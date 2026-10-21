@@ -597,7 +597,7 @@ function addItem(id, n = 1) { inv[id] = (inv[id] || 0) + n;
 function maxHp() { return 10 + (equip.body ? ITEMS[equip.body].hp || 0 : 0) + hpBonus + (typeof friendHp === 'function' ? friendHp() : 0); }
 function atkOf() { return 2 + (equip.tail ? ITEMS[equip.tail].atk || 0 : 0) + (buffs.atk > 0 ? 2 : 0); }
 function defOf() { return equip.body ? ITEMS[equip.body].def || 0 : 0; }
-function healP(n) { const before = hp; hp = Math.min(maxHp(), hp + n); const got = hp - before; floaters.push({ x: P.x, y: P.y - 28, t: 1.1, text: `HP +${got}`, col: '#9be37a' }); for (let i = 0; i < 10; i++) parts.push({ x: P.x + (Math.random() - .5) * 14, y: P.y - Math.random() * 14, vx: 0, vy: -25, t: .7, c: '#9be37a', g: 0, sz: 1.5 }); }
+function healP(n) { const before = hp; hp = Math.min(maxHp(), hp + n); const got = hp - before; floaters.push({ x: P.x, y: P.y - 28, t: 1.1, text: `용기 +${got}`, col: '#9be37a' }); for (let i = 0; i < 10; i++) parts.push({ x: P.x + (Math.random() - .5) * 14, y: P.y - Math.random() * 14, vx: 0, vy: -25, t: .7, c: '#9be37a', g: 0, sz: 1.5 }); }
 function useItem(id) {
   const it = ITEMS[id]; if (!it || !(inv[id] > 0)) return false;
   if (it.heal && hp >= maxHp()) { toast('HP가 이미 가득해!'); return false; }
@@ -4283,6 +4283,56 @@ musicTick = function (dt) {
 stat = (orig => (k, n = 1) => { const r = orig(k, n); if (['harvest', 'acorn', 'wood', 'hive', 'pet', 'feed', 'cook', 'craft', 'gift'].includes(k) && state === 'play') { burst(P.x, P.y - 26, '#fff3b0', 8); if (CFG.vib !== 0 && navigator.vibrate) try { navigator.vibrate(12); } catch (e) { } } return r; })(stat);
 
 updateTown = (orig => dt => { orig(dt); reactTick(dt); questTick(); })(updateTown);
+
+// ---------- items.js: 음식 효과를 '병아리인 척' 돕는 효과로 ----------
+// 먹으면 일정 시간 버프. 용기(HP) 회복은 그대로 덤으로.
+const SNACK_FX = {
+  calm: { name: '든든', ico: '🍀', col: '#9be37a', txt: p => `공룡 티 -${Math.round((1 - p) * 100)}%` },
+  quiet: { name: '사뿐사뿐', ico: '🐾', col: '#7fcaf2', txt: p => `달릴 때 들킴 -${Math.round((1 - p) * 100)}%` },
+  voice: { name: '맑은 목소리', ico: '🎵', col: '#ffd23f', txt: p => `삐약 타이밍 ×${p.toFixed(1)}` },
+  fluff: { name: '보송보송', ico: '☁️', col: '#ffb3c6', txt: p => `웅크리면 들킴 -${Math.round((1 - p) * 100)}%` },
+};
+// id: [효과, 지속(초), 세기]
+const SNACK = {
+  carrot: ['calm', 180, .95], turnip: ['calm', 180, .95], cabbage: ['calm', 180, .94], corn: ['calm', 180, .94], tomato: ['calm', 180, .95], potato: ['calm', 180, .95], sweetpotato: ['calm', 240, .93], spinach: ['calm', 180, .95], pepper: ['quiet', 180, .92], strawberry: ['voice', 180, 1.1], watermelon: ['voice', 240, 1.12], rice: ['calm', 180, .95],
+  egg: ['fluff', 180, .92], egg_p: ['fluff', 300, .88], bread: ['calm', 300, .92], persimmon: ['voice', 180, 1.1], apple: ['voice', 180, 1.1], pepero: ['voice', 240, 1.15],
+  milk: ['quiet', 600, .78], milk_p: ['quiet', 900, .72], gmilk: ['quiet', 480, .8], gmilk_p: ['quiet', 720, .74],
+  honey: ['voice', 600, 1.35], honey_acacia: ['voice', 600, 1.3], honey_chestnut: ['voice', 600, 1.3], honey_buckwheat: ['voice', 600, 1.3],
+  cake: ['calm', 900, .8], salad: ['calm', 600, .85], soup: ['quiet', 600, .75], omelet: ['fluff', 600, .65], pizza: ['calm', 900, .82], sandwich: ['calm', 600, .85], jamtoast: ['voice', 600, 1.4], gratin: ['quiet', 900, .7], eggsalad: ['fluff', 600, .7],
+};
+const SNACKB = {}; // 효과 -> { t, p }
+function snackText(id) { const s = SNACK[id]; if (!s) return ''; const F = SNACK_FX[s[0]]; return `${F.ico} ${F.name} ${Math.round(s[1] / 60)}분 · ${F.txt(s[2])}`; }
+// 설명 다시 쓰기: 'HP n 회복' 대신 효과를 앞에, 용기 회복은 뒤에 덤으로
+for (const id in SNACK) { const it = ITEMS[id]; if (!it) continue; const rest = (it.desc || '').split(' · ').filter(t => !/HP|회복/.test(t)).join(' · ');
+  it.desc = `${snackText(id)}${it.heal ? ` · 용기 +${it.heal >= 999 ? '가득' : it.heal}` : ''}${rest ? ' · ' + rest : ''}`; }
+for (const id of ['pot_red']) if (ITEMS[id]) ITEMS[id].desc = '용기 10 회복 · 버섯 동굴에서 든든';
+useItem = (orig => id => {
+  const s = SNACK[id], it = ITEMS[id]; if (!s || !it || !(inv[id] > 0)) return orig(id);
+  inv[id]--; if (inv[id] <= 0) delete inv[id]; sfx('gulp');
+  const [k, sec, p] = s, F = SNACK_FX[k], cur = SNACKB[k];
+  SNACKB[k] = { t: Math.max(cur ? cur.t : 0, sec), p: cur ? (k === 'voice' ? Math.max(cur.p, p) : Math.min(cur.p, p)) : p };
+  if (it.heal && hp < maxHp()) healP(it.heal);
+  if (it.buff) buffs[it.buff] = 30;
+  floaters.push({ x: P.x, y: P.y - 40, t: 1.4, text: `냠! ${F.ico} ${F.name}`, col: '#fff3b0' }); emote(null, 'heart', 1.2);
+  save(); return true;
+})(useItem);
+function snackTick(dt) { if (state !== 'play') return; for (const k in SNACKB) { SNACKB[k].t -= dt; if (SNACKB[k].t <= 0) { delete SNACKB[k]; toast(`${SNACK_FX[k].ico} ${SNACK_FX[k].name} 효과가 끝났어요`); } } }
+// 공룡 티 계산에 반영
+gearMul = (orig => kind => { let m = orig(kind); const B = SNACKB; if (B.calm) m *= B.calm.p; if (kind === 'run' && B.quiet) m *= B.quiet.p; if (kind === 'crouch' && B.fluff) m *= B.fluff.p; return m; })(gearMul);
+peepMul = (orig => () => orig() * (SNACKB.voice ? SNACKB.voice.p : 1))(peepMul);
+// 화면 왼쪽 아래: 지금 켜진 효과 칩 (남은 분)
+function drawSnackChips() {
+  if (state !== 'play' || menu || phone) return; const ks = Object.keys(SNACKB); if (!ks.length) return;
+  const u = Math.max(11 * DPR, Math.min(CW, CH) / 34) * TXS(), x = SA.l + 8 * DPR; let y = CH - SA.b - u * 5.6;
+  for (const k of ks) { const F = SNACK_FX[k], m = Math.ceil(SNACKB[k].t / 60), s = `${F.ico} ${F.name} ${m}분`; ctx.font = `${Math.round(u * .85)}px ${FONT}`; const w = ctx.measureText(s).width + u * 1.2;
+    ctx.fillStyle = 'rgba(51,34,42,.78)'; rr(x, y, w, u * 1.6, u * .8); ctx.fill(); ctx.fillStyle = F.col; rr(x + 2 * DPR, y + 2 * DPR, u * .45, u * 1.6 - 4 * DPR, u * .22); ctx.fill(); text(s, x + u * .75, y + u * .82, u * .85, '#fff'); y -= u * 1.9; }
+}
+drawOverlay4 = (o => () => { o(); drawSnackChips(); })(drawOverlay4);
+updateTown = (orig => dt => { orig(dt); snackTick(dt); })(updateTown);
+townSave = (orig => () => Object.assign(orig(), { sn: SNACKB }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.sn) Object.assign(SNACKB, d.sn); })(townLoad);
+// 가방 음식 버튼: 사용 → 먹기
+panelEntries = (orig => () => { const E = orig(); if (menu && menu.kind === 'bag') { const byName = {}; for (const id in SNACK) if (ITEMS[id]) byName[ITEMS[id].name] = id; for (const e of E) { const nm = String(e.name || '').replace(/ ×\d+$/, ''); if (byName[nm] && e.tag === '사용') e.tag = '먹기'; } } return E; })(panelEntries);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
