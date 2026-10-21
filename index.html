@@ -3783,7 +3783,7 @@ function epHold(id, x, y, face) { const n = npcById(id); if (!n) return null; if
 function epRelease() { for (const n of NPCS) if (n._epw !== undefined) { n.wander = n._epw; n.x = n.tx = n._epx; n.y = n.ty = n._epy; n.wait = 1; delete n._epw; delete n._epx; delete n._epy; } }
 function epPanel(i, fx, fy, lines, sfx, extra) { if (!EP) return; EP.panels[i] = Object.assign({ img: epCapture(fx, fy), lines, sfx }, extra || {}); }
 function epStart(def, arg) {
-  if (EP || state !== 'play' || dlg || menu || phone || mini || fishing || (typeof VISIT !== 'undefined' && VISIT) || curRoom.dungeon) { toast('지금은 사건을 시작할 수 없어요'); return false; }
+  if (EP || state !== 'play' || dlg || menu || phone || mini || fishing || (typeof VISIT !== 'undefined' && VISIT) || curRoom.dungeon) { toast('지금은 소동을 시작할 수 없어요'); return false; }
   if (!tut.done) { toast('튜토리얼을 먼저 마쳐 주세요'); return false; }
   for (const k in EP_FX) delete EP_FX[k];
   EP = { def, step: 0, t: 0, d: Object.assign({}, arg || {}), panels: [], freeze: false, noAuto: window.__noAuto };
@@ -3797,7 +3797,7 @@ function epEnd() {
   const E0 = EP; if (!E0) return; DG.on = false; DG.peep = null; window.__spdMul = 1; window.__cutscene = false; EPC.length = 0; epRelease(); window.__noAuto = E0.noAuto; EP = null;
   if (E0.def.finish) E0.def.finish(E0);
 }
-function epAbort() { if (!EP) return; const E0 = EP; DG.on = false; DG.peep = null; window.__spdMul = 1; window.__cutscene = false; EPC.length = 0; epRelease(); window.__noAuto = E0.noAuto; EP = null; toast('사건을 그만뒀어요'); }
+function epAbort() { if (!EP) return; const E0 = EP; DG.on = false; DG.peep = null; window.__spdMul = 1; window.__cutscene = false; EPC.length = 0; epRelease(); window.__noAuto = E0.noAuto; EP = null; toast('소동을 그만뒀어요'); }
 function epTick(dt) {
   dgTick(dt);
   if (!EP) return; if (dlg || menu || wipe) return;
@@ -3821,7 +3821,7 @@ function epFace(n, look) { const m = R3 && R3.ents.get(n); if (m) m.rotation.y =
 // ===== 입력 가로채기 =====
 interact = (orig => () => { if (EP) { const s = EP.def.steps[EP.step]; if (DG.peep && dgPeepPress()) return; if (s && s.onA && s.onA(EP)) return; if (s && s.lockA) return; } orig(); })(interact);
 action = (orig => () => { if (EP) { const s = EP.def.steps[EP.step]; if (s && s.onB && s.onB(EP)) return; if (DG.on || (s && s.lockB)) return; } orig(); })(action);
-openPhone = (orig => () => { if (EP) { toast('사건 중이에요! 끝나고 열어 줘요'); return; } orig(); })(openPhone);
+openPhone = (orig => () => { if (EP) { toast('소동 중이에요! 끝나고 열어 줘요'); return; } orig(); })(openPhone);
 
 // ===== 큰 사건 1화: 병아리 운동회 =====
 const POSTER = { x: 23.6, y: 12.5 }; // 타일 좌표
@@ -3990,12 +3990,12 @@ for (const k in SMALL_EP) SMALL_EP[k].finish = E => {
   const C = composeComic({ kicker: `안노랑 일상툰 · ${SMALL[E.d.kind].name}`, title: E.d.title, ending: ok ? '성공!' : '들켰다…' }, panels);
   const key = `day_${dayKey()}_${Date.now() % 100000}`; toBlob(C).then(b => { if (!b) return; albPut(key, b); EPS.toons.unshift({ k: key, t: E.d.title, ok: ok ? 1 : 0, d: dayKey() }); while (EPS.toons.length > 30) { const o = EPS.toons.pop(); albDel(o.k); } save(); });
   if (first) setTimeout(() => toast(`${npcName(E.d.who)} 인정 ♥+${(ok ? 2 : 1) + (E.d.lunch ? 1 : 0)} · ✦+${(ok ? 8 : 4) + (E.d.lunch ? 5 : 0)}${E.d.lunch ? ' (도시락 냠냠!)' : ''}`), 400);
-  setTimeout(() => showComic(C, { title: `일상툰 「${E.d.title}」`, desc: ok ? '오늘의 작은 사건 성공!' : '들켰지만… 그것도 오늘의 이야기!' }), 1000);
+  setTimeout(() => showComic(C, { title: `일상툰 「${E.d.title}」`, desc: ok ? '오늘의 소동 대성공!' : '들켰지만… 그것도 오늘의 이야기!' }), 1000);
 };
 for (const k in SMALL_EP) { const P0 = SMALL_EP[k].props; SMALL_EP[k].props = (E, dt) => { if (P0) P0(E, dt); }; }
 
 // ===== 사건 준비물: 마을 생활에서 만든 걸로 사건을 유리하게 =====
-Object.assign(ITEMS, { ep_band: { name: '응원 머리띠', type: 'mat', desc: '털실로 만든 병아리 머리띠 · 1화 운동회에서 들킴 -20%' }, ep_lunch: { name: '병아리 도시락', type: 'mat', desc: '작은 사건에 들고 가면 인정 ♥+1 · ✦+5 더' } });
+Object.assign(ITEMS, { ep_band: { name: '응원 머리띠', type: 'mat', desc: '털실로 만든 병아리 머리띠 · 1화 운동회에서 들킴 -20%' }, ep_lunch: { name: '병아리 도시락', type: 'mat', desc: '오늘의 소동에 들고 가면 인정 ♥+1 · ✦+5 더' } });
 const CROPS4 = ['carrot', 'tomato', 'corn', 'cabbage', 'potato', 'strawberry', 'pumpkin'];
 const PREP = [
   { id: 'ep_band', need: () => [['yarn', 1]], txt: '털실 1개 (공방 물레에서 양털로)' },
@@ -4004,19 +4004,19 @@ const PREP = [
 function prepEntries() { return PREP.map(p => { const need = p.need(), ok = need.every(([k, n]) => (inv[k] || 0) >= n), it = ITEMS[p.id];
   return { img: (() => { try { return itemImg(need[0][0]); } catch (e) { return null; } })(), name: `${it.name} (보유 ${inv[p.id] || 0})`, desc: `${p.txt} · ${it.desc.split(' · ').slice(1).join(' · ')}`, tag: ok ? '만들기' : '재료 부족', col: ok ? '#ffd23f' : '#d9cbb5', act: () => { if (!ok) { sfx('bonk'); return pmsg(`재료가 모자라요: ${p.txt}`, 1); } for (const [k, n] of need) { inv[k] -= n; if (inv[k] <= 0) delete inv[k]; } addItem(p.id); sfx('done'); pmsg(`${it.name} 완성!`); save(); } }; }); }
 
-// ===== 사건 수첩 (노랑폰 앱) =====
+// ===== 소동 일기 (노랑폰 앱) =====
 function epbookEntries(m) {
   const E = [];
   if (m.ask) { const n = m.ask, s = todaySmall(); return [
-    { name: '사건 시작하기', desc: `${s.sp.name} · ${SMALL[s.kind].name} · 4컷 만화가 그려져요`, tag: '시작', col: '#ffd23f', act: () => { menu = null; smallStart(); } },
-    { name: '그냥 이야기하기', desc: '사건은 나중에 (사건 수첩에서 언제든 시작)', tag: '대화', col: '#efe2c8', act: () => { menu = null; n._epSkip = dayKey(); farmTalk(n); } }]; }
+    { name: '소동 시작하기', desc: `${s.sp.name} · ${SMALL[s.kind].name} · 4컷 만화가 그려져요`, tag: '시작', col: '#ffd23f', act: () => { menu = null; smallStart(); } },
+    { name: '그냥 이야기하기', desc: '소동은 나중에 (소동 일기에서 언제든 시작)', tag: '대화', col: '#efe2c8', act: () => { menu = null; n._epSkip = dayKey(); farmTalk(n); } }]; }
   if (m.tab === 0) {
     const s = todaySmall(), sd = smallDone();
-    E.push({ name: `오늘의 작은 사건 · ${s.title}`, desc: sd ? '오늘은 완료! 다시 해도 일상툰이 새로 그려져요' : `${s.sp.name} · ${npcName(s.who)}에게 말을 걸면 시작 (바로 시작도 가능)`, tag: sd ? '다시 하기' : '바로 가기', col: sd ? '#efe2c8' : '#ffd23f', act: () => { menu = null; smallStart(); } });
+    E.push({ name: `오늘의 소동 · ${s.title}`, desc: sd ? '오늘은 완료! 다시 해도 일상툰이 새로 그려져요' : `${s.sp.name} · ${npcName(s.who)}에게 말을 걸면 시작 (바로 시작도 가능)`, tag: sd ? '다시 하기' : '바로 가기', col: sd ? '#efe2c8' : '#ffd23f', act: () => { menu = null; smallStart(); } });
     for (const b of BIG) { const got = b.ends ? Object.keys(EPS.album[b.id] || {}).length : 0, open = !b.need || accTotal() >= b.need;
       E.push({ name: `${b.no}화 「${b.title}」`, desc: b.soon ? (open ? '다음 업데이트에서 열려요!' : `마을 인정 ♥${b.need} 모으면 열려요 (지금 ♥${accTotal()}) · 준비 중`) : `결말 ${got}/3 모음 · ${EPS.clear[b.id] === dayKey() ? '오늘 보상 받음' : '오늘 보상 있음'} · 광장 포스터에서 시작`, tag: b.soon ? '🔒' : '시작', col: b.soon ? '#d9cbb5' : '#9be37a', act: () => { if (b.soon) return pmsg('준비 중이에요!'); menu = null; epStart(b); } }); }
   }
-  if (m.tab === 1) { E.push({ name: `마을 인정 ♥${accTotal()}`, desc: '사건을 함께 겪을수록 마을 친구들이 노랑이를 병아리로 인정해요', tag: '', act: () => { } });
+  if (m.tab === 1) { E.push({ name: `마을 인정 ♥${accTotal()}`, desc: '소동을 함께 겪을수록 마을 친구들이 노랑이를 병아리로 인정해요', tag: '', act: () => { } });
     for (const id of ['hen', 'pig', 'rabbit', 'duck', 'cow', 'sheep', 'sheep2', 'fox', 'raccoon']) { const n = npcById(id); if (!n) continue; const lv = accLv(id);
       E.push({ img: window.NPC_IMG && NPC_IMG[n.name], name: n.name, desc: `${ACC_NAME[lv]} · ${lv < 3 ? `다음 단계까지 ${ACC_LV[lv + 1] - (EPS.acc[id] || 0)}` : '최고 단계!'}`, tag: '♥'.repeat(lv) + '♡'.repeat(3 - lv), col: lv >= 3 ? '#ffe066' : '#efe2c8', act: () => pmsg(`${n.name}: ${['저 덩치 큰 병아리는… 뭐지?', '노랑이…는 병아리… 맞겠지?', '노랑이는 우리 병아리 친구야!', '노랑이? 당연히 병아리지!'][lv]}`) }); } }
   if (m.tab === 2) { E.push({ name: `착용 중: ${EPS.wear.filter(k => EPS.gear[k]).map(k => GEAR[k].name).join(', ') || '없음'}`, desc: '최대 2개까지 입을 수 있어요 · 공룡 티를 줄여 줘요', tag: '', act: () => { } });
@@ -4027,11 +4027,11 @@ function epbookEntries(m) {
         else { if (EPS.wear.length >= 2) EPS.wear.shift(); EPS.wear.push(k); pmsg(`${G.name} 착용!`); sfx('blip'); }
         save(); } }); } }
   if (m.tab === 3) return prepEntries();
-  if (m.tab === 4) { E.push({ name: '만화책 펼치기', desc: `큰 사건 결말 ${BIG.filter(b => b.ends).reduce((a, b) => a + Object.keys(EPS.album[b.id] || {}).length, 0)}칸 · 일상툰 ${EPS.toons.length}편`, tag: '열기', col: '#ffd23f', act: () => { menu = null; openAlbum(); } }); }
+  if (m.tab === 4) { E.push({ name: '만화책 펼치기', desc: `이야기 결말 ${BIG.filter(b => b.ends).reduce((a, b) => a + Object.keys(EPS.album[b.id] || {}).length, 0)}칸 · 일상툰 ${EPS.toons.length}편`, tag: '열기', col: '#ffd23f', act: () => { menu = null; openAlbum(); } }); }
   return E;
 }
 async function openAlbum() {
-  const S = sheet4('안노랑 만화책', '사건을 겪으면 4컷 만화가 차곡차곡 쌓여요. 결말을 모두 모으면 표지가 금색이 돼요!'); if (!S) return;
+  const S = sheet4('안노랑 만화책', '소동을 겪으면 4컷 만화가 차곡차곡 쌓여요. 결말을 모두 모으면 표지가 금색이 돼요!'); if (!S) return;
   const grid = (items) => { const w = document.createElement('div'); w.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0'; S.box.append(w); items.forEach(it => w.append(it)); };
   const cell = (label, sub, k, ok) => { const d = document.createElement('div'); d.style.cssText = `border:2px solid #33222a;border-radius:10px;background:${ok ? '#fff' : '#efe2c8'};padding:6px;font-size:12px;text-align:center;cursor:${ok ? 'pointer' : 'default'};display:flex;flex-direction:column;gap:4px;align-items:center`;
     const im = document.createElement('div'); im.style.cssText = 'width:100%;aspect-ratio:9/16;border-radius:6px;background:#e8dcc4 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:26px;color:#8a6a5a'; im.textContent = ok ? '' : '?'; d.append(im);
@@ -4042,10 +4042,10 @@ async function openAlbum() {
     S.h(`${all ? '🏆 ' : ''}${b.no}화 「${b.title}」 ${Object.keys(got).length}/3`, 17);
     grid(Object.entries(b.ends).map(([k, e]) => cell(got[k] ? e.name : '???', got[k] ? `${String(got[k]).slice(4, 6)}/${String(got[k]).slice(6)}` : e.hint, `${b.id}_${k}`, !!got[k]))); }
   S.h(`일상툰 ${EPS.toons.length}편`, 17);
-  if (EPS.toons.length) grid(EPS.toons.slice(0, 12).map(t => cell(t.t, `${String(t.d).slice(4, 6)}/${String(t.d).slice(6)} · ${t.ok ? '성공' : '들킴'}`, t.k, true))); else S.p('아직 없어요. 오늘의 작은 사건을 해 보세요!');
+  if (EPS.toons.length) grid(EPS.toons.slice(0, 12).map(t => cell(t.t, `${String(t.d).slice(4, 6)}/${String(t.d).slice(6)} · ${t.ok ? '성공' : '들킴'}`, t.k, true))); else S.p('아직 없어요. 오늘의 소동을 겪어 보세요!');
   S.btn('닫기', '#efe2c8', () => S.close());
 }
-{ const i = APPS.findIndex(a => a.id === 'friends'); APPS.splice(Math.max(0, i), 0, { id: 'epbook', name: '사건 수첩', ico: '📒', col: '#ffe066', go: () => { phone = null; menu = { kind: 'epbook', title: '사건 수첩', tabs: ['사건', '인정도', '변장', '준비물', '만화책'], tab: 0, sel: 0, page: 0 }; } }); }
+{ const i = APPS.findIndex(a => a.id === 'friends'); APPS.splice(Math.max(0, i), 0, { id: 'epbook', name: '소동 일기', ico: '📒', col: '#ffe066', go: () => { phone = null; menu = { kind: 'epbook', title: '소동 일기', tabs: ['소동', '인정도', '변장', '준비물', '만화책'], tab: 0, sel: 0, page: 0 }; } }); }
 townEntries = (orig => m => m.kind === 'epbook' ? epbookEntries(m) : orig(m))(townEntries);
 
 // ===== 마을과 연결: 포스터 · 작은 사건 NPC · 말 걸기 =====
@@ -4054,14 +4054,14 @@ townNear = (orig => () => nearPoster() ? 'ep_poster' : orig())(townNear);
 townInteract = (orig => () => { if (nearPoster()) { epStart(EP1); return true; } return orig(); })(townInteract);
 townHint = (orig => () => nearPoster() ? { x: POSTER.x * T, y: POSTER.y * T - 30, t: `${KA()} 1화 병아리 운동회` } : orig())(townHint);
 const _farmTalk0 = farmTalk;
-farmTalk = (orig => n => { if (!window.__noAuto && !EP && tut.done && !smallDone() && n._epSkip !== dayKey()) { const s = todaySmall(), busy = (typeof questMark === 'function' && questMark(n)) || (STORY.st === 1 && TRIALS[n.id]); if (n.id === s.who && !busy) { menu = { kind: 'epbook', title: `📒 ${s.title}`, tabs: ['오늘의 작은 사건'], tab: 0, sel: 0, page: 0, ask: n }; sfx('blip'); return true; } } return orig(n); })(farmTalk);
+farmTalk = (orig => n => { if (!window.__noAuto && !EP && tut.done && !smallDone() && n._epSkip !== dayKey()) { const s = todaySmall(), busy = (typeof questMark === 'function' && questMark(n)) || (STORY.st === 1 && TRIALS[n.id]); if (n.id === s.who && !busy) { menu = { kind: 'epbook', title: `📒 ${s.title}`, tabs: ['오늘의 소동'], tab: 0, sel: 0, page: 0, ask: n }; sfx('blip'); return true; } } return orig(n); })(farmTalk);
 
 // ===== HUD: 공룡 티 게이지 · 삐약 타이밍 · 사건 표시 =====
 function drawEp() {
   if (state !== 'play') return;
   const u = Math.max(11 * DPR, Math.min(CW, CH) / 32) * TXS();
   // 작은 사건 NPC 표시
-  if (!EP && tut.done && !smallDone() && USE3D && !menu && !dlg && !window.__noAuto) { const s = todaySmall(), n = npcById(s.who); if (n && Math.hypot(n.x - P.x, n.y - P.y) < 14 * T) { const p = epProject(n.x, n.y, 1.25); if (p) { const x = p.x * CW, y = p.y * CH - Math.abs(Math.sin(time * 3)) * 6 * DPR, t0 = '📒 사건'; ctx.font = `${Math.round(u * .85)}px ${FONT}`; const w = ctx.measureText(t0).width + u; ctx.fillStyle = '#ffe066'; rr(x - w / 2, y - u * 1.6, w, u * 1.4, u * .7); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.stroke(); text(t0, x, y - u * .9, u * .85, '#33222a', 'center'); } } }
+  if (!EP && tut.done && !smallDone() && USE3D && !menu && !dlg && !window.__noAuto) { const s = todaySmall(), n = npcById(s.who); if (n && Math.hypot(n.x - P.x, n.y - P.y) < 14 * T) { const p = epProject(n.x, n.y, 1.25); if (p) { const x = p.x * CW, y = p.y * CH - Math.abs(Math.sin(time * 3)) * 6 * DPR, t0 = '📒 소동'; ctx.font = `${Math.round(u * .85)}px ${FONT}`; const w = ctx.measureText(t0).width + u; ctx.fillStyle = '#ffe066'; rr(x - w / 2, y - u * 1.6, w, u * 1.4, u * .7); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.stroke(); text(t0, x, y - u * .9, u * .85, '#33222a', 'center'); } } }
   if (!EP) return;
   if (DG.on) { const w = Math.min(CW * .6, u * 16), x = CW / 2 - w / 2 + u * 1.2, y = CH * (CW < CH ? .155 : .12), v = DG.v / 100;
     ctx.fillStyle = 'rgba(51,34,42,.88)'; rr(x - u * 3, y - u * .3, w + u * 3.6, u * 2.6, u * 1.2); ctx.fill();
@@ -4083,7 +4083,7 @@ townSave = (orig => () => Object.assign(orig(), { ep: EPS }))(townSave);
 townLoad = (orig => d => { orig(d); const e = d && d.ep; if (!e) return; Object.assign(EPS.acc, e.acc || {}); Object.assign(EPS.album, e.album || {}); EPS.toons = e.toons || []; Object.assign(EPS.gear, e.gear || {}); EPS.wear = e.wear || []; Object.assign(EPS.clear, e.clear || {}); EPS.small = e.small || EPS.small; EPS.intro = e.intro || 0; })(townLoad);
 // 첫 안내
 startGame = (orig => () => { orig(); setTimeout(() => { if (state !== 'play' || EPS.intro || !tut.done || dlg || menu || window.__noAuto) return; EPS.intro = 1; save();
-  const s = todaySmall(); say([L('계획이', '노랑아! 이제부터 마을에 매일 "사건"이 생겨!'), L('먹보', `오늘은 ${s.sp.name} 쪽에서 ${josa(npcName(s.who), '이', '가')} 무슨 일이 있대. 머리 위에 📒 뜬 친구한테 말 걸어 봐!`), L('승부욕', '광장 포스터에는 큰 사건, 「병아리 운동회」도 붙었어!'), L('계획이', '노랑폰 "사건 수첩"에 인정도·변장·준비물·만화책이 다 모여. 털실로 응원 머리띠도 만들 수 있대!')]); }, 4500); })(startGame);
+  const s = todaySmall(); say([L('계획이', '노랑아! 이제부터 마을에 매일매일 "소동"이 일어나!'), L('먹보', `오늘은 ${s.sp.name} 쪽에서 ${josa(npcName(s.who), '이', '가')} 무슨 일이 있대. 머리 위에 📒 뜬 친구한테 말 걸어 봐!`), L('승부욕', '광장 포스터 봤어? 「병아리 운동회」가 열린대!'), L('계획이', '노랑폰 "소동 일기"에 인정도·변장·준비물·만화책이 다 모여. 털실로 응원 머리띠도 만들 수 있대!')]); }, 4500); })(startGame);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
