@@ -30,9 +30,10 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
 <body>
 <div id="boot" style="position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 40%,#fff3b0,#ffd23f 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:Jua,sans-serif;color:#5a3a26;transition:opacity .45s"><div class="egg"><i></i></div><div style="font-size:30px;color:#33222a">안노랑의 마을 축제</div><div id="bootmsg" style="font-size:16px">농장 지도 펼치는 중…</div></div><style>#boot .egg{width:74px;height:58px;background:#fff;border-radius:50% 50% 46% 54%/60% 60% 40% 40%;position:relative;animation:eb .9s ease-in-out infinite;box-shadow:0 6px 0 rgba(51,34,42,.15)}#boot .egg i{position:absolute;left:24px;top:16px;width:26px;height:24px;border-radius:50%;background:#ffab2e}@keyframes eb{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-12px) rotate(4deg)}}</style>
 <div id="pwa" style="display:none;position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;width:min(92vw,420px);background:#fff8e7;border:2px solid #3b2a2f;border-radius:20px;box-shadow:0 6px 0 rgba(59,42,47,.25);padding:14px 16px;font-family:Jua,sans-serif;color:#3b2a2f">
-<div style="display:flex;gap:12px;align-items:center"><img src="./icon-192.png" alt="" style="width:50px;height:50px;flex:none;border-radius:13px;box-shadow:0 2px 0 rgba(59,42,47,.2)">
+<div style="display:flex;gap:12px;align-items:center"><img id="pwaimg" alt="" style="width:50px;height:50px;flex:none;border-radius:13px;box-shadow:0 2px 0 rgba(59,42,47,.2)">
 <div style="flex:1"><div style="font-size:17px">홈 화면에 삐약마을 추가하기</div><div id="pwamsg" style="font-size:13px;color:#8a6a5a;margin-top:3px">앱처럼 전체 화면으로, 인터넷 없이도 플레이!</div></div></div>
 <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button id="pwano" style="font:inherit;font-size:14px;border:0;background:#efe2c8;color:#5a3a26;border-radius:12px;padding:8px 14px">다음에</button><button id="pwayes" style="font:inherit;font-size:14px;border:2px solid #3b2a2f;background:#ffd23f;color:#3b2a2f;border-radius:12px;padding:8px 16px">설치하기</button></div></div>
+<div id="upd" style="display:none;position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:31;align-items:center;gap:10px;background:#3b2a2f;color:#fff8e7;border-radius:999px;padding:8px 8px 8px 16px;font-family:Jua,sans-serif;font-size:15px;box-shadow:0 4px 0 rgba(0,0,0,.2);white-space:nowrap">🐣 새 버전이 나왔어요!<button id="updgo" style="font:inherit;font-size:14px;border:0;background:#ffd23f;color:#3b2a2f;border-radius:999px;padding:6px 12px">지금 업데이트</button><button id="updx" aria-label="닫기" style="font:inherit;font-size:14px;border:0;background:transparent;color:#d9cbb5;padding:4px 6px">✕</button></div>
 <script>
 (function(){
   var KEY='annorang_pwa_v2', el=document.getElementById('pwa'), msg=document.getElementById('pwamsg'), yes=document.getElementById('pwayes'), no=document.getElementById('pwano'), bip=null, mode=null, forced=false;
@@ -58,21 +59,22 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
   }
   function onTitle(){ return typeof state==='undefined' || state==='title'; }
   function bootGone(){ var b=document.getElementById('boot'); return !b || b.style.display==='none' || getComputedStyle(b).opacity<.1 || !b.isConnected; }
+  function showEl(){ var im=document.getElementById('pwaimg'); if(im && !im.src) im.src='./icon-192.png'; el.style.display='block'; }
   function canShow(){ return top && !isStandalone() && window.__PWA && (forced || !seen()); }
   // pop the sheet as soon as we know which guide to show (loading screen, title or in-game: whichever comes first)
   var tries=0, timer=setInterval(function(){
     tries++; if(tries>600){ clearInterval(timer); return; }
     if(!mode || !canShow()) return;
-    el.style.display='block'; clearInterval(timer);
+    showEl(); clearInterval(timer);
   },400);
   window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); bip=e; if(!inapp) setMode('android'); });
-  var instT=null; function show(m){ setMode(m); forced=true; el.style.display='block'; }
+  var instT=null; function show(m){ setMode(m); forced=true; showEl(); }
   window.addEventListener('appinstalled',function(){ store('installed'); if(instT){ clearTimeout(instT); instT=null; } show('done'); });
   if(inapp && (ios||android)) setMode('inapp');
   else if(ios) setMode('ios');
   else if(android) setTimeout(function(){ if(!mode) setMode(bip?'android':'manual'); },2500);
   else setTimeout(function(){ if(!mode) setMode(bip?'android':'desktop'); },2500);
-  window.__pwaGuide=function(){ forced=true; if(isStandalone()){ return '이미 앱으로 실행 중이에요'; } if(!mode) setMode(bip?'android':(ios?'ios':'manual')); el.style.display='block'; return ''; };
+  window.__pwaGuide=function(){ forced=true; if(isStandalone()){ return '이미 앱으로 실행 중이에요'; } if(!mode) setMode(bip?'android':(ios?'ios':'manual')); showEl(); return ''; };
   function toChrome(){ var u=location.href; location.href='intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(u)+';end'; }
   no.onclick=function(){ store('later'); el.style.display='none'; forced=false; };
   yes.onclick=function(){
@@ -82,7 +84,19 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
     if(mode==='inapp' && android){ if(kakao) location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href); else toChrome(); return; }
     store(mode||'ok');
   };
-  if(window.__PWA && 'serviceWorker' in navigator && top && (location.protocol==='https:'||location.hostname==='localhost')) window.addEventListener('load',function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
+  if(window.__PWA && 'serviceWorker' in navigator && top && (location.protocol==='https:'||location.hostname==='localhost')) {
+    // 새 버전 감지: 새 서비스워커가 자리를 잡으면 '업데이트' 띠를 띄워요 (첫 설치 때는 조용히)
+    var hadCtrl = !!navigator.serviceWorker.controller, updShown=false;
+    navigator.serviceWorker.addEventListener('controllerchange',function(){ if(!hadCtrl){ hadCtrl=true; return; } showUpd(); });
+    window.addEventListener('load',function(){ navigator.serviceWorker.register('./sw.js').then(function(reg){
+      var ask=function(){ reg.update().catch(function(){}); };
+      setInterval(ask, 20*60*1000); document.addEventListener('visibilitychange',function(){ if(!document.hidden) ask(); });
+    }).catch(function(){}); });
+  }
+  function showUpd(){ if(updShown) return; updShown=true; var b=document.getElementById('upd'); if(!b) return; b.style.display='flex';
+    document.getElementById('updgo').onclick=function(){ try{ if(typeof save==='function') save(); }catch(e){} location.reload(); };
+    document.getElementById('updx').onclick=function(){ b.style.display='none'; }; }
+  window.__showUpd=showUpd;
 })();
 </script>
 <div id="probe"></div><div id="svh"></div><canvas id="c" tabindex="0"></canvas><div id="sa"></div>
@@ -610,7 +624,7 @@ function haveStr(need) { return Object.entries(need).map(([k, n]) => `${ITEMS[k]
 function panelEntries() {
   const m = menu, E = [];
   if (['stamp', 'friends', 'settings', 'hab'].includes(m.kind)) return lifeEntries(m);
-  if (['craft', 'market', 'fest', 'brief', 'diary', 'deco', 'license', 'quiz'].includes(m.kind) || (m.kind === 'cook' && m.tab === 1) || (m.kind === 'shop' && m.tab === 6)) return townEntries(m);
+  if (['craft', 'market', 'fest', 'brief', 'diary', 'deco', 'license', 'quiz', 'visit'].includes(m.kind) || (m.kind === 'cook' && m.tab === 1) || (m.kind === 'shop' && m.tab === 6)) return townEntries(m);
   if (['cook', 'plant'].includes(m.kind) || (m.kind === 'shop' && m.tab >= 3)) return farmEntries(m);
   if (m.kind === 'museum') return museumEntries(m);
   if (m.kind === 'ranch') return ranchEntries(m);
@@ -935,7 +949,7 @@ cv.addEventListener('pointerdown', e => {
   const x = (e.clientX - cvOff.l) * DPR, y = (e.clientY - cvOff.t) * DPR;
   if (cardOpen) return;
   if (state === 'title' && codeBtn && x > codeBtn.x && x < codeBtn.x + codeBtn.w && y > codeBtn.y && y < codeBtn.y + codeBtn.h) { openSaveUI(); return; }
-  if (state === 'title') { if (loaded && resetBtn && x > resetBtn.x && x < resetBtn.x + resetBtn.w && y > resetBtn.y && y < resetBtn.y + resetBtn.h) { if (resetArm > 0) { try { localStorage.removeItem(SAVE_KEY); } catch (_) { } location.reload(); } else resetArm = 3; return; } if (e.pointerType !== 'mouse' && FSOK) goFull(); startGame(); return; }
+  if (state === 'title') { if (loaded && resetBtn && x > resetBtn.x && x < resetBtn.x + resetBtn.w && y > resetBtn.y && y < resetBtn.y + resetBtn.h) { if (resetArm > 0) { try { if (typeof bakNow === 'function') bakNow('처음부터 하기 전'); localStorage.removeItem(SAVE_KEY); } catch (_) { } location.reload(); } else resetArm = 3; return; } if (e.pointerType !== 'mouse' && FSOK) goFull(); startGame(); return; }
   if (FSOK && hit(btnLayout().fs, x, y)) { toggleFull(); return; }
   if (state === 'end') { const inR = r => r && x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h; if (inR(endBtn)) state = 'play'; else if (inR(cardBtn)) makeCard(); return; }
   if (mini) { miniTap(x, y); return; }
@@ -1011,13 +1025,14 @@ function nextTut() {
   if (tut.step >= 6) { tut.done = true; tut.step = -1; banner('준비 완료!', '이제 동물 친구들을 도와주자', '#9be37a'); sfx('star'); save(); }
 }
 function tutText() {
+  const btn = (k, ro) => TOUCH() ? `${k} 버튼${ro ? '으로' : '을'}` : `${k} 키${ro ? '로' : '를'}`;
   return [
-    `${TOUCH() ? '화면 왼쪽을 드래그해서' : '방향키로'} 움직여봐!`,
-    `풀숲 가까이에서 ${KB()}${TOUCH() ? ' 버튼' : ' 키'}로 꼬리를 휘둘러봐!`,
-    '튀어나온 별사탕을 주워봐! (가까이 가면 쏙)',
-    `머리 위에 ! 뜬 친구에게 가서 ${KA()}${TOUCH() ? ' 버튼' : ' 키'}로 말 걸기`,
-    `${TOUCH() ? '오른쪽 위 ≡ 버튼' : 'P 키'}로 노랑폰을 열어봐! (다 보면 닫기)`,
-    `밭(울타리 안 빈 칸) 앞에서 ${KA()}${TOUCH() ? ' 버튼' : ' 키'}로 씨앗 심기`,
+    `${TOUCH() ? '화면 왼쪽을 드래그해서' : '방향키로'} 움직여 봐!`,
+    `풀숲 가까이 가서 ${btn(KB(), 1)} 꼬리를 휘둘러 봐!`,
+    '튀어나온 별사탕을 주워 봐! (가까이 가면 쏙)',
+    `머리 위에 ! 뜬 친구에게 가서 ${btn(KA(), 1)} 말 걸기`,
+    `${TOUCH() ? '오른쪽 위 노랑폰 버튼' : 'P 키'}으로 노랑폰을 열어 봐! (다 보면 닫기)`,
+    `울타리 안 빈 밭 앞에서 ${btn(KA(), 1)} 씨앗 심기`,
   ][tut.step] || '';
 }
 function startGame() {
@@ -1409,6 +1424,7 @@ function drawOverlays(toS) {
   if (phone) drawPhone();
   if (mini) mini.draw();
   if (dlg) drawDialogAC();
+  if (typeof drawOverlay4 === 'function') drawOverlay4();
 }
 function npcH(n) { return n.spr ? SP[n.spr].height : 16; }
 function hintTarget() {
@@ -1550,6 +1566,14 @@ function text(s, x, y, size, col = '#fff', align = 'left', outline = false) {
   if (outline) { ctx.lineWidth = Math.max(2, size * .22); ctx.strokeStyle = '#33222a'; ctx.lineJoin = 'round'; ctx.strokeText(s, x, y); }
   ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
+// 글씨가 칸을 넘치면 조금 줄이고, 그래도 넘치면 … 처리
+function fitText(s, x, y, size, col, maxW, align = 'left') {
+  s = String(s); if (!(maxW > 0)) return text(s, x, y, size, col, align);
+  ctx.font = `${Math.round(size)}px ${FONT}`; let w = ctx.measureText(s).width;
+  if (w > maxW) { const k = Math.max(.78, maxW / w); size *= k; ctx.font = `${Math.round(size)}px ${FONT}`; w = ctx.measureText(s).width;
+    if (w > maxW) { let t = s; while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1); s = t + '…'; } }
+  text(s, x, y, size, col, align);
+}
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 function vHeart(x, y, s, fill, line) { const g = ctx; g.beginPath(); g.moveTo(x + s * .5, y + s * .92); g.bezierCurveTo(x - s * .05, y + s * .55, x - s * .02, y + s * .02, x + s * .27, y + s * .04); g.bezierCurveTo(x + s * .42, y + s * .05, x + s * .5, y + s * .2, x + s * .5, y + s * .24); g.bezierCurveTo(x + s * .5, y + s * .2, x + s * .58, y + s * .05, x + s * .73, y + s * .04); g.bezierCurveTo(x + s * 1.02, y + s * .02, x + s * 1.05, y + s * .55, x + s * .5, y + s * .92); g.closePath(); if (fill) { g.fillStyle = fill; g.fill(); } if (line) { g.strokeStyle = line; g.lineWidth = Math.max(1, s * .1); g.stroke(); } }
 function vStar(x, y, r, fill, line, pts = 5, k = .48) { const g = ctx; g.beginPath(); for (let i = 0; i < pts * 2; i++) { const a = -Math.PI / 2 + i * Math.PI / pts, rr0 = i % 2 ? r * k : r; g.lineTo(x + Math.cos(a) * rr0, y + Math.sin(a) * rr0); } g.closePath(); g.lineJoin = 'round'; if (fill) { g.fillStyle = fill; g.fill(); } if (line) { g.strokeStyle = line; g.lineWidth = Math.max(1, r * .16); g.stroke(); } }
@@ -1605,12 +1629,18 @@ function drawGuide(toS) {
 }
 function drawTutorial() {
   if (tut.step < 0 || tut.done || dlg || state !== 'play') return;
-  const u = Math.max(12 * DPR, Math.min(CW, CH) / 28), s = tutText();
-  ctx.font = `${Math.round(u * 1.05)}px ${FONT}`; const w = Math.min(CW - 30 * DPR, ctx.measureText(s).width + u * 5), h = u * 2.4, x = CW / 2 - w / 2, y = CH * .2; window.__tutBottom = y + h;
-  ctx.fillStyle = 'rgba(51,34,42,.88)'; rr(x, y, w, h, u * .8); ctx.fill(); ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2 * DPR; ctx.stroke();
+  const port = CW < CH, u = Math.max(12 * DPR, Math.min(CW, CH) / (port ? 24 : 28)) * TXS(), s = tutText();
+  // 좁은 화면에서는 두 줄로 나눠서 잘리지 않게
+  const maxW = CW - SA.l - SA.r - 24 * DPR, tw = maxW - u * 5.2; ctx.font = `${Math.round(u * 1.05)}px ${FONT}`;
+  let lines = [s]; if (ctx.measureText(s).width > tw) { let best = -1, bd = 1e9; for (let i = 1; i < s.length; i++) if (s[i] === ' ') { const d = Math.abs(ctx.measureText(s.slice(0, i)).width - ctx.measureText(s.slice(i + 1)).width); if (d < bd) { bd = d; best = i; } } if (best > 0) lines = [s.slice(0, best), s.slice(best + 1)]; }
+  const lw = Math.max(...lines.map(l => ctx.measureText(l).width)), w = Math.min(maxW, lw + u * 5.4), h = u * (lines.length > 1 ? 3.5 : 2.4), x = CW / 2 - w / 2, y = port && typeof mmRect !== 'undefined' && mmRect ? Math.max(CH * .17, mmRect.y + mmRect.h + 8 * DPR) : CH * (port ? .17 : .2); window.__tutBottom = y + h;
+  ctx.fillStyle = 'rgba(51,34,42,.9)'; rr(x, y, w, h, u * .8); ctx.fill(); ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2 * DPR; ctx.stroke();
   { const im = (window.BODY_IMG && window.BODY_IMG.chick_g) || SP.chick_g; ctx.imageSmoothingEnabled = im.width > 40; ctx.drawImage(im, x + u * .3, y + h / 2 - u * 1.25, u * 2.4, u * 2.4); ctx.imageSmoothingEnabled = false; }
   text(`${tut.step + 1}/6`, x + u * 3, y + h / 2 + 1, u * .8, '#ffd23f');
-  text(s, x + u * 4.5, y + h / 2 + 1, u * 1.05, '#fff');
+  lines.forEach((l, i) => fitText(l, x + u * 4.5, y + h / 2 + 1 + (i - (lines.length - 1) / 2) * u * 1.3, u * 1.05, '#fff', w - u * 5.1));
+  // 눌러야 할 버튼을 반짝반짝
+  if (TOUCH() && !menu && !phone) { const B = btnLayout(), t0 = { 1: B.b, 3: B.a, 4: B.menu }[tut.step];
+    if (t0) { const k = (time * 1.6) % 1; ctx.strokeStyle = `rgba(255,210,63,${1 - k})`; ctx.lineWidth = 4 * DPR; ctx.beginPath(); ctx.arc(t0.x, t0.y, t0.r * (1.05 + k * .6), 0, 6.29); ctx.stroke(); ctx.strokeStyle = 'rgba(255,210,63,.9)'; ctx.lineWidth = 3 * DPR; ctx.beginPath(); ctx.arc(t0.x, t0.y, t0.r * 1.08, 0, 6.29); ctx.stroke(); } }
 }
 function drawBanner() {
   if (!bannerQ) return;
@@ -1695,8 +1725,8 @@ function drawHUD() {
   act.slice(0, 3).forEach(([k, q]) => { const ready = q.st === 2, s = ready ? `★ ${q.title} → ${NPCNAME(k)}` : q.goal(); ctx.font = `${Math.round(u * .88)}px ${FONT}`; const w = ctx.measureText(s).width + u * 1.4; uiPanel(px, y, w, u * 1.55, u * .7, ready ? 'rgba(255,210,63,.96)' : UIC.panel); text(s, px + u * .7, y + u * .8, u * .88, ready ? UIC.ink : UIC.ink2); y += u * 1.8; });
   if (act.length > 3) { const s = `+${act.length - 3}개 더`; uiPanel(px, y, u * 4.2, u * 1.4, u * .6); text(s, px + u * 2.1, y + u * .72, u * .78, UIC.sub, 'center'); }
   // toast
-  if (toastT > 0) { ctx.globalAlpha = Math.min(1, toastT * 2); ctx.font = `${Math.round(u * 1.0)}px ${FONT}`; const w = Math.min(CW - SA.l - SA.r - 20 * DPR, ctx.measureText(toastMsg).width + u * 2.2); const ty = Math.max(clockBox && clockBox.y < CH * .2 ? clockBox.y + clockBox.h + 6 * DPR : py, mmRect && CW < CH ? mmRect.y + mmRect.h + 8 * DPR : 0);
-    uiPanel(CW / 2 - w / 2, ty, w, u * 2, u, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, ty + u, u * 1.0, UIC.ink, 'center'); ctx.globalAlpha = 1; }
+  if (toastT > 0) { const U2 = u * TXS(); ctx.globalAlpha = Math.min(1, toastT * 2); ctx.font = `${Math.round(U2 * 1.0)}px ${FONT}`; const w = Math.min(CW - SA.l - SA.r - 20 * DPR, ctx.measureText(toastMsg).width + U2 * 2.2); const ty = Math.max(clockBox && clockBox.y < CH * .2 ? clockBox.y + clockBox.h + 6 * DPR : py, mmRect && CW < CH ? mmRect.y + mmRect.h + 8 * DPR : 0);
+    uiPanel(CW / 2 - w / 2, ty, w, U2 * 2, U2, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, ty + U2, U2 * 1.0, UIC.ink, 'center'); ctx.globalAlpha = 1; }
   // touch buttons
   const B = btnLayout();
   if (TOUCH() && state === 'play') {
@@ -1758,7 +1788,7 @@ function drawPartyUI() {
   }
 }
 function drawPanel() {
-  const m = menu, u = Math.max(12 * DPR, Math.min(CW, CH) / 25);
+  const m = menu, u = Math.max(12 * DPR, Math.min(CW, CH) / 25) * TXS();
   const E = panelEntries();
   const w = Math.min(CW - SA.l - SA.r - 20 * DPR, u * 24), x = SA.l + (CW - SA.l - SA.r - w) / 2;
   const top = SA.t + 8 * DPR, maxH = CH - SA.t - SA.b - 16 * DPR;
@@ -1787,8 +1817,10 @@ function drawPanel() {
     if (r.close || r.nav) { text(r.name, rx + rw / 2, ry + rh / 2 + 1, u * .9, '#8a6a5a', 'center'); return; }
     let tx = rx + u * .6;
     if (r.img) { const k = Math.min(rh * .8 / r.img.height, u * 2.2 / r.img.width); ctx.imageSmoothingEnabled = r.img.width > 40; ctx.drawImage(r.img, rx + u * .5, ry + (rh - r.img.height * k) / 2, r.img.width * k, r.img.height * k); tx = rx + u * .9 + r.img.width * k; }
-    text(r.name, tx, ry + rh * (r.desc ? .34 : .52), u * .9, '#33222a');
-    if (r.desc) text(r.desc, tx, ry + rh * .72, u * .64, '#8a6a5a');
+    let tagW = 0; if (r.tag) { ctx.font = `${Math.round(u * .82)}px ${FONT}`; tagW = ctx.measureText(r.tag).width + u * 1.6; }
+    const room = rx + rw - tagW - u * .5 - tx;
+    fitText(r.name, tx, ry + rh * (r.desc ? .34 : .52), u * .9, '#33222a', room);
+    if (r.desc) fitText(r.desc, tx, ry + rh * .72, u * .64, '#8a6a5a', room);
     if (r.tag) { ctx.font = `${Math.round(u * .82)}px ${FONT}`; const tw = ctx.measureText(r.tag).width + u * 1.2; ctx.fillStyle = r.col || '#ffd23f'; rr(rx + rw - tw - u * .4, ry + rh / 2 - u * .62, tw, u * 1.24, u * .6); ctx.fill(); text(r.tag, rx + rw - tw / 2 - u * .4, ry + rh / 2 + 1, u * .82, '#33222a', 'center'); }
   });
   if (m.msgT > 0) { ctx.globalAlpha = Math.min(1, m.msgT * 2); ctx.font = `${Math.round(u * .85)}px ${FONT}`; const mw = ctx.measureText(m.msg).width + u * 1.6, my = Math.min(CH - SA.b - u * 1.6, y + h + u * .3); ctx.fillStyle = m.bad ? '#ff6b8a' : '#9be37a'; rr(CW / 2 - mw / 2, my, mw, u * 1.4, u * .7); ctx.fill(); text(m.msg, CW / 2, my + u * .7, u * .85, m.bad ? '#fff' : '#33222a', 'center'); ctx.globalAlpha = 1; }
@@ -1905,6 +1937,7 @@ function drawTitle() {
 const CFG_KEY = 'annorang_cfg_v1';
 const CFG = { time: 'auto', season: 'auto', gfx: 'auto', clock: 1, art: 'toy' };
 try { Object.assign(CFG, JSON.parse(localStorage.getItem(CFG_KEY) || '{}')); } catch (e) { }
+function TXS() { return { 1: 1, 2: 1.15, 3: 1.3 }[CFG.txt || 1] || 1; } // 글씨 크기 배율
 function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch (e) { } }
 function josa(w, a, b) { const c = (w || '').charCodeAt(w.length - 1); return w + (c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? a : b); }
 function dayKey(d = new Date()) { return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
@@ -2217,7 +2250,7 @@ const TAGCOL = { '안노랑': '#ffab2e', '계획이': '#7fcaf2', '먹보': '#ff8
 function tagColor(who) { if (TAGCOL[who]) return TAGCOL[who]; const n = NPCS.find(q => q.name === who); const pal = ['#9be37a', '#c9b6ff', '#ffd23f', '#7fcaf2', '#ffb3c6', '#f2c45a', '#a0d8c8']; let h = 0; for (const ch of who) h = (h * 31 + ch.charCodeAt(0)) % 997; return n ? pal[h % pal.length] : '#ffd23f'; }
 function drawDialogAC() {
   const L0 = dlg.lines[dlg.i];
-  const u = Math.max(13 * DPR, Math.min(CW, CH) / 26);
+  const u = Math.max(13 * DPR, Math.min(CW, CH) / 26) * TXS();
   const bw = Math.min(CW - SA.l - SA.r - 20 * DPR, u * 34), bh = Math.min(u * 5.4, CH * .34), bx = SA.l + (CW - SA.l - SA.r - bw) / 2, by = CH - SA.b - bh - 14 * DPR;
   // soft shadow + bubbly box
   ctx.fillStyle = 'rgba(51,34,42,.25)'; rr(bx + 4 * DPR, by + 6 * DPR, bw, bh, bh * .42); ctx.fill();
@@ -3373,6 +3406,272 @@ townLoad = (orig => d => { orig(d); const t = d && d.t3; if (!t) return; Object.
 // ---------- 홈 화면 설치 안내 다시 보기 ----------
 lifeEntries = (orig => m => { const E = orig(m); if (m.kind === 'settings' && window.__pwaGuide) E.splice(E.length - 1, 0, { name: '홈 화면에 앱 추가', desc: '폰 홈 화면에 삐약마을 아이콘 만들기', tag: '안내', col: '#ffd23f', act: () => { menu = null; const r = window.__pwaGuide(); if (r && typeof toast === 'function') toast(r); } }); return E; })(lifeEntries);
 
+// ---------- town4: 저장 백업 · 성능 · 알림 · 친구 마을 · 글씨 크기 ----------
+
+// ===== 공통: DOM 시트 (버튼 클릭이 '진짜 터치'로 인정돼야 하는 기능용 — 공유·복사·알림 허용) =====
+function sheet4(title, desc) {
+  if (cardOpen) return null; cardOpen = true;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(30,20,25,.88);display:flex;align-items:center;justify-content:center;z-index:12;padding:12px;box-sizing:border-box;overflow:auto;font-family:' + FONT;
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff8e7;border:3px solid #33222a;border-radius:18px;padding:18px;max-width:440px;width:100%;color:#33222a;display:flex;flex-direction:column;gap:10px;max-height:92vh;overflow:auto;box-sizing:border-box';
+  ov.className = 'sheet4'; ov.append(box); document.body.append(ov);
+  ['pointerdown', 'pointerup', 'keydown', 'touchstart'].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation()));
+  const add = el => { el.style.flexShrink = '0'; box.append(el); return el; };
+  const S = {
+    box, ov,
+    close() { ov.remove(); cardOpen = false; },
+    h(t, size = 22) { const d = document.createElement('div'); d.textContent = t; d.style.cssText = `font-size:${size}px`; return add(d); },
+    p(t, col = '#8a6a5a') { const d = document.createElement('div'); d.innerHTML = t; d.style.cssText = `font-size:14px;color:${col};line-height:1.45`; return add(d); },
+    btn(t, bg, fn) { const b = document.createElement('button'); b.textContent = t; b.style.cssText = `background:${bg};color:#33222a;border:0;border-radius:999px;padding:11px 16px;font-size:16px;font-family:inherit;cursor:pointer`; b.onclick = fn; return add(b); },
+    ta(ph, val, ro) { const t = document.createElement('textarea'); t.placeholder = ph || ''; t.value = val || ''; t.readOnly = !!ro; t.style.cssText = 'width:100%;height:68px;box-sizing:border-box;border-radius:10px;border:2px solid #e8a92a;padding:8px;font-size:12px;font-family:monospace;resize:none;background:#fff'; return add(t); },
+    input(ph, val) { const t = document.createElement('input'); t.placeholder = ph || ''; t.value = val || ''; t.maxLength = 12; t.style.cssText = 'width:100%;box-sizing:border-box;border-radius:10px;border:2px solid #e8a92a;padding:10px;font-size:17px;font-family:inherit;background:#fff'; return add(t); },
+    msg() { const d = document.createElement('div'); d.style.cssText = 'font-size:14px;color:#e2543b;min-height:18px;line-height:1.4'; return add(d); },
+    sep() { const d = document.createElement('div'); d.style.cssText = 'height:2px;background:#efe2c8;margin:4px 0'; return add(d); },
+  };
+  if (title) S.h(title); if (desc) S.p(desc);
+  return S;
+}
+async function copyText(t, ta) { let ok = false; try { await navigator.clipboard.writeText(t); ok = true; } catch (e) { } if (!ok && ta) { ta.focus(); ta.select(); try { ok = document.execCommand('copy'); } catch (e) { } } return ok; }
+async function shareText(title, text) { if (navigator.share) { try { await navigator.share({ title, text }); return 'shared'; } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; } } return (await copyText(text)) ? 'copied' : 'fail'; }
+
+// ===== ② 저장 백업 · 옮기기 =====
+const BAK_KEY = 'annorang_bak_v1';
+function bakList() { try { return JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); } catch (e) { return []; } }
+function bakNow(why) { try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false; const d = JSON.parse(raw), L0 = bakList(); L0.unshift({ at: Date.now(), why: why || '자동 백업', st: d.stars || 0, pt: d.playT || 0, raw }); while (L0.length > 4) L0.pop(); localStorage.setItem(BAK_KEY, JSON.stringify(L0)); return true; } catch (e) { return false; } }
+function bakDaily() { const k = dayKey(); if (bakList().some(b => b.why === '자동 백업' && dayKey(new Date(b.at)) === k)) return; save(); bakNow('자동 백업'); }
+function fmtAt(t) { const d = new Date(t); return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function markBackedUp() { CFG.bakAt = Date.now(); saveCfg(); }
+function applySave(d, why) { bakNow(why || '불러오기 전'); localStorage.setItem(SAVE_KEY, JSON.stringify(d)); location.reload(); }
+openSaveUI = function () {
+  if (state === 'play') save();
+  const S = sheet4('저장 · 백업', '진행 상황은 이 폰의 <b>이 브라우저(또는 앱) 안</b>에만 저장돼요. 앱을 지우거나 폰을 바꾸기 전에 <b>저장 코드</b>를 카톡·메모에 보관해 두세요.'); if (!S) return;
+  const code = encodeSave(), ta = S.ta('', code, true), msg = S.msg();
+  const day = new Date(), fname = `삐약마을_저장_${day.getFullYear()}${String(day.getMonth() + 1).padStart(2, '0')}${String(day.getDate()).padStart(2, '0')}.txt`;
+  const b1 = S.btn('코드 복사하기', '#ffd23f', async () => { const ok = await copyText(code, ta); b1.textContent = ok ? '복사됐어요! 카톡 나와의 채팅에 붙여 두세요' : '위 코드를 길게 눌러 복사하세요'; if (ok) markBackedUp(); });
+  if (navigator.share) S.btn('카톡·메모로 보내기', '#ffe9a8', async () => { const r = await shareText('삐약마을 저장 코드', `삐약마을 저장 코드 (${fmtAt(Date.now())})\n${code}`); if (r === 'shared' || r === 'copied') { markBackedUp(); msg.style.color = '#5aa548'; msg.textContent = r === 'copied' ? '복사했어요!' : '보냈어요!'; } });
+  S.btn('파일로 저장하기', '#f3e6cf', () => { try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([code], { type: 'text/plain' })); a.download = fname; document.body.append(a); a.click(); a.remove(); markBackedUp(); msg.style.color = '#5aa548'; msg.textContent = `'${fname}' 파일로 저장했어요 (다운로드 폴더)`; } catch (e) { msg.textContent = '이 브라우저에서는 파일 저장이 안 돼요. 코드 복사를 써 주세요.'; } });
+  if (CFG.bakAt) S.p(`마지막 백업: ${fmtAt(CFG.bakAt)}`);
+  S.sep(); S.h('코드·파일로 불러오기', 18);
+  const ta2 = S.ta('여기에 저장 코드(ANR-...)를 붙여넣기'), msg2 = S.msg();
+  const fi = document.createElement('input'); fi.type = 'file'; fi.accept = '.txt,text/plain'; fi.style.display = 'none'; S.box.append(fi);
+  fi.onchange = () => { const f = fi.files && fi.files[0]; if (!f) return; f.text().then(t => { ta2.value = t.trim(); msg2.style.color = '#5aa548'; msg2.textContent = '파일을 읽었어요. 아래 불러오기를 눌러 주세요.'; }); };
+  S.btn('불러오기', '#9be37a', () => { const d = decodeSave(ta2.value); if (!d) { msg2.style.color = '#e2543b'; msg2.textContent = '코드가 올바르지 않아요. 전체를 빠짐없이 붙여넣었는지 확인해 주세요.'; return; } try { applySave(d); } catch (e) { msg2.textContent = '이 브라우저에서는 저장이 막혀 있어요.'; } });
+  S.btn('저장 파일 고르기', '#f3e6cf', () => fi.click());
+  const L0 = bakList();
+  if (L0.length) { S.sep(); S.h('자동 백업', 18); S.p('하루 한 번, 그리고 처음부터 하기·불러오기 직전에 이 폰에 따로 보관해요. 실수로 날렸을 때 되돌릴 수 있어요.');
+    L0.forEach(b => { const bt = S.btn(`${fmtAt(b.at)} · ${b.why} · 별 ${b.st}개 · ${Math.floor(b.pt / 60)}분`, '#efe2c8', () => { if (bt.dataset.arm) { try { applySave(JSON.parse(b.raw), '백업 되돌리기 전'); } catch (e) { } } else { bt.dataset.arm = 1; bt.textContent = '한 번 더 누르면 이 시점으로 되돌려요'; bt.style.background = '#ffb3c6'; } }); bt.style.fontSize = '14px'; }); }
+  S.btn('닫기', '#f3e6cf', () => S.close());
+};
+
+// ===== ③ 성능: 초당 프레임 기록 · 표시 · 리포트 =====
+const PF = { n: 0, t0: 0, cur: 0, sec: [] };
+function perfFrame(t) { if (!PF.t0) PF.t0 = t; PF.n++; if (t - PF.t0 >= 1000) { PF.cur = PF.n * 1000 / (t - PF.t0); if (state === 'play') { PF.sec.push(PF.cur); if (PF.sec.length > 120) PF.sec.shift(); } PF.n = 0; PF.t0 = t; } }
+function perfSummary() {
+  const a = PF.sec.slice(-60), avg = a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0, lo = a.length ? Math.min(...a) : 0;
+  const r3 = typeof R3 !== 'undefined' && R3 && R3.renderer, pr = r3 ? r3.getPixelRatio() : 0, sz = r3 ? r3.getSize(new THREE.Vector2()) : null;
+  const ua = navigator.userAgent, model = (ua.match(/Android [\d.]+; ([^;)]+)/) || [])[1] || (/(iPhone|iPad)/.exec(ua) || [])[1] || '';
+  return { avg, lo, pr, lines: [
+    `삐약마을 성능 리포트 (${fmtAt(Date.now())})`,
+    `평균 ${avg.toFixed(1)}fps · 최저 ${lo.toFixed(0)}fps (최근 ${a.length}초, 목표 ${CFG.fps === 30 ? 30 : 60})`,
+    `화질 ${typeof GFX !== 'undefined' ? GFX : '-'} (설정 ${CFG.gfx}) · 렌더 배율 ${pr || '-'} · 화면 ${innerWidth}×${innerHeight} @${devicePixelRatio}x${sz ? ` · 렌더 ${Math.round(sz.x * pr)}×${Math.round(sz.y * pr)}` : ''}`,
+    `자동 조절: 내림 ${(typeof perf !== 'undefined' && perf.downs) || 0}번 · 올림 ${(typeof perf !== 'undefined' && perf.ups) || 0}번 · 최고 ${(typeof perf !== 'undefined' && perf.max) || '-'}`,
+    `기기 ${model || '-'} · 메모리 ${navigator.deviceMemory || '?'}GB · 코어 ${navigator.hardwareConcurrency || '?'} · ${matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches ? '설치 앱' : '브라우저'}${PF.batt ? ` · 배터리 ${PF.batt}` : ''}`,
+    ua,
+  ] };
+}
+function openPerfReport() {
+  if (navigator.getBattery) navigator.getBattery().then(b => { PF.batt = `${Math.round(b.level * 100)}%${b.charging ? ' 충전 중' : ''}`; }).catch(() => { });
+  const S = sheet4('성능 리포트', '마을을 1분쯤 돌아다닌 뒤에 열면 정확해요. 아래 내용을 복사해서 보내 주시면 기기에 맞게 화질 기준을 조정할 수 있어요.'); if (!S) return;
+  const R = perfSummary(), good = R.avg >= (CFG.fps === 30 ? 27 : 50), ok = R.avg >= (CFG.fps === 30 ? 22 : 35);
+  S.p(!PF.sec.length ? '아직 기록이 없어요. 게임을 조금 플레이한 뒤 다시 열어 주세요.' : good ? '👍 아주 부드럽게 돌아가고 있어요.' : ok ? '🙂 플레이에 무리 없는 정도예요. 발열이 느껴지면 프레임을 30으로 바꿔 보세요.' : '🐢 조금 버거워해요. 그래픽을 \'낮음\', 프레임을 30으로 바꾸면 좋아져요.', '#33222a');
+  const ta = S.ta('', R.lines.join('\n'), true); ta.style.height = '150px';
+  const b = S.btn('리포트 복사하기', '#ffd23f', async () => { b.textContent = (await copyText(ta.value, ta)) ? '복사됐어요!' : '위 내용을 길게 눌러 복사하세요'; });
+  S.btn('닫기', '#f3e6cf', () => S.close());
+}
+
+// ===== ⑥ 알림 (설치한 앱 · 안드로이드 크롬 기준) =====
+function notiMsg(d) {
+  const m = d.getMonth() + 1, dd = d.getDate();
+  for (const h of HOLI) if (h.from[0] === m && h.from[1] === dd) return { t: `🎉 ${h.name} 시작!`, b: `마을 친구들이 ${josa(h.itemName, '을', '를')} 준비했대요. 인사하러 가 볼까요?` };
+  for (const id in BDAY) if (BDAY[id][0] === m && BDAY[id][1] === dd) { const n = npcById(id); if (n) return { t: `🎂 오늘은 ${n.name}의 생일!`, b: '좋아하는 음식을 선물하면 아주 기뻐해요' }; }
+  for (const nm in CHICK_BDAY) if (CHICK_BDAY[nm][0] === m && CHICK_BDAY[nm][1] === dd) return { t: `🎂 오늘은 병아리 ${nm}의 생일!`, b: '삐약! 축하해 주러 가 볼까요?' };
+  if (marketDay(dayNum(d))) return { t: '🛒 오늘 5일장이 열렸어요', b: '떠돌이 상인이 특별한 물건을 가져왔대요. 광장으로 가 볼까요?' };
+  if (d.getDay() === 0) return { t: '🏅 일요일 마을 축제 날!', b: '광장에서 축제 미니게임이 열려요. 금메달에 도전!' };
+  const R = [['🥚 닭들이 새 알을 낳았어요', '오늘도 농장에 들러 줄래요? 병아리 3총사가 기다려요'], ['🌱 밭의 작물이 쑥쑥 자랐어요', '물 주고 수확하러 가 볼까요?'], ['🐣 삐약! 노랑이 어디 갔지?', '계획이·먹보·승부욕이 노랑이를 찾고 있어요']];
+  const r = R[dayNum(d) % 3]; return { t: r[0], b: r[1] };
+}
+async function notiPlan() {
+  if (!('caches' in window)) return;
+  try { const now = new Date(), days = []; for (let i = 0; i < 21; i++) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); days.push(Object.assign({ k: dayKey(d) }, notiMsg(d))); }
+    const c = await caches.open('piyak-notify');
+    await c.put('./__notify.json', new Response(JSON.stringify({ on: CFG.noti ? 1 : 0, days }), { headers: { 'content-type': 'application/json' } }));
+    if (state === 'play') await c.put('./__played', new Response(String(dayKey())));
+  } catch (e) { }
+}
+function notiSupport() {
+  const sw = window.__PWA && 'serviceWorker' in navigator && isSecureContext, n = 'Notification' in window;
+  const inst = matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  return { sw, n, inst, perm: n ? Notification.permission : 'none', ios: /iphone|ipad|ipod/i.test(navigator.userAgent) };
+}
+async function notiOn() {
+  const P0 = await Notification.requestPermission(); if (P0 !== 'granted') return { ok: false, why: P0 === 'denied' ? '알림이 차단돼 있어요. 폰 설정 → 앱(또는 브라우저) → 알림에서 허용해 주세요.' : '알림 허용을 누르지 않았어요.' };
+  CFG.noti = 1; saveCfg();
+  const reg = await navigator.serviceWorker.ready; let ps = false;
+  if (reg.periodicSync) { try { const st = await navigator.permissions.query({ name: 'periodic-background-sync' }); if (st.state === 'granted') { await reg.periodicSync.register('piyak-daily', { minInterval: 12 * 3600 * 1000 }); ps = true; } } catch (e) { } }
+  CFG.notiBg = ps ? 1 : 0; saveCfg(); await notiPlan();
+  try { await reg.showNotification('삐약마을 알림이 켜졌어요 🐣', { body: ps ? '하루에 한 번, 오늘의 마을 소식을 알려 드릴게요' : '이 폰에서는 앱을 열어 둔 동안에만 알림이 와요', icon: './icon-192.png', badge: './icon-192.png', tag: 'piyak-hello' }); } catch (e) { }
+  return { ok: true, ps };
+}
+async function notiOff() { CFG.noti = 0; saveCfg(); try { const reg = await navigator.serviceWorker.ready; if (reg.periodicSync) await reg.periodicSync.unregister('piyak-daily'); } catch (e) { } await notiPlan(); }
+function openNoti() {
+  const s = notiSupport();
+  const S = sheet4('마을 소식 알림', '5일장 · 일요일 축제 · 친구 생일 · 기념일 같은 소식을 <b>하루에 한 번</b>(오전 8시~밤 9시 사이) 알려 줘요. 그날 이미 게임을 했다면 보내지 않아요.'); if (!S) return;
+  const st = S.p('', '#33222a'), msg = S.msg();
+  const paint = () => { st.innerHTML = !s.sw ? '⚠️ 홈 화면에 설치한 <b>삐약마을 앱</b>에서만 켤 수 있어요. (설정 → 홈 화면에 앱 추가)' : !s.n ? (s.ios ? '⚠️ 아이폰은 iOS 16.4 이상에서 <b>홈 화면에 추가한 앱</b>으로 열어야 알림을 쓸 수 있어요.' : '⚠️ 이 브라우저는 알림을 지원하지 않아요.') : CFG.noti && Notification.permission === 'granted' ? `✅ 알림 켜짐 · ${CFG.notiBg ? '앱을 꺼 둬도 하루 한 번 와요' : '이 폰은 앱이 꺼져 있으면 알림이 안 올 수 있어요 (크롬 설치 앱 권장)'}` : '🔕 지금은 꺼져 있어요'; };
+  paint();
+  if (s.sw && s.n) {
+    S.btn(CFG.noti ? '알림 끄기' : '알림 켜기', CFG.noti ? '#efe2c8' : '#ffd23f', async function () { const b = this; if (CFG.noti) { await notiOff(); b.textContent = '알림 켜기'; b.style.background = '#ffd23f'; msg.textContent = ''; } else { const r = await notiOn(); if (r.ok) { b.textContent = '알림 끄기'; b.style.background = '#efe2c8'; msg.style.color = '#5aa548'; msg.textContent = '알림을 켰어요! 방금 테스트 알림이 갔을 거예요.'; } else { msg.style.color = '#e2543b'; msg.textContent = r.why; } } paint(); });
+    const today = notiMsg(new Date()); S.p(`오늘의 알림 예시: <b>${today.t}</b> — ${today.b}`);
+  }
+  S.btn('닫기', '#f3e6cf', () => S.close());
+}
+
+// ===== ⑦ 친구 마을 놀러 가기 (서버 없이 코드로) =====
+const T4 = { name: '', recv: {}, gd: 0, gn: 0, recent: [] };
+let VISIT = null;
+function vname() { return T4.name || '노랑이네 마을'; }
+function b64e(o) { return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64d(t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); while (t.length % 4) t += '='; return JSON.parse(decodeURIComponent(escape(atob(t)))); }
+function ck4(s) { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 1679616; return h.toString(36).padStart(4, '0'); }
+function mkCode(pre, o) { const b = b64e(o); return `${pre}-${b}.${ck4(b)}`; }
+function rdCode(pre, txt) { const m = String(txt || '').replace(/\s+/g, '').match(new RegExp(pre + '-([A-Za-z0-9_-]+)\\.([0-9a-z]{4})')); if (!m || ck4(m[1]) !== m[2]) return null; try { return b64d(m[1]); } catch (e) { return null; } }
+const CHICK3 = ['계획이', '먹보', '승부욕'];
+function myVillage() { return { n: vname(), f: Object.keys(FURN).filter(k => FOWN[k] && FON[k] && !FURN[k].own), o: OUTFIT, h: hat, s: stars, fr: frTotal(), c: CHICK3.map(c => typeof chickLv === 'function' ? chickLv(c) : 1), d: dayKey() }; }
+function baseURL() { return window.__PWA && /^https:/.test(location.protocol) ? location.origin + location.pathname : ''; }
+function inviteText() { const code = mkCode('PYV1', myVillage()), u = baseURL(); return { code, text: `🐣 ${vname()}의 둥지집에 놀러 와!\n삐약마을 → 노랑폰 → 친구 마을 → 놀러 가기에 아래 코드를 붙여넣기\n${code}${u ? `\n\n바로 열기: ${u}?visit=${code}` : ''}` }; }
+function canTravel() { if (state !== 'play' || curRoom.dungeon || mini || fishing || dlg || VISIT) return VISIT ? '이미 친구 집에 놀러 와 있어요' : curRoom.dungeon ? '동굴 밖에서 놀러 갈 수 있어요' : '지금은 놀러 갈 수 없어요'; return ''; }
+function startVisit(V) {
+  const why = canTravel(); if (why) { toast(why); return false; }
+  const HR = ROOMS.find(r => r.id === 'home'); VISIT = { V, hname: HR.name, fown: Object.assign({}, FOWN), fon: Object.assign({}, FON), x: P.x, y: P.y, dir: P.dir };
+  for (const k in FURN) { const on = FURN[k].own || (V.f || []).includes(k) ? 1 : 0; FOWN[k] = on; FON[k] = on; } furnSolid(); HR.name = `${V.n} 둥지집`;
+  T4.recent = [{ n: V.n, v: V }].concat(T4.recent.filter(r => r.n !== V.n)).slice(0, 3);
+  menu = null; phone = null;
+  startWipe(() => { warpTo((HM.door + .5) * T, (HM.y1 - .6) * T, 'up'); });
+  setTimeout(() => say([L(V.n, '어서 와! 여기가 우리 둥지집이야~ 천천히 구경하고 가!'), L(V.n, `우리 마을은 별 ${V.s || 0}개 · 친구 하트 ♥${V.fr || 0} · 병아리 3총사 Lv ${(V.c || [1, 1, 1]).join('/')}!${V.o && V.o !== 'none' && OUTFITS[V.o] ? ` 요즘 ${OUTFITS[V.o].name} 입고 다녀.` : ''}`), L('안노랑', '(우와... 구경하고 가야지! 문으로 나가면 우리 마을로 돌아가요)')]), 900);
+  sfx('done'); return true;
+}
+function endVisit(gift = true) {
+  if (!VISIT) return; const V = VISIT.V, back = VISIT;
+  startWipe(() => { Object.keys(FOWN).forEach(k => delete FOWN[k]); Object.keys(FON).forEach(k => delete FON[k]); Object.assign(FOWN, back.fown); Object.assign(FON, back.fon); furnSolid(); ROOMS.find(r => r.id === 'home').name = back.hname; VISIT = null; warpTo(back.x, back.y, back.dir);
+    if (gift) setTimeout(() => { menu = { kind: 'visit', title: `${V.n}에게 선물 남기기`, tabs: ['선물 고르기'], tab: 0, sel: 0, page: 0, gift: V }; }, 700); });
+}
+const GIFTABLE = ['use', 'mat', 'seed'];
+function giftEntries(m) {
+  const V = m.gift, E = [{ name: '선물 없이 돌아가기', desc: '다음에 또 놀러 가요', tag: '닫기', col: '#efe2c8', act: () => { menu = null; toast(`${V.n} 구경 끝! 즐거웠어`); } }];
+  for (const id in inv) { const I = ITEMS[id]; if (!I || !(inv[id] > 0) || !GIFTABLE.includes(I.type)) continue;
+    E.push({ img: (() => { try { return itemImg(id); } catch (e) { return null; } })(), name: I.name, desc: `보유 ${inv[id]}개 · 1개를 선물 코드로 만들어 보내요`, tag: '선물', col: '#ffd23f', act: () => sendGift(V, id) }); }
+  return E;
+}
+function sendGift(V, id) {
+  if (!(inv[id] > 0)) return; inv[id]--; if (inv[id] <= 0) delete inv[id]; menu = null; save();
+  const g = { from: vname(), to: V.n, i: id, n: 1, id: Math.random().toString(36).slice(2, 10), d: dayKey() }, code = mkCode('PYG1', g), u = baseURL();
+  const text = `🎁 ${vname()}에서 ${V.n}에게 ${ITEMS[id].name} 선물이 왔어요!\n삐약마을 → 노랑폰 → 친구 마을 → 선물 열기에 아래 코드를 붙여넣기\n${code}${u ? `\n\n바로 열기: ${u}?gift=${code}` : ''}`;
+  const S = sheet4(`${ITEMS[id].name} 선물 포장 완료!`, `이 선물 코드를 <b>${V.n}</b> 친구에게 보내 주세요. 코드는 한 번만 열 수 있어요.`); if (!S) return;
+  const ta = S.ta('', text, true), msg = S.msg();
+  S.btn('카톡으로 보내기', '#ffd23f', async () => { const r = await shareText('삐약마을 선물', text); msg.style.color = '#5aa548'; msg.textContent = r === 'shared' ? '보냈어요!' : r === 'copied' ? '복사했어요! 카톡에 붙여넣어 보내 주세요' : '위 내용을 길게 눌러 복사하세요'; });
+  S.btn('닫기', '#f3e6cf', () => S.close());
+}
+function openGift(txt) {
+  const g = rdCode('PYG1', txt); if (!g || !ITEMS[g.i]) return '선물 코드가 올바르지 않아요. 전체를 빠짐없이 붙여넣었는지 확인해 주세요.';
+  if (T4.recv[g.id]) return '이미 열어 본 선물이에요.';
+  if (T4.gd !== dayKey()) { T4.gd = dayKey(); T4.gn = 0; } if (T4.gn >= 5) return '선물은 하루에 5개까지 열 수 있어요. 내일 다시 열어 주세요!';
+  T4.recv[g.id] = dayKey(); const ks = Object.keys(T4.recv); if (ks.length > 300) delete T4.recv[ks[0]]; T4.gn++;
+  addItem(g.i, Math.max(1, Math.min(3, g.n || 1))); save(); sfx('star');
+  setTimeout(() => banner('선물 도착!', `${josa(g.from, '이', '가')} ${josa(ITEMS[g.i].name, '을', '를')} 보냈어요`, '#ffb3c6'), 300);
+  return '';
+}
+function askCode(title, desc, ph, onOk) {
+  const S = sheet4(title, desc); if (!S) return; const ta = S.ta(ph), msg = S.msg();
+  if (navigator.clipboard && navigator.clipboard.readText) S.btn('복사한 내용 붙여넣기', '#f3e6cf', async () => { try { ta.value = await navigator.clipboard.readText(); } catch (e) { msg.textContent = '칸을 길게 눌러 직접 붙여넣어 주세요.'; } });
+  S.btn('확인', '#ffd23f', () => { const err = onOk(ta.value); if (err) { msg.textContent = err; return; } S.close(); });
+  S.btn('닫기', '#efe2c8', () => S.close());
+}
+function visitEntries(m) {
+  if (m.gift) return giftEntries(m);
+  const E = [
+    { name: '내 마을 이름', desc: `${vname()} · 친구에게 이렇게 보여요`, tag: '바꾸기', col: '#efe2c8', act: () => { const S = sheet4('마을 이름 바꾸기', '친구 초대장과 선물에 표시돼요. (최대 12자)'); if (!S) return; const ip = S.input('예: 노랑이네 마을', T4.name); S.btn('저장', '#ffd23f', () => { T4.name = ip.value.trim().slice(0, 12); save(); S.close(); toast(`이제 '${vname()}'이에요!`); }); S.btn('닫기', '#efe2c8', () => S.close()); } },
+    { name: '우리 집에 초대하기', desc: '초대 코드를 보내면 친구가 둥지집을 구경하러 와요', tag: '보내기', col: '#ffd23f', act: () => { const I = inviteText(), S = sheet4('초대장 보내기', `지금 둥지집 모습(가구 ${myVillage().f.length}개)이 코드에 담겨요. 꾸미기를 바꾸면 새로 보내 주세요.`); if (!S) return; const ta = S.ta('', I.text, true), msg = S.msg(); S.btn('카톡으로 보내기', '#ffd23f', async () => { const r = await shareText('삐약마을 초대장', I.text); msg.style.color = '#5aa548'; msg.textContent = r === 'shared' ? '보냈어요!' : r === 'copied' ? '복사했어요! 카톡에 붙여넣어 보내 주세요' : '위 내용을 길게 눌러 복사하세요'; }); S.btn('닫기', '#efe2c8', () => S.close()); } },
+    { name: '친구 집 놀러 가기', desc: '친구가 보낸 초대 코드(PYV1-...)를 붙여넣어요', tag: '코드 입력', col: '#9be37a', act: () => { menu = null; askCode('친구 집 놀러 가기', '카톡으로 받은 초대장을 통째로 붙여넣어도 괜찮아요.', 'PYV1-...', t => { const V = rdCode('PYV1', t); if (!V) return '초대 코드가 올바르지 않아요.'; const w = canTravel(); if (w) return w; setTimeout(() => startVisit(V), 50); return ''; }); } },
+    { name: '받은 선물 열기', desc: `친구가 보낸 선물 코드(PYG1-...) · 오늘 ${T4.gd === dayKey() ? T4.gn : 0}/5개`, tag: '코드 입력', col: '#ffb3c6', act: () => { menu = null; askCode('받은 선물 열기', '카톡으로 받은 선물 메시지를 통째로 붙여넣어도 괜찮아요.', 'PYG1-...', openGift); } },
+  ];
+  for (const r of T4.recent) E.push({ name: `${r.n} 다시 가기`, desc: '최근에 놀러 간 친구 집 (그때 모습 그대로)', tag: '놀러 가기', col: '#c9e6a8', act: () => { menu = null; startVisit(r.v); } });
+  return E;
+}
+// 친구 집에 있는 동안: 부엌·옷장·꾸미기 막기, 문으로 나가면 돌아오기, 저장은 잠시 멈춤
+homeExit = (orig => () => VISIT ? endVisit() : orig())(homeExit);
+homeNear = (orig => () => VISIT ? null : orig())(homeNear);
+openDeco = (orig => () => { if (VISIT) { toast('친구 집은 구경만 할 수 있어요'); return; } orig(); })(openDeco);
+save = (orig => () => { if (VISIT) return; orig(); })(save);
+{ const i = APPS.findIndex(a => a.id === 'deco'); APPS.splice(i + 1, 0, { id: 'visit', name: '친구 마을', ico: '💌', col: '#ffb3c6', go: () => { phone = null; if (VISIT) { toast('문으로 나가면 우리 마을로 돌아가요'); return; } menu = { kind: 'visit', title: '친구 마을', tabs: ['친구 마을'], tab: 0, sel: 0, page: 0 }; } }); }
+// 초대·선물 링크로 들어왔을 때 (…/?visit=코드, ?gift=코드)
+function linkInvite() {
+  let q; try { q = new URLSearchParams(location.search); } catch (e) { return; }
+  const v = q.get('visit'), g = q.get('gift'); if (!v && !g) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) { }
+  setTimeout(() => {
+    if (v) { const V = rdCode('PYV1', v); if (!V) return toast('초대 코드가 올바르지 않아요'); const S = sheet4('💌 초대장이 왔어요!', `<b>${V.n}</b>의 둥지집에 놀러 갈까요?`); if (!S) return; S.btn('놀러 가기', '#ffd23f', () => { S.close(); startVisit(V); }); S.btn('나중에', '#efe2c8', () => S.close()); }
+    else { const S = sheet4('🎁 선물이 왔어요!', '지금 열어 볼까요? 선물은 이 기기의 마을로 들어가요.'); if (!S) return; const msg = S.msg(); S.btn('선물 열기', '#ffd23f', () => { const e = openGift(g); if (e) { msg.textContent = e; return; } S.close(); }); S.btn('나중에', '#efe2c8', () => S.close()); }
+  }, 2600);
+}
+
+// ===== HUD 덧그림: 성능 표시 · 친구 집 안내 =====
+function drawOverlay4() {
+  if (state === 'title') return;
+  const u = Math.max(11 * DPR, Math.min(CW, CH) / 34);
+  if (VISIT && !menu && !dlg) { const s = `🏠 ${VISIT.V.n} 둥지집 구경 중 · 문으로 나가면 돌아가요`; ctx.font = `${Math.round(u * .95)}px ${FONT}`; const w = Math.min(CW - 24 * DPR, ctx.measureText(s).width + u * 2), y = CH * (CW < CH ? .155 : .12);
+    ctx.fillStyle = 'rgba(255,179,198,.95)'; rr(CW / 2 - w / 2, y, w, u * 2, u); ctx.fill(); ctx.strokeStyle = '#3b2a2f'; ctx.lineWidth = 1.5 * DPR; ctx.stroke(); fitText(s, CW / 2, y + u + 1, u * .95, '#33222a', w - u, 'center'); }
+  if (CFG.perf) { const s = `${PF.cur.toFixed(0)} fps · ${typeof GFX !== 'undefined' ? GFX_NAME[GFX] : '2D'}${CFG.fps === 30 ? ' · 30' : ''}`; ctx.font = `${Math.round(u * .8)}px monospace`; const w = ctx.measureText(s).width + u, x = SA.l + 8 * DPR, y = CH - SA.b - u * 5.2;
+    ctx.fillStyle = PF.cur >= (CFG.fps === 30 ? 27 : 50) ? 'rgba(40,120,60,.85)' : PF.cur >= (CFG.fps === 30 ? 22 : 35) ? 'rgba(180,130,20,.88)' : 'rgba(190,50,60,.88)'; rr(x, y, w, u * 1.6, u * .5); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s, x + u * .5, y + u * .82); }
+}
+
+// ===== 설정: 탭 3개로 정리 + 새 항목 =====
+const SET_TABS = ['기본', '화면·성능', '데이터·알림'];
+const SET_WHERE = { '시간': 0, '계절': 0, '날씨': 0, '시계 표시': 0, '소리': 0, '진동': 0, '그래픽': 1, '홈 화면에 앱 추가': 2 };
+lifeEntries = (orig => m => {
+  if (m.kind !== 'settings') return orig(m);
+  if (m.tabs.length < 3) { m.tabs = SET_TABS.slice(); m.tab = Math.min(m.tab || 0, 2); }
+  const E = orig(Object.assign({}, m, { tab: 0 })), cyc = (key, order, after) => () => { CFG[key] = order[(order.indexOf(CFG[key]) + 1) % order.length]; saveCfg(); sfx('blip'); if (after) after(); };
+  const nE = [
+    { name: '글씨 크기', desc: '대화창 · 메뉴 · 안내 글씨를 키워요', tag: { 1: '보통', 2: '크게', 3: '아주 크게' }[CFG.txt || 1], col: '#ffd23f', act: () => { const o = [1, 2, 3]; CFG.txt = o[(o.indexOf(CFG.txt || 1) + 1) % 3]; saveCfg(); sfx('blip'); }, _t: 1 },
+    { name: '프레임', desc: '30은 배터리·발열을 줄여요 (움직임은 살짝 덜 부드러워요)', tag: CFG.fps === 30 ? '30 절약' : '60 부드럽게', col: '#ffd23f', act: cyc('fps', [60, 30], () => { if (typeof perf !== 'undefined') { perf.cool = 4; perf.t = 0; perf.f = 0; } }), _t: 1 },
+    { name: '성능 표시', desc: '왼쪽 아래에 초당 프레임(fps)을 보여줘요', tag: CFG.perf ? '켜기' : '끄기', col: '#ffd23f', act: () => { CFG.perf = CFG.perf ? 0 : 1; saveCfg(); sfx('blip'); }, _t: 1 },
+    { name: '성능 리포트', desc: '기기·프레임 정보를 복사해서 보낼 수 있어요', tag: '보기', col: '#efe2c8', act: () => { menu = null; openPerfReport(); }, _t: 1 },
+    { name: '저장 백업 · 옮기기', desc: `저장 코드 · 파일 · 자동 백업 ${bakList().length}개${CFG.bakAt ? ` · 마지막 백업 ${fmtAt(CFG.bakAt)}` : ' · 아직 백업 안 함'}`, tag: '열기', col: CFG.bakAt ? '#efe2c8' : '#ffd23f', act: () => { menu = null; openSaveUI(); }, _t: 2 },
+    { name: '마을 소식 알림', desc: '5일장 · 축제 · 생일을 하루 한 번 알려줘요', tag: CFG.noti ? '켜짐' : '꺼짐', col: '#ffd23f', act: () => { menu = null; openNoti(); }, _t: 2 },
+  ];
+  const all = E.map(e => Object.assign(e, { _t: SET_WHERE[e.name] !== undefined ? SET_WHERE[e.name] : 0 })).concat(nE);
+  return all.filter(e => e._t === m.tab);
+})(lifeEntries);
+townEntries = (orig => m => m.kind === 'visit' ? visitEntries(m) : orig(m))(townEntries);
+townSave = (orig => () => Object.assign(orig(), { t4: { n: T4.name, r: T4.recv, gd: T4.gd, gn: T4.gn, rc: T4.recent } }))(townSave);
+townLoad = (orig => d => { orig(d); const t = d && d.t4; if (!t) return; T4.name = t.n || ''; Object.assign(T4.recv, t.r || {}); T4.gd = t.gd || 0; T4.gn = t.gn || 0; T4.recent = t.rc || []; })(townLoad);
+
+// ===== 게임 시작할 때: 저기능 기기 화질 시작값 · 저장 공간 보호 · 자동 백업 · 백업 알림 · 알림 일정 =====
+let BAK_REMIND = false;
+startGame = (orig => () => {
+  orig();
+  try { if (USE3D && CFG.gfx === 'auto' && !PF.init) { PF.init = 1; const mem = navigator.deviceMemory || 8, cores = navigator.hardwareConcurrency || 8; if (mem <= 3 || cores <= 4) { perf.max = 'mid'; if (GFX === 'high') applyGfx('mid'); } } } catch (e) { }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => { }); } catch (e) { }
+  setTimeout(bakDaily, 8000);
+  if (CFG.noti || window.__PWA) notiPlan();
+  linkInvite();
+  if (!BAK_REMIND) { BAK_REMIND = true; setTimeout(() => { if (state === 'play' && !VISIT && playT > 1200 && (!CFG.bakAt || Date.now() - CFG.bakAt > 7 * 864e5)) toast('📦 저장 코드를 백업해 두면 폰을 바꿔도 이어할 수 있어요 (설정 → 데이터)'); }, 90000); }
+})(startGame);
+setInterval(() => { if (state === 'play' && !VISIT) bakDaily(); }, 30 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') { save(); if (CFG.noti) notiPlan(); } });
+
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
 let USE3D = false, R3 = null;
@@ -4021,7 +4320,7 @@ function applyEnv3D(dt) {
     p.needsUpdate = true; }
 }
 // ---------- graphics tiers + auto performance ----------
-let GFX = 'high'; const perf = { t: 0, f: 0, cool: 4 };
+let GFX = 'high'; const perf = { t: 0, f: 0, cool: 4, good: 0, max: 'high' };
 function applyGfx(level) {
   if (!R3) return; GFX = level; const dpr = window.devicePixelRatio || 1;
   R3.renderer.setPixelRatio(level === 'high' ? Math.min(2, dpr) : level === 'mid' ? Math.min(1.5, dpr) : 1);
@@ -4029,11 +4328,16 @@ function applyGfx(level) {
   if (R3.sun.shadow.mapSize.x !== want) { R3.sun.shadow.mapSize.set(want, want); if (R3.sun.shadow.map) { R3.sun.shadow.map.dispose(); R3.sun.shadow.map = null; } }
   R3.usePost = level !== 'low'; resize3D();
 }
+// 자동 화질: 3초 평균이 기준보다 낮으면 한 단계 내리고, 15초 동안 넉넉하면 한 번만 다시 올려요
 function perfTick(dt) {
-  if (CFG.gfx !== 'auto' || state !== 'play' || GFX === 'low') return;
+  if (CFG.gfx !== 'auto' || state !== 'play') return;
   if (perf.cool > 0) { perf.cool -= dt; return; }
   perf.t += dt; perf.f++;
-  if (perf.t >= 3) { const fps = perf.f / perf.t; perf.t = 0; perf.f = 0; if (fps < 38) { applyGfx(GFX === 'high' ? 'mid' : 'low'); perf.cool = 4; toast(`기기에 맞춰 화질을 '${GFX_NAME[GFX]}'(으)로 조절했어요`); } }
+  if (perf.t < 3) return;
+  const fps = perf.f / perf.t, cap = CFG.fps === 30 ? 30 : 60; perf.t = 0; perf.f = 0; perf.last = fps;
+  if (fps < cap * .63 && GFX !== 'low') { applyGfx(GFX === 'high' ? 'mid' : 'low'); perf.cool = 4; perf.good = 0; perf.downs = (perf.downs || 0) + 1; toast(`기기에 맞춰 화질을 '${GFX_NAME[GFX]}'(으)로 조절했어요`); return; }
+  if (fps > cap * .93 && GFX !== perf.max && (perf.ups || 0) < 1) { if (++perf.good >= 5) { applyGfx(GFX === 'low' ? 'mid' : 'high'); perf.ups = (perf.ups || 0) + 1; perf.good = 0; perf.cool = 6; } }
+  else perf.good = 0;
 }
 
 // ---------- critters & fishing in 3D ----------
@@ -4607,6 +4911,7 @@ function appIconModel(id) {
     case 'dex': { const g = G(m('c', '#3b2a2f', .03, .4, .03, 0, .25, 0)); for (const sx of [-1, 1]) { g.add(m('s', '#7fcaf2', .2, .04, .16, sx * .2, .32, -.03)); g.add(m('s', '#ffb3c6', .14, .03, .11, sx * .15, .22, .1)); } return g; }
     case 'diary': return G(m('b', '#ff9fb5', .48, .1, .62, 0, .05, 0), m('b', '#fff8e7', .44, .09, .58, .02, .1, 0), m('c', '#ffd23f', .04, .7, .04, -.24, .1, 0).rotateX(Math.PI / 2), m('b', '#e2543b', .06, .02, .3, .12, .16, -.15));
     case 'license': return G(m('b', '#3b2a2f', .6, .05, .6, 0, .35, 0).rotateY(Math.PI / 4), m('c', '#3b2a2f', .22, .2, .22, 0, .24, 0), m('c', '#ffd23f', .01, .25, .01, .26, .26, 0), m('s', '#ffd23f', .05, .05, .05, .26, .12, 0));
+    case 'visit': { const g = G(m('c', '#8a5a3c', .04, .5, .04, 0, .25, 0), m('b', '#ff8fa3', .42, .3, .3, 0, .62, 0), m('b', '#e2543b', .03, .14, .03, .2, .78, .06), m('b', '#fff8e7', .3, .02, .2, 0, .66, .16)); g.add(vHeart3D('#ffd23f').translateY(.62).translateZ(.18)); return g; }
     case 'deco': { const c = typeof cottage === 'function' ? cottage(.55, { nest: true }) : G(m('b', '#f6efe2', .5, .4, .5, 0, .2, 0)); return c; }
   }
   return null;
@@ -4638,10 +4943,12 @@ function syncLife3D() {
 // ---------- loop ----------
 let lastT = 0;
 function frame(t) {
+  requestAnimationFrame(frame);
+  if (CFG.fps === 30 && lastT && t - lastT < 30) return; // 배터리 절약: 30프레임
   const dt = Math.min(.05, (t - lastT) / 1000 || 0); lastT = t; lastDt = dt;
   if (stopT > 0) { stopT -= dt; time += dt * .2; } else update(dt);
   render(); bootTick();
-  requestAnimationFrame(frame);
+  if (typeof perfFrame === 'function') perfFrame(t);
 }
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
