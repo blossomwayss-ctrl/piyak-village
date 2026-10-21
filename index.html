@@ -624,7 +624,7 @@ function haveStr(need) { return Object.entries(need).map(([k, n]) => `${ITEMS[k]
 function panelEntries() {
   const m = menu, E = [];
   if (['stamp', 'friends', 'settings', 'hab'].includes(m.kind)) return lifeEntries(m);
-  if (['craft', 'market', 'fest', 'brief', 'diary', 'deco', 'license', 'quiz', 'visit'].includes(m.kind) || (m.kind === 'cook' && m.tab === 1) || (m.kind === 'shop' && m.tab === 6)) return townEntries(m);
+  if (['craft', 'market', 'fest', 'brief', 'diary', 'deco', 'license', 'quiz', 'visit', 'epbook'].includes(m.kind) || (m.kind === 'cook' && m.tab === 1) || (m.kind === 'shop' && m.tab === 6)) return townEntries(m);
   if (['cook', 'plant'].includes(m.kind) || (m.kind === 'shop' && m.tab >= 3)) return farmEntries(m);
   if (m.kind === 'museum') return museumEntries(m);
   if (m.kind === 'ranch') return ranchEntries(m);
@@ -1150,7 +1150,7 @@ function update(dt) {
     if (pressed.b) action();
   }
   pressed.a = pressed.b = pressed.q = pressed.i = 0;
-  const SPD = 62 * (buffs.spd > 0 ? 1.45 : 1);
+  const SPD = 62 * (buffs.spd > 0 ? 1.45 : 1) * (window.__spdMul === undefined ? 1 : window.__spdMul);
   if (P.kb > 0) { P.kb -= dt; const nx = P.x + P.kbx * dt, ny = P.y + P.kby * dt; if (boxFree(nx, P.y)) P.x = nx; if (boxFree(P.x, ny)) P.y = ny; }
   if (P.inv > 0) P.inv -= dt; for (const b in buffs) if (buffs[b] > 0) buffs[b] -= dt; if (milkT > 0) milkT -= dt;
   if (P.x < (FX - 1) * T && hp < maxHp() && state === 'play') { regenT += dt; if (regenT > 6) { regenT = 0; hp++; } }
@@ -3672,6 +3672,419 @@ startGame = (orig => () => {
 setInterval(() => { if (state === 'play' && !VISIT) bakDaily(); }, 30 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') { save(); if (CFG.noti) notiPlan(); } });
 
+// ---------- ep.js: 시트콤 사건 시스템 ----------
+// 쌓이는 것: 병아리 인정도 · 만화 앨범 · 변장 장비 / 매일: 큰 사건(손으로 만든 화) · 작은 사건(조합식)
+
+// ===== 저장 데이터 =====
+const EPS = { acc: {}, accDay: {}, album: {}, toons: [], gear: {}, wear: [], clear: {}, small: { k: 0, done: 0 }, intro: 0, seen1: 0 };
+const ACC_LV = [0, 2, 5, 9], ACC_NAME = ['수상해해요', '긴가민가', '병아리 친구', '진짜 병아리!'];
+function accLv(id) { const p = EPS.acc[id] || 0; let l = 0; for (let i = 1; i < ACC_LV.length; i++) if (p >= ACC_LV[i]) l = i; return l; }
+function accTotal() { return Object.values(EPS.acc).reduce((a, b) => a + b, 0); }
+function accAdd(id, n, why) { const before = accLv(id); EPS.acc[id] = (EPS.acc[id] || 0) + n; const after = accLv(id), nm = (npcById(id) || {}).name || id;
+  if (after > before) setTimeout(() => banner(`${nm} · ${ACC_NAME[after]}`, after === 3 ? '이제 노랑이를 진짜 병아리로 생각해요!' : '노랑이를 병아리로 인정하기 시작했어요', '#ffe066'), 600); }
+
+// ===== 변장 장비 (공룡 티를 줄여요 · 최대 2개 착용) =====
+const GEAR = {
+  vest: { name: '깃털 조끼', ico: '🪶', price: 25, desc: '몸집이 덜 티 나요 · 들킴 -25%', all: .75 },
+  shoes: { name: '꼬마 장화', ico: '👢', price: 20, desc: '쿵쿵 소리가 작아요 · 달리다 들킴 -40%', run: .6 },
+  whistle: { name: '삐약 호루라기', ico: '📯', price: 15, desc: '삐약 타이밍이 1.6배 넉넉해져요', peep: 1.6 },
+  cape: { name: '꼬리 감추개', ico: '🧣', price: 30, desc: '웅크리면 꼬리까지 쏙 · 웅크림 들킴 -60%', crouch: .4 },
+};
+function gearOn(k) { return EPS.wear.includes(k) && EPS.gear[k]; }
+function gearMul(kind) { let m = EP && EP.d.band ? .8 : 1; for (const k of EPS.wear) if (EPS.gear[k] && GEAR[k]) { if (GEAR[k].all) m *= GEAR[k].all; if (GEAR[k][kind] && kind !== 'peep') m *= GEAR[k][kind]; } return m; }
+function peepMul() { return gearOn('whistle') ? GEAR.whistle.peep : 1; }
+
+// ===== 공룡 티 게이지 · 웅크리기 · 삐약 =====
+const DG = { v: 0, on: false, peep: null, flash: 0, caughtT: 0, onCaught: null };
+function crouching() { return !!(DG.on && (Object.values(btnHeld).includes('b') || keys.x || keys.shift)); }
+function dgGain(base, kind) { if (!DG.on || DG.caughtT > 0) return; DG.v = Math.min(100, DG.v + base * gearMul(kind)); if (base > 0) DG.flash = .25; if (DG.v >= 100 && DG.onCaught) { DG.caughtT = 1.2; const f = DG.onCaught; f(); } }
+function dgPeep(win = 1.1) { DG.peep = { t: win * peepMul(), t0: win * peepMul() }; sfx('blip'); }
+function dgPeepPress() { if (!DG.peep) return false; DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.1, text: '삐약!', col: '#fff3b0' }); sfx('pick'); EP_FX.peepOk = (EP_FX.peepOk || 0) + 1; return true; }
+function dgTick(dt) {
+  if (DG.flash > 0) DG.flash -= dt; if (DG.caughtT > 0) DG.caughtT -= dt;
+  if (DG.peep) { DG.peep.t -= dt; if (DG.peep.t <= 0) { DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.4, text: '어흥! …아, 아니 삐약!', col: '#ff8fa3' }); shake(2, .25); sfx('bonk'); EP_FX.peepMiss = (EP_FX.peepMiss || 0) + 1; dgGain(30, 'all'); } }
+  window.__spdMul = DG.on ? (crouching() ? .45 : 1) * (EP && EP.freeze ? 0 : 1) : (EP && EP.freeze ? 0 : 1);
+}
+const EP_FX = {};
+
+// ===== 장면 캡처 → 4컷 만화 =====
+function epProject(x, y, h = .6) { if (!USE3D || !R3) return null; const v = new THREE.Vector3(U(x), h, ZU(y) - .2).project(R3.camera); return { x: (v.x + 1) / 2, y: (1 - v.y) / 2 }; }
+function epCapture(fx, fy) {
+  const c = document.createElement('canvas'); c.width = 1000; c.height = 440; const g = c.getContext('2d');
+  try {
+    if (USE3D && R3) { const src = R3.renderer.domElement, W = src.width, H = src.height, p = epProject(fx, fy) || { x: .5, y: .5 }, ar = 1000 / 440;
+      let cw = Math.min(W, H * .55 * ar), ch = cw / ar; const cx = p.x * W, cy = p.y * H;
+      const x0 = Math.max(0, Math.min(W - cw, cx - cw / 2)), y0 = Math.max(0, Math.min(H - ch, cy - ch * .6)); g.drawImage(src, x0, y0, cw, ch, 0, 0, 1000, 440); }
+    else { g.fillStyle = '#ffe9a8'; g.fillRect(0, 0, 1000, 440); }
+  } catch (e) { g.fillStyle = '#ffe9a8'; g.fillRect(0, 0, 1000, 440); }
+  return c;
+}
+function wrapLines(g, s, maxW) { const out = []; let cur = ''; for (const ch of s) { if (g.measureText(cur + ch).width > maxW && cur) { const sp = cur.lastIndexOf(' '); if (sp > 3) { out.push(cur.slice(0, sp)); cur = cur.slice(sp + 1) + ch; } else { out.push(cur); cur = ch; } } else cur += ch; } if (cur) out.push(cur); return out; }
+function rrp(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+const TAGC = { '안노랑': '#ffb347', '계획이': '#9be37a', '먹보': '#ffb3c6', '승부욕': '#ff8f6b' };
+function drawBubble(g, line, x, y, maxW, side) {
+  const nar = !line.who; g.font = `${nar ? 30 : 34}px ${FONT}`; const L0 = wrapLines(g, line.text, maxW - 40), lh = nar ? 38 : 42;
+  const w = Math.min(maxW, Math.max(...L0.map(l => g.measureText(l).width)) + 44), h = L0.length * lh + 26;
+  const bx = side ? x - w : x;
+  if (nar) { g.fillStyle = '#ffe066'; g.strokeStyle = '#33222a'; g.lineWidth = 5; g.fillRect(bx, y, w, h); g.strokeRect(bx, y, w, h); }
+  else { g.fillStyle = '#fff'; g.strokeStyle = '#33222a'; g.lineWidth = 5; rrp(g, bx, y, w, h, 26); g.fill(); g.stroke();
+    const tx = side ? bx + w - 60 : bx + 60; g.beginPath(); g.moveTo(tx - 14, y + h - 3); g.lineTo(tx + (side ? 26 : -26), y + h + 30); g.lineTo(tx + 14, y + h - 3); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.fillRect(tx - 12, y + h - 8, 24, 8);
+    g.font = `24px ${FONT}`; const nw = g.measureText(line.who).width + 24; g.fillStyle = TAGC[line.who] || tagColor(line.who); rrp(g, bx + 18, y - 18, nw, 34, 17); g.fill(); g.lineWidth = 3; g.stroke(); g.fillStyle = '#33222a'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(line.who, bx + 30, y - 1); g.font = `34px ${FONT}`; }
+  g.fillStyle = '#33222a'; g.textAlign = 'left'; g.textBaseline = 'middle'; L0.forEach((l, i) => g.fillText(l, bx + 22, y + 13 + lh / 2 + i * lh + (nar ? 0 : 4)));
+  return h;
+}
+function drawSfx(g, s, x, y, rot, size = 92, col = '#ffd23f') { g.save(); g.translate(x, y); g.rotate(rot); g.font = `${size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.strokeStyle = '#33222a'; g.lineWidth = size * .2; g.strokeText(s, 0, 0); g.fillStyle = col; g.fillText(s, 0, 0); g.restore(); }
+function composeComic(meta, panels) {
+  const C = document.createElement('canvas'); C.width = 1080; C.height = 1920; const g = C.getContext('2d');
+  g.fillStyle = '#fff8e7'; g.fillRect(0, 0, 1080, 1920);
+  for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(255,210,63,.18)'; g.beginPath(); g.arc((i * 137) % 1080, (i * 251) % 1920, 6 + (i % 4) * 3, 0, 6.29); g.fill(); }
+  g.fillStyle = '#33222a'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.font = `30px ${FONT}`; g.fillStyle = '#e8a92a'; g.fillText(meta.kicker, 44, 58);
+  g.font = `64px ${FONT}`; g.fillStyle = '#33222a'; g.fillText(meta.title, 44, 122);
+  if (meta.ending) { g.font = `30px ${FONT}`; const w = g.measureText(meta.ending).width + 40; g.fillStyle = '#ffd23f'; rrp(g, 1036 - w, 98, w, 50, 25); g.fill(); g.strokeStyle = '#33222a'; g.lineWidth = 4; g.stroke(); g.fillStyle = '#33222a'; g.textAlign = 'center'; g.fillText(meta.ending, 1036 - w / 2, 124); g.textAlign = 'left'; }
+  const top = 176, ph = 392, gap = 18;
+  panels.slice(0, 4).forEach((p, i) => {
+    const x = 40, y = top + i * (ph + gap), w = 1000, rot = (i % 2 ? .006 : -.006);
+    g.save(); g.translate(x + w / 2, y + ph / 2); g.rotate(rot); g.translate(-(x + w / 2), -(y + ph / 2));
+    g.save(); rrp(g, x, y, w, ph, 22); g.clip(); if (p && p.img) g.drawImage(p.img, 0, 0, 1000, 440, x, y - 20, w, 440); else { g.fillStyle = '#ffe9a8'; g.fillRect(x, y, w, ph); }
+    if (p && p.tone) { g.fillStyle = p.tone; g.fillRect(x, y, w, ph); }
+    if (p && p.lines) { let by = y + 34; p.lines.forEach((ln, j) => { const side = j % 2 === 1; by += drawBubble(g, ln, side ? x + w - 24 : x + 24, by, 560, side) + 30; }); }
+    if (p && p.sfx) drawSfx(g, p.sfx, x + (i % 2 ? 210 : w - 200), y + ph - 80, i % 2 ? -.14 : .12, p.sfx.length > 3 ? 74 : 92, p.sfxCol || '#ffd23f');
+    g.restore();
+    g.strokeStyle = '#33222a'; g.lineWidth = 9; rrp(g, x, y, w, ph, 22); g.stroke();
+    g.fillStyle = '#33222a'; g.beginPath(); g.arc(x + 34, y + ph - 30, 22, 0, 6.29); g.fill(); g.fillStyle = '#fff'; g.font = `26px ${FONT}`; g.textAlign = 'center'; g.fillText(String(i + 1), x + 34, y + ph - 29); g.textAlign = 'left';
+    g.restore();
+  });
+  g.fillStyle = '#33222a'; g.font = `40px ${FONT}`; g.textAlign = 'center'; g.fillText('@an_norang', 540, 1884); g.font = `24px ${FONT}`; g.fillStyle = '#8a6a5a'; const d = new Date(); g.fillText(`${meta.who || vname()} · ${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} · 삐약마을`, 540, 1840); g.textAlign = 'left';
+  return C;
+}
+
+// ===== 만화 앨범 (IndexedDB에 그림 보관, 저장 데이터엔 목록만) =====
+function albDB() { return new Promise((res, rej) => { try { const r = indexedDB.open('piyak-album', 1); r.onupgradeneeded = () => r.result.createObjectStore('c'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); }
+async function albPut(k, blob) { try { const db = await albDB(); return await new Promise(res => { const tx = db.transaction('c', 'readwrite'); tx.objectStore('c').put(blob, k); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }); } catch (e) { return false; } }
+async function albGet(k) { try { const db = await albDB(); return await new Promise(res => { const r = db.transaction('c').objectStore('c').get(k); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); } catch (e) { return null; } }
+async function albDel(k) { try { const db = await albDB(); db.transaction('c', 'readwrite').objectStore('c').delete(k); } catch (e) { } }
+function toBlob(C) { return new Promise(res => { try { C.toBlob(b => res(b), 'image/jpeg', .86); } catch (e) { res(null); } }); }
+function showComic(C, opt = {}) {
+  const S = sheet4(opt.title || '오늘의 4컷', opt.desc || ''); if (!S) return;
+  const url = C.toDataURL ? C.toDataURL('image/jpeg', .86) : C; const img = document.createElement('img'); img.src = url; img.alt = '안노랑 4컷 만화'; img.style.cssText = 'width:100%;border-radius:12px;border:2px solid #33222a;flex-shrink:0;-webkit-touch-callout:default;user-select:auto'; S.box.append(img);
+  const msg = S.msg();
+  S.btn('인스타·카톡에 공유하기', '#ffd23f', async () => { try { const b = await (await fetch(url)).blob(), f = new File([b], 'annorang_4cut.jpg', { type: 'image/jpeg' }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: '안노랑 4컷', text: '#안노랑 #삐약마을 @an_norang' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; } msg.textContent = '이 기기는 바로 공유가 안 돼요. 그림을 길게 눌러 저장한 뒤 올려 주세요.'; });
+  S.btn('사진으로 저장하기', '#f3e6cf', () => { try { const a = document.createElement('a'); a.href = url; a.download = `안노랑_4컷_${dayKey()}.jpg`; document.body.append(a); a.click(); a.remove(); msg.style.color = '#5aa548'; msg.textContent = '저장했어요! (안 되면 그림을 길게 눌러 저장)'; } catch (e) { msg.textContent = '그림을 길게 눌러 저장해 주세요.'; } });
+  S.btn('닫기', '#efe2c8', () => { S.close(); if (opt.onClose) opt.onClose(); });
+}
+
+// ===== 사건 진행기 =====
+let EP = null; // { def, step, t, d, panels, freeze }
+const EPC = []; // 사건용 엑스트라 병아리 [{x,y,k,hop,face,tx,ty,sp,st}]
+function epChickKinds(i) { return ['x', 'chick_c', 'chick_t', 'chick_g'][i % 4]; }
+function epMakeChicks(n) { EPC.length = 0; for (let i = 0; i < n; i++) EPC.push({ x: 0, y: 0, k: epChickKinds(i), hop: Math.random() * 6, face: 1, band: i % 2 ? '#7fcaf2' : '#ff6b6b', tx: null, ty: null, sp: 30, st: '' }); }
+function epHold(id, x, y, face) { const n = npcById(id); if (!n) return null; if (n._epw === undefined) { n._epw = n.wander; n._epx = n.x; n._epy = n.y; } n.wander = 0; n.follow = false; n.x = n.tx = x; n.y = n.ty = y; n.wait = 99; if (face) n.face = face; n.walking = false; return n; }
+function epRelease() { for (const n of NPCS) if (n._epw !== undefined) { n.wander = n._epw; n.x = n.tx = n._epx; n.y = n.ty = n._epy; n.wait = 1; delete n._epw; delete n._epx; delete n._epy; } }
+function epPanel(i, fx, fy, lines, sfx, extra) { if (!EP) return; EP.panels[i] = Object.assign({ img: epCapture(fx, fy), lines, sfx }, extra || {}); }
+function epStart(def, arg) {
+  if (EP || state !== 'play' || dlg || menu || phone || mini || fishing || (typeof VISIT !== 'undefined' && VISIT) || curRoom.dungeon) { toast('지금은 사건을 시작할 수 없어요'); return false; }
+  if (!tut.done) { toast('튜토리얼을 먼저 마쳐 주세요'); return false; }
+  for (const k in EP_FX) delete EP_FX[k];
+  EP = { def, step: 0, t: 0, d: Object.assign({}, arg || {}), panels: [], freeze: false, noAuto: window.__noAuto };
+  window.__noAuto = 1; DG.v = 0; DG.on = false; DG.peep = null; DG.onCaught = null; EP.d.caught = 0;
+  if (def === EP1 && inv.ep_band > 0) { inv.ep_band--; if (!inv.ep_band) delete inv.ep_band; EP.d.band = 1; setTimeout(() => toast('응원 머리띠 착용! 이번 운동회는 덜 들켜요'), 1500); }
+  if (def.small && inv.ep_lunch > 0 && !smallDone()) { inv.ep_lunch--; if (!inv.ep_lunch) delete inv.ep_lunch; EP.d.lunch = 1; }
+  def.steps[0].enter && def.steps[0].enter(EP); return true;
+}
+function epNext() { if (!EP) return; EP.step++; EP.t = 0; const s = EP.def.steps[EP.step]; if (!s) return epEnd(); s.enter && s.enter(EP); }
+function epEnd() {
+  const E0 = EP; if (!E0) return; DG.on = false; DG.peep = null; window.__spdMul = 1; window.__cutscene = false; EPC.length = 0; epRelease(); window.__noAuto = E0.noAuto; EP = null;
+  if (E0.def.finish) E0.def.finish(E0);
+}
+function epAbort() { if (!EP) return; const E0 = EP; DG.on = false; DG.peep = null; window.__spdMul = 1; window.__cutscene = false; EPC.length = 0; epRelease(); window.__noAuto = E0.noAuto; EP = null; toast('사건을 그만뒀어요'); }
+function epTick(dt) {
+  dgTick(dt);
+  if (!EP) return; if (dlg || menu || wipe) return;
+  EP.t += dt; const s = EP.def.steps[EP.step]; if (s && s.tick && s.tick(EP, dt)) epNext();
+  for (const c of EPC) { if (c.tx !== null) { const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy); if (d > 1) { const k = Math.min(1, c.sp * dt / d); c.x += dx * k; c.y += dy * k; c.face = dx > 0 ? 1 : dx < 0 ? -1 : c.face; c.hop += dt * 12; c.moving = true; } else c.moving = false; } }
+}
+// 엑스트라 병아리 · 소품 3D
+function syncEp3D(dt) {
+  if (!R3) return;
+  EPC.forEach((c, i) => { const m = ent('epc' + i, () => { const g = buildChick(c.k); g.userData.b.add(mesh('b', c.band, .34, .07, .3, 0, .33, .02)); g.userData.b.add(mesh('b', c.band, .06, .12, .06, -.14, .36, -.14)); return g; });
+    m.position.set(U(c.x), (c.moving ? Math.abs(Math.sin(c.hop)) * .12 : 0) + (c.jump || 0), ZU(c.y) - .2); m.rotation.y = lerpAng(m.rotation.y, c.look !== undefined ? c.look : c.face > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(1, dt * 10)); });
+  // 웅크리기: 안노랑이 납작
+  const pm = R3.ents.get(P); if (pm && pm.userData.inner) { const cr = crouching(), k = Math.min(1, dt * 12), sy = cr ? .62 : 1, sx = cr ? 1.12 : 1; const s = pm.userData.inner.scale; s.y += (sy - s.y) * k; s.x += (sx - s.x) * k; s.z += (sx - s.z) * k; }
+  // 사건 소품
+  if (EP && EP.def.props) EP.def.props(EP, dt);
+  // 큰 사건 포스터
+  if (!EP && curRoom.id === 'v1') { const p = ent('ep_poster', () => { const g = grp(mesh('c', '#8a5a3c', .05, 1.1, .05, -.42, .55, 0), mesh('c', '#8a5a3c', .05, 1.1, .05, .42, .55, 0), mesh('b', '#fff8e7', 1.0, .62, .06, 0, 1.0, 0), mesh('b', '#ff8fa3', 1.0, .14, .07, 0, 1.24, 0), mesh('b', '#ffd23f', .5, .1, .07, 0, .86, .01)); return g; }); p.position.set(POSTER.x, 0, zt(POSTER.y) - .2); p.rotation.y = 0; }
+}
+function epFace(n, look) { const m = R3 && R3.ents.get(n); if (m) m.rotation.y = look; }
+
+// ===== 입력 가로채기 =====
+interact = (orig => () => { if (EP) { const s = EP.def.steps[EP.step]; if (DG.peep && dgPeepPress()) return; if (s && s.onA && s.onA(EP)) return; if (s && s.lockA) return; } orig(); })(interact);
+action = (orig => () => { if (EP) { const s = EP.def.steps[EP.step]; if (s && s.onB && s.onB(EP)) return; if (DG.on || (s && s.lockB)) return; } orig(); })(action);
+openPhone = (orig => () => { if (EP) { toast('사건 중이에요! 끝나고 열어 줘요'); return; } orig(); })(openPhone);
+
+// ===== 큰 사건 1화: 병아리 운동회 =====
+const POSTER = { x: 23.6, y: 12.5 }; // 타일 좌표
+const EP1 = {
+  id: 'ep1', no: 1, title: '병아리 운동회', ends: {
+    perfect: { name: '완벽한 병아리', hint: '한 번도 안 들키고, 끝까지 꼬리를 참으면' },
+    caught: { name: '들켰지만 괜찮아', hint: '한 번이라도 들키고, 꼬리를 참으면' },
+    hero: { name: '공룡이라 다행이야', hint: '마지막 종목에서 꼬리를 쓰면' } },
+  cast: ['hen', 'pig', 'rabbit', 'duck'],
+  steps: [],
+};
+const PLZ = { lineY: 15.6, gapX: 21.2, x0: 17.6, x1: 25.4 };
+const RACE = { y: 15.5, x0: 25.6, fin: 40.4, judge: 41.6 };
+const POLE = { x: 23.6, y: 12.9 };
+EP1.steps = [
+  { // 0. 개막 · 줄 세우기
+    enter(E) { window.__cutscene = true; startWipe(() => { warpTo((PLZ.gapX - 1.4) * T, (PLZ.lineY + 1.2) * T, 'up');
+        epMakeChicks(9); EPC.forEach((c, i) => { const slot = i < 4 ? i : i + 1; c.x = (PLZ.x0 + slot * .78) * T; c.y = PLZ.lineY * T + (i % 2) * 2; c.look = 0; });
+        epHold('hen', 18.2 * T, 14.7 * T, 1); epHold('pig', 16.6 * T, 14.2 * T, 1); epHold('rabbit', 26.4 * T, 14.2 * T, -1); epHold('duck', 27.2 * T, 15.1 * T, -1);
+        setTimeout(() => say([L('꼬꼬 아줌마', '자~ 오늘은 삐약마을 병아리 운동회 날이에요!'), L('꼬꼬 아줌마', '단! 병아리만 참가할 수 있어요~ 꼬꼬!'), L('안노랑', '(나도… 병아리야. 모자도 썼고!)'), L('계획이', `노랑아, 들키면 안 돼! 심판이 볼 때는 ${KB()}${TOUCH() ? ' 버튼' : ' 키'}을 꾹 눌러서 웅크려!`), L('먹보', `"삐약!" 하라고 하면 ${KA()}! 늦으면… 어흥이 튀어나와.`)], () => { epPanel(0, P.x, P.y + 10, [{ who: '꼬꼬 아줌마', text: '병아리만 참가할 수 있어요~!' }, { who: '안노랑', text: E.d.band ? '(머리띠까지 맞췄어. 완벽해!)' : '(나도… 병아리야. 모자도 썼고!)' }], '두근'); window.__cutscene = false; }), 700); }); },
+    tick(E) { return E.t > 1.5 && !window.__cutscene; } },
+  { // 1. 빈자리로
+    enter(E) { toast('줄의 반짝이는 빈자리로 가서 서!'); },
+    tick(E) { return Math.hypot(P.x - PLZ.gapX * T, P.y - PLZ.lineY * T) < 9; } },
+  { // 2. 키 재기 검사 (심판이 줄을 따라 걸어가요)
+    enter(E) { DG.on = true; E.d.hx = 17.8; E.d.calls = [19.6, 23.0]; E.d.cap = false; banner('1종목 · 키 재기 검사', '심판이 가까이 오면 웅크리기! 삐약 소리도 맞춰서', '#ffd23f');
+      DG.onCaught = () => epCaught(E, 1); },
+    lockA: true,
+    tick(E, dt) { const hen = npcById('hen'); E.d.hx += dt * .55; hen.x = hen.tx = E.d.hx * T; hen.y = hen.ty = (PLZ.lineY - .75) * T; hen.face = 1; hen.walking = true;
+      const near = Math.abs(hen.x - P.x) < 1.7 * T, inLine = Math.hypot(P.x - PLZ.gapX * T, P.y - PLZ.lineY * T) < 14;
+      if (near) dgGain((crouching() ? 5 : 42) * dt, crouching() ? 'crouch' : 'all'); if (!inLine && Math.abs(hen.x - P.x) < 3 * T) dgGain(25 * dt, 'all');
+      if (E.d.calls.length && E.d.hx >= E.d.calls[0]) { E.d.calls.shift(); floaters.push({ x: hen.x, y: hen.y - 46, t: 1.4, text: '다들 대답~ 삐약!', col: '#fff' }); EPC.forEach(c => { c.jump = .15; setTimeout(() => c.jump = 0, 300); }); dgPeep(1.1); }
+      if (!E.d.cap && Math.abs(hen.x - P.x) < .45 * T && !E.d.caughtCap) { E.d.cap = true; epPanel(1, P.x, P.y, [{ who: '꼬꼬 아줌마', text: '음…? 이 병아리는 좀… 큰데?' }, { who: '안노랑', text: crouching() ? '삐…약.' : '(헉)' }], crouching() ? '움찔' : '쭈뼛'); }
+      if (E.d.hx > 25.6) { hen.walking = false; return true; } } },
+  { // 3. 달리기 준비
+    enter(E) { DG.on = false; E.freeze = true; startWipe(() => { warpTo(RACE.x0 * T, RACE.y * T, 'right'); EPC.forEach((c, i) => { c.look = undefined; c.tx = null; c.x = (RACE.x0 - .3 - (i % 3) * .25) * T; c.y = (14.5 + (i % 5) * .45) * T; c.face = 1; c.sp = 30 + Math.random() * 8; });
+        epHold('hen', RACE.judge * T, 15.2 * T, 1); epHold('pig', 33 * T, 17.2 * T, -1); epHold('rabbit', 36 * T, 13.4 * T, -1); epHold('duck', 30 * T, 17.4 * T, 1);
+        setTimeout(() => say([L('꼬꼬 아줌마', '2종목! 무궁화 꽃이 피었습니다~ 달리기!'), L('꼬꼬 아줌마', '내가 뒤돌아볼 때 움직이면… 병아리가 아닌 거예요~'), L('승부욕', `노랑아, 아줌마가 볼 땐 멈추거나 ${KB()} 꾹 눌러서 종종걸음!`)]), 600); }); E.d.cd = 3.2; },
+    tick(E, dt) { if (dlg) return false; E.d.cd -= dt; if (E.d.cd <= 0) { E.freeze = false; return true; } } },
+  { // 4. 무궁화 달리기
+    enter(E) { DG.on = true; DG.onCaught = () => epCaught(E, 2); E.d.watch = false; E.d.ph = 2.6; E.d.warn = false; E.d.done = 0; E.d.rank = 0; E.d.cap = false; sfx('done'); },
+    lockA: true,
+    tick(E, dt) { const hen = npcById('hen');
+      E.d.ph -= dt; if (!E.d.watch && E.d.ph < .45 && !E.d.warn) { E.d.warn = true; emote(hen, '!', .6); }
+      if (E.d.ph <= 0) { E.d.watch = !E.d.watch; E.d.warn = false; E.d.ph = E.d.watch ? 1.5 + Math.random() * .9 : 2.0 + Math.random() * 1.8; if (E.d.watch) { sfx('bonk'); E.d.turnT = 0; } }
+      hen.face = E.d.watch ? -1 : 1;
+      if (E.d.watch) { E.d.turnT += dt; const sp = E.d.lastX !== undefined ? Math.abs(P.x - E.d.lastX) / dt : 0; if (sp > 62 * .5) dgGain(75 * dt, 'run'); else if (sp > 4) dgGain(7 * dt, crouching() ? 'crouch' : 'all');
+        if (!E.d.cap && P.x > 31 * T && E.d.turnT > .25) { E.d.cap = true; const fast = sp > 62 * .5; epPanel(2, P.x, P.y, [{ who: '꼬꼬 아줌마', text: fast ? '방금… 땅이 울렸는데?!' : '……' }, { who: '안노랑', text: fast ? '(쿵쿵쿵쿵)' : '(종종종종…)' }], fast ? '쿵쿵쿵' : '살금'); } }
+      else if (!crouching() && P.moving && Math.random() < dt * 6) floaters.push({ x: P.x, y: P.y + 2, t: .5, text: '쿵', col: '#c98a5a' });
+      E.d.lastX = P.x;
+      for (const c of EPC) { if (c.fin) continue; if (!E.d.watch) { c.x += c.sp * dt; c.moving = true; c.hop += dt * 12; c.face = 1; } else c.moving = false; if (c.x >= RACE.fin * T) { c.fin = ++E.d.done; } }
+      if (!E.d.pfin && P.x >= RACE.fin * T) { E.d.pfin = true; E.d.rank = E.d.done + 1; banner(`${E.d.rank}등으로 도착!`, E.d.rank <= 3 ? '메달권이야!' : '그래도 완주!', '#9be37a'); if (!E.d.cap) { E.d.cap = true; epPanel(2, P.x, P.y, [{ who: '안노랑', text: `${E.d.rank}등…! 병아리답게 뛰었어!` }], '도착!'); } E.d.after = 2.2; }
+      if (E.d.pfin) { E.d.after -= dt; if (E.d.after <= 0) return true; }
+      if (E.t > 70 && !E.d.pfin) { E.d.pfin = true; E.d.rank = 10; E.d.after = .5; } } },
+  { // 5. 박 터뜨리기
+    enter(E) { DG.on = false; E.freeze = true; startWipe(() => { warpTo((POLE.x - 1.6) * T, (POLE.y + 1.6) * T, 'up');
+        EPC.forEach((c, i) => { c.fin = 0; c.tx = null; const a = i / EPC.length * 6.28; c.x = (POLE.x + Math.cos(a) * 1.7) * T; c.y = (POLE.y + .9 + Math.sin(a) * .9) * T; c.look = undefined; c.face = c.x < POLE.x * T ? 1 : -1; });
+        epHold('hen', (POLE.x - 3) * T, (POLE.y + .4) * T, 1); epHold('pig', (POLE.x + 3) * T, (POLE.y + 1.2) * T, -1); epHold('rabbit', (POLE.x - 2.4) * T, (POLE.y + 2.4) * T, 1); epHold('duck', (POLE.x + 2.2) * T, (POLE.y + 2.6) * T, -1);
+        setTimeout(() => say([L('꼬꼬 아줌마', '마지막 종목! 높~이 달린 박을 터뜨리면 병아리 팀 승리예요!'), L('먹보', '으앙, 너무 높아… 콩주머니가 닿지를 않아!'), L('승부욕', '노랑아, 네 꼬리라면 한 방에… 아, 아니다. 들키면 안 되지.'), L('계획이', `콩주머니는 ${KA()}, 꼬리는 ${KB()}… 노랑이가 정해!`)], () => { E.freeze = false; E.d.left = 15; }), 600); }); E.d.left = 99; E.d.throws = 0; E.d.bags = []; },
+    onA(E) { if (E.freeze || E.d.left > 20) return true; E.d.throws++; E.d.bags.push({ t: 0, x: P.x, y: P.y }); sfx('blip'); floaters.push({ x: P.x, y: P.y - 40, t: .8, text: '영차!', col: '#fff' }); return true; },
+    onB(E) { if (E.freeze || E.d.left > 20) return true; if (Math.hypot(P.x - POLE.x * T, P.y - (POLE.y + .2) * T) > 2.2 * T) { toast('박 가까이 가서 꼬리를 휘둘러!'); return true; } E.d.tail = true; return true; },
+    tick(E, dt) { for (const b of E.d.bags) b.t += dt; E.d.bags = E.d.bags.filter(b => b.t < 1.2);
+      for (const c of EPC) { c.throwT = (c.throwT || Math.random() * 2) - dt; if (c.throwT <= 0) { c.throwT = 1.5 + Math.random() * 1.5; E.d.bags.push({ t: 0, x: c.x, y: c.y, chick: 1 }); c.jump = .12; setTimeout(() => c.jump = 0, 200); } }
+      if (E.freeze || E.d.left > 20) return false;
+      if (E.d.tail) { E.d.end = 'hero'; return true; }
+      E.d.left -= dt; if (E.d.left <= 0) { E.d.end = E.d.caught ? 'caught' : 'perfect'; return true; } } },
+  { // 6. 결말
+    enter(E) { E.freeze = true; const end = E.d.end, px = POLE.x * T, py = POLE.y * T;
+      if (end === 'hero') { P.spin = .35; sfx('star'); shake(5, .5); E.d.pop = 1; burst(px, py - 40, '#ffd23f', 40); burst(px, py - 40, '#ff8fa3', 30); burst(px, py - 40, '#7fcaf2', 30); banner('펑!! 병아리 팀 승리!', '', '#ffb3c6');
+        EPC.forEach(c => { c.jump = .3; }); setTimeout(() => { epPanel(3, (P.x + px) / 2, P.y, [{ who: '병아리들', text: '와아아! 노랑이 최고!!' }, { who: '꼬꼬 아줌마', text: '사실… 다들 알고 있었단다. 노랑이는 우리 마을 병아리야~' }], '펑!!', { sfxCol: '#ff8fa3' }); EPC.forEach(c => c.jump = 0);
+          say([L('병아리들', '와아아! 노랑이 최고!!'), L('꼬꼬 아줌마', '꼬꼬… 사실 다들 알고 있었단다. 노랑이는 우리 마을 병아리야!'), L('안노랑', '(…들켜도 괜찮은 거였구나.)')], () => epNext()); }, 700); }
+      else if (end === 'perfect') { sfx('done'); setTimeout(() => { epPanel(3, P.x, P.y, [{ who: '꼬꼬 아줌마', text: '올해도 박은 그대로네~ 호호' }, { who: '안노랑', text: '(그래도… 완벽한 병아리였어!)' }], '뿌듯', { sfxCol: '#9be37a' });
+          say([L('꼬꼬 아줌마', '호호, 올해도 박은 그대로네~ 다들 수고했어요!'), L('안노랑', '(그래도… 한 번도 안 들켰어. 완벽한 병아리였어!)'), L('계획이', '노랑아… 너 땀 엄청 흘려.')], () => epNext()); }, 500); }
+      else { sfx('bonk'); setTimeout(() => { epPanel(3, P.x, P.y, [{ who: '먹보', text: '노랑아, 어차피 들켰는데 꼬리 쓰지 그랬어~' }, { who: '안노랑', text: '(…그러게?)' }], '털썩', { sfxCol: '#c9b6ff' });
+          say([L('먹보', '노랑아~ 어차피 아까 들켰는데 꼬리 쓰지 그랬어!'), L('안노랑', '(…그러게? 왜 참았지.)'), L('승부욕', '내년엔 우리가 이긴다!')], () => epNext()); }, 500); } },
+    tick() { return false; } },
+];
+EP1.props = (E, dt) => {
+  // 줄 빈자리 표시
+  const gap = ent('ep_gap', () => { const m = mesh('tor', M('#ffd23f', { emissive: '#ffd23f', emissiveIntensity: .8 }), .34, .34, .06, 0, .04, 0); m.rotation.x = Math.PI / 2; return grp(m); });
+  gap.visible = E.step <= 2; gap.position.set(PLZ.gapX, 0, zt(PLZ.lineY) - .2); gap.scale.setScalar(1 + Math.sin(time * 5) * .08);
+  // 결승선
+  const fin = ent('ep_fin', () => grp(mesh('c', '#fff8e7', .05, 1.0, .05, 0, .5, -1.4), mesh('c', '#fff8e7', .05, 1.0, .05, 0, .5, 1.6), mesh('b', '#ff6b6b', .04, .12, 3.0, 0, .8, .1), mesh('b', '#fff8e7', .25, .02, 3.0, -9, .015, .1), mesh('b', '#fff8e7', .25, .02, 3.0, 0, .015, .1)));
+  fin.visible = E.step >= 3 && E.step <= 4; fin.position.set(RACE.fin, 0, zt(15.2) - .2);
+  // 박 장대
+  const pole = ent('ep_pole', () => { const g = grp(mesh('c', '#c98a5a', .06, 2.6, .06, 0, 1.3, 0), mesh('b', '#c98a5a', .9, .06, .06, .3, 2.55, 0)); const pk = grp(mesh('hemi', '#e2443b', .28, .28, .28, 0, 0, 0), mesh('hemi', '#fff8e7', .28, .28, .28, 0, 0, 0)); pk.children[1].rotation.x = Math.PI; pk.position.set(.6, 2.2, 0); g.add(pk); g.userData.pk = pk; return g; });
+  pole.visible = E.step >= 5; pole.position.set(POLE.x, 0, zt(POLE.y) - .2);
+  if (E.d.pop) { const pk = pole.userData.pk; pk.children[0].rotation.z = Math.min(1.2, (pk.children[0].rotation.z || 0) + dt * 6); pk.children[1].rotation.z = Math.max(-1.2, (pk.children[1].rotation.z || 0) - dt * 6); }
+  // 날아가는 콩주머니
+  const bags = ent('ep_bags', () => { const g = new THREE.Group(); for (let i = 0; i < 16; i++) g.add(mesh('s', i % 2 ? '#ff6b6b' : '#7fcaf2', .07, .06, .07, 0, -9, 0)); return g; });
+  bags.children.forEach((m, i) => { const b = E.d.bags && E.d.bags[i]; if (!b) { m.visible = false; return; } m.visible = true; const k = b.t / 1.2, tx = POLE.x * T + .6 * T, ty = POLE.y * T; m.position.set(U(b.x + (tx - b.x) * k * .8), .3 + Math.sin(k * Math.PI) * 1.6, ZU(b.y + (ty - b.y) * k * .8) - .2); });
+  // 심판(꼬꼬 아줌마) 방향
+  if (E.step === 4) { const hen = npcById('hen'); epFace(hen, hen.face < 0 ? -Math.PI / 2 : Math.PI / 2); }
+};
+function epCaught(E, where) {
+  E.d.caught++; shake(4, .4); sfx('bonk'); window.__cutscene = true; E.freeze = true;
+  EPC.forEach(c => { c.jump = .25; setTimeout(() => c.jump = 0, 400); }); for (const n of NPCS) if (n._epw !== undefined) emote(n, '!', 1.2);
+  if (!E.d.caughtCap) { E.d.caughtCap = true; epPanel(where === 1 ? 1 : 2, P.x, P.y, [{ who: '꼬꼬 아줌마', text: '꼬꼬?! 고, 공룡이다!!' }, { who: '승부욕', text: '아니 그냥 노랑이잖아.' }], '들켰다!', { sfxCol: '#ff6b6b', tone: 'rgba(255,90,90,.12)' }); if (where === 1) E.d.cap = true; }
+  say([L('꼬꼬 아줌마', '꼬꼬?! 고, 공룡이다!!'), L('승부욕', '아니 그냥 노랑이잖아.'), L('꼬꼬 아줌마', '…어머, 노랑이네? 호호, 오늘만 병아리로 쳐 줄게~ 계속해요!')], () => { DG.v = 40; window.__cutscene = false; E.freeze = false; });
+}
+EP1.finish = E => {
+  const end = E.d.end || 'caught', first = !EPS.album.ep1 || !EPS.album.ep1[end], today = EPS.clear.ep1 !== dayKey();
+  EPS.album.ep1 = EPS.album.ep1 || {}; EPS.album.ep1[end] = dayKey();
+  let rew = [];
+  if (today) { EPS.clear.ep1 = dayKey(); const c = end === 'hero' ? 2 : 1; for (const id of EP1.cast) accAdd(id, c); const cand = 10 + (E.d.rank && E.d.rank <= 3 ? (4 - E.d.rank) * 3 : 0); hearts += cand; rew.push(`✦+${cand}`, `인정 ♥+${c} (${EP1.cast.length}명)`); }
+  if (!EPS.gear.vest) { EPS.gear.vest = 1; if (EPS.wear.length < 2) EPS.wear.push('vest'); rew.push('깃털 조끼 획득!'); }
+  stat('ep'); save();
+  const panels = E.panels; for (let i = 0; i < 4; i++) if (!panels[i]) panels[i] = { img: epCapture(P.x, P.y), lines: [], sfx: '' };
+  const C = composeComic({ kicker: '안노랑 시즌 1 · 1화', title: EP1.title, ending: EP1.ends[end].name }, panels);
+  toBlob(C).then(b => { if (b) albPut(`ep1_${end}`, b); });
+  setTimeout(() => { banner(`결말: ${EP1.ends[end].name}`, first ? '만화책에 새 칸이 생겼어요!' : '만화책 그림이 새로 바뀌었어요', '#ffb3c6'); if (rew.length) toast(rew.join(' · ')); }, 300);
+  setTimeout(() => showComic(C, { title: `1화 「${EP1.title}」 완성!`, desc: `결말 <b>${EP1.ends[end].name}</b> · 만화책 ${Object.keys(EPS.album.ep1).length}/3칸` }), 1300);
+};
+const BIG = [EP1, { id: 'ep2', no: 2, title: '사진관 대소동', need: 12, soon: 1 }, { id: 'ep3', no: 3, title: '병아리 수영 교실', need: 24, soon: 1 }];
+
+// ===== 작은 사건 생성기 (매일 1개 · 누가 + 어디서 + 무슨 일) =====
+const SPOTS = { plaza: { name: '광장', x: 21.6, y: 15.2 }, pond: { name: '연못가', x: 26.2, y: 19.6 }, field: { name: '밭', x: 9.5, y: 18.8 }, east: { name: '동쪽 길', x: 36.5, y: 15.4 }, home: { name: '둥지집 앞', x: 8.5, y: 13.6 } };
+const SMALL = {
+  sneak: { name: '살금살금', make: (who, sp, h) => { const thing = ['먹보의 간식 봉지', '계획이의 수첩', '승부욕의 호루라기'][h % 3], owner = ['먹보', '계획이', '승부욕'][h % 3];
+    return { title: `${josa(npcName(who), '이', '가')} 낮잠 자는 사이`, intro: [L(owner, `노랑아! 내 ${thing.replace(/^.+의 /, '')}… ${sp.name}에 두고 왔는데 ${josa(npcName(who), '이', '가')} 그 옆에서 자고 있어!`), L(owner, `깨우면 큰일 나. 웅크리고(${KB()} 꾹) 살금살금 가져와 줘!`)], thing, owner }; } },
+  photo: { name: '단체 사진', make: (who, sp) => ({ title: `${sp.name}에서 단체 사진`, intro: [L(npcName(who), '자~ 병아리들 단체 사진 찍을게요! 다들 모여요~'), L('계획이', `노랑아, 사진에 머리가 잘려! 찰칵 할 때 ${KB()} 꾹 눌러서 웅크려!`)] }) },
+  chorus: { name: '삐약 합창', make: (who, sp) => ({ title: `${sp.name} 삐약 합창 연습`, intro: [L(npcName(who), '오늘은 병아리 합창 연습이에요~ 제가 손을 들면 다 같이 "삐약!"'), L('먹보', `${KA()} 타이밍 놓치면… 어흥 나와. 조심해!`)] }) },
+};
+const SMALL_WHO = { sneak: ['pig', 'cow', 'sheep', 'duck', 'rabbit'], photo: ['fox', 'raccoon', 'rabbit', 'hen'], chorus: ['hen', 'duck', 'cow', 'sheep2'] };
+function npcName(id) { return (npcById(id) || {}).name || id; }
+function todaySmall() { const dn = dayNum(), h = (dn * 2654435761 >>> 0) % 997, kinds = Object.keys(SMALL), kind = kinds[h % kinds.length], wl = SMALL_WHO[kind], who = wl[(h >> 2) % wl.length], spk = Object.keys(SPOTS)[(h >> 4) % Object.keys(SPOTS).length];
+  const sp = SPOTS[kind === 'sneak' ? (['field', 'pond', 'east'][(h >> 3) % 3]) : spk]; return Object.assign({ kind, who, sp, h, k: dayKey() }, SMALL[kind].make(who, sp, h)); }
+function smallDone() { return EPS.small.k === dayKey() && EPS.small.done; }
+function smallStart() { const s = todaySmall(); return epStart(SMALL_EP[s.kind], s); }
+function smallCommon(E, sp) { window.__cutscene = true; startWipe(() => { warpTo((sp.x - 1.4) * T, (sp.y + 1.2) * T, 'up'); E.d.setup(E); setTimeout(() => say(E.d.intro, () => { window.__cutscene = false; E.d.ready = 1; epPanel(0, P.x, P.y - 6, [{ who: E.d.intro[0].who, text: E.d.intro[0].text.length > 34 ? E.d.intro[0].text.slice(0, 32) + '…' : E.d.intro[0].text }], E.d.sfx0 || '')}), 600); }); }
+function smallFinish(E, ok, lines, sfx) { if (E.d.fin) return; E.d.fin = 1; DG.on = false; DG.peep = null; E.d.ok = ok; E.freeze = true; epPanel(3, P.x, P.y, lines.slice(-2).map(l => ({ who: l.who, text: l.text })), sfx, ok ? null : { sfxCol: '#ff8fa3' }); say(lines, () => epEnd()); }
+const SMALL_EP = {
+  sneak: { id: 'small', small: 1, steps: [
+    { enter(E) { const sp = E.d.sp; E.d.setup = () => { epHold(E.d.who, sp.x * T, sp.y * T, -1); E.d.item = { x: (sp.x + 1.5) * T, y: (sp.y - .4) * T }; }; smallCommon(E, sp); }, tick(E) { return E.d.ready; } },
+    { enter(E) { DG.on = true; E.d.cap = false; DG.onCaught = () => { DG.on = false; const n = npcById(E.d.who); emote(n, '!', 1.5); shake(3, .3); smallFinish(E, false, [L(npcName(E.d.who), '흐아암… 누, 누구야?! 고, 공룡?!'), L('안노랑', '삐, 삐약…? (이미 늦었다)'), L(E.d.owner, '…노랑아 그건 그냥 서 있는 공룡이야.')], '번쩍!'); }; },
+      lockA: true,
+      tick(E, dt) { const n = npcById(E.d.who), d = Math.hypot(P.x - n.x, P.y - n.y); if (Math.random() < dt * 1.2) floaters.push({ x: n.x, y: n.y - 30, t: 1, text: 'Zz', col: '#c9b6ff' });
+        if (d < 2.8 * T && P.moving) dgGain((crouching() ? 6 : 55) * dt * (1.6 - d / (2.8 * T)), crouching() ? 'crouch' : 'run');
+        if (!E.d.cap && d < 1.3 * T) { E.d.cap = true; epPanel(1, P.x, P.y, [{ who: '안노랑', text: crouching() ? '(살금… 살금…)' : '(쿵… 쿵…)' }], crouching() ? '살금' : '쿵'); }
+        if (Math.hypot(P.x - E.d.item.x, P.y - E.d.item.y) < 10) { DG.on = false; epPanel(2, P.x, P.y, [{ who: '안노랑', text: `(${E.d.thing} 확보!)` }], '휴…'); smallFinish(E, true, [L(E.d.owner, '노랑아 고마워! 진짜 병아리처럼 조용했어!'), L('안노랑', '(병아리는… 원래 조용하지. 후훗.)')], '성공!'); } } },
+    { tick() { return false; } }],
+    props(E) { const it = ent('ep_item', () => grp(mesh('b', '#ffd23f', .2, .16, .14, 0, .1, 0), mesh('b', '#ff8fa3', .22, .04, .16, 0, .19, 0))); it.visible = !!E.d.item && E.step <= 1; if (E.d.item) it.position.set(U(E.d.item.x), Math.abs(Math.sin(time * 3)) * .08, ZU(E.d.item.y) - .2); } },
+  photo: { id: 'small', small: 1, steps: [
+    { enter(E) { const sp = E.d.sp; E.d.setup = () => { epMakeChicks(6); EPC.forEach((c, i) => { c.x = (sp.x - 1.6 + i * .64 + (i >= 3 ? .7 : 0)) * T; c.y = sp.y * T; c.look = 0; }); epHold(E.d.who, sp.x * T, (sp.y + 2.4) * T, 1); E.d.spot = { x: (sp.x - 1.6 + 3 * .64 + .1) * T, y: sp.y * T }; }; smallCommon(E, sp); }, tick(E) { return E.d.ready; } },
+    { enter(E) { E.d.shots = 0; E.d.miss = 0; E.d.cd = 2.6; DG.on = true; DG.onCaught = () => { DG.on = false; smallFinish(E, false, [L(npcName(E.d.who), '어… 사진마다 커다란 노란 게 찍혔네?'), L('승부욕', '그거 노랑이 꼬리야.')], '찰칵?!'); }; toast('줄 가운데 빈자리로! 찰칵 할 때 웅크리기'); },
+      lockA: true,
+      tick(E, dt) { E.d.cd -= dt; const n = npcById(E.d.who); if (E.d.cd < 1.5 && !E.d.cnt) { E.d.cnt = 1; floaters.push({ x: n.x, y: n.y - 40, t: 1.4, text: '하나, 둘…', col: '#fff' }); }
+        if (E.d.cd <= 0) { E.d.cnt = 0; E.d.cd = 2.4 + Math.random(); sfx('star'); const inSpot = Math.hypot(P.x - E.d.spot.x, P.y - E.d.spot.y) < 14, ok = inSpot && crouching(); E.d.shots++; R3 && (R3.flash = .2);
+          floaters.push({ x: n.x, y: n.y - 40, t: 1, text: '찰칵!', col: '#fff3b0' }); if (!ok) { dgGain(inSpot ? 40 : 30, 'all'); floaters.push({ x: P.x, y: P.y - 40, t: 1.2, text: inSpot ? '머리가 잘렸다!' : '사진에서 빠졌다!', col: '#ff8fa3' }); }
+          if (E.d.shots === 2) epPanel(1, P.x, P.y, [{ who: npcName(E.d.who), text: '자~ 웃어요! 김치~' }, { who: '안노랑', text: ok ? '(납작…!)' : '(앗 머리…)' }], '찰칵!');
+          if (E.d.shots >= 3 && DG.on) { DG.on = false; epPanel(2, P.x, P.y, [{ who: '병아리들', text: '삐약~!' }], '찰칵!'); smallFinish(E, true, [L(npcName(E.d.who), '완벽해요! 병아리 일곱 마리, 다 잘 나왔어요~'), L('계획이', '…일곱? 우리 여섯인데.'), L('안노랑', '(병아리 일곱 마리! 후훗.)')], '찰칵!'); } } } },
+    { tick() { return false; } }] },
+  chorus: { id: 'small', small: 1, steps: [
+    { enter(E) { const sp = E.d.sp; E.d.setup = () => { epMakeChicks(6); EPC.forEach((c, i) => { c.x = (sp.x - 1.8 + i * .7) * T; c.y = (sp.y + (i % 2) * .3) * T; c.look = 0; }); epHold(E.d.who, sp.x * T, (sp.y - 1.6) * T, 1); }; smallCommon(E, sp); }, tick(E) { return E.d.ready; } },
+    { enter(E) { E.d.n = 0; E.d.cd = 2.2; E.d.miss0 = EP_FX.peepMiss || 0; DG.on = true; DG.onCaught = () => { DG.on = false; smallFinish(E, false, [L(npcName(E.d.who), '방금… 어흥 소리 누구예요?'), L('먹보', '(모두 노랑이를 쳐다본다)'), L('안노랑', '…삐약?')], '어흥?!'); }; },
+      tick(E, dt) { const n = npcById(E.d.who); E.d.cd -= dt;
+        if (E.d.cd <= 0 && !DG.peep) { E.d.n++; E.d.cd = 1.4 + Math.random() * 1.2; n.react = .5; floaters.push({ x: n.x, y: n.y - 46, t: 1, text: '하나 둘 셋!', col: '#fff' }); EPC.forEach(c => { c.jump = .15; setTimeout(() => c.jump = 0, 250); }); dgPeep(Math.max(.6, 1.0 - E.d.n * .05)); if (E.d.n === 3) setTimeout(() => EP && epPanel(1, P.x, P.y, [{ who: '병아리들', text: '삐약! 삐약!' }, { who: '안노랑', text: '삐약!' }], '삐약!'), 200); }
+        if (E.d.n >= 6 && !DG.peep && DG.on) { DG.on = false; const miss = (EP_FX.peepMiss || 0) - E.d.miss0; epPanel(2, P.x, P.y, [{ who: npcName(E.d.who), text: miss ? '음… 중간에 좀 낮은 소리가?' : '완벽한 화음이에요!' }], miss ? '어흥…?' : '♪'); smallFinish(E, true, [L(npcName(E.d.who), miss ? '음~ 중간에 낮은 소리가 섞였지만… 그것도 개성이죠!' : '오늘 합창 최고예요! 병아리 목소리가 반짝반짝~'), L('안노랑', miss ? '(목소리 좀 더 연습해야지…)' : '(삐약 마스터 안노랑!)')], miss ? '삐약?' : '♪♪'); } } },
+    { tick() { return false; } }] },
+};
+for (const k in SMALL_EP) SMALL_EP[k].finish = E => {
+  const ok = E.d.ok, first = !smallDone();
+  if (first) { EPS.small = { k: dayKey(), done: 1 }; accAdd(E.d.who, (ok ? 2 : 1) + (E.d.lunch ? 1 : 0)); hearts += (ok ? 8 : 4) + (E.d.lunch ? 5 : 0); }
+  stat('small'); save();
+  const panels = E.panels; for (let i = 0; i < 4; i++) if (!panels[i]) panels[i] = { img: epCapture(P.x, P.y), lines: [], sfx: '' };
+  const C = composeComic({ kicker: `안노랑 일상툰 · ${SMALL[E.d.kind].name}`, title: E.d.title, ending: ok ? '성공!' : '들켰다…' }, panels);
+  const key = `day_${dayKey()}_${Date.now() % 100000}`; toBlob(C).then(b => { if (!b) return; albPut(key, b); EPS.toons.unshift({ k: key, t: E.d.title, ok: ok ? 1 : 0, d: dayKey() }); while (EPS.toons.length > 30) { const o = EPS.toons.pop(); albDel(o.k); } save(); });
+  if (first) setTimeout(() => toast(`${npcName(E.d.who)} 인정 ♥+${(ok ? 2 : 1) + (E.d.lunch ? 1 : 0)} · ✦+${(ok ? 8 : 4) + (E.d.lunch ? 5 : 0)}${E.d.lunch ? ' (도시락 냠냠!)' : ''}`), 400);
+  setTimeout(() => showComic(C, { title: `일상툰 「${E.d.title}」`, desc: ok ? '오늘의 작은 사건 성공!' : '들켰지만… 그것도 오늘의 이야기!' }), 1000);
+};
+for (const k in SMALL_EP) { const P0 = SMALL_EP[k].props; SMALL_EP[k].props = (E, dt) => { if (P0) P0(E, dt); }; }
+
+// ===== 사건 준비물: 마을 생활에서 만든 걸로 사건을 유리하게 =====
+Object.assign(ITEMS, { ep_band: { name: '응원 머리띠', type: 'mat', desc: '털실로 만든 병아리 머리띠 · 1화 운동회에서 들킴 -20%' }, ep_lunch: { name: '병아리 도시락', type: 'mat', desc: '작은 사건에 들고 가면 인정 ♥+1 · ✦+5 더' } });
+const CROPS4 = ['carrot', 'tomato', 'corn', 'cabbage', 'potato', 'strawberry', 'pumpkin'];
+const PREP = [
+  { id: 'ep_band', need: () => [['yarn', 1]], txt: '털실 1개 (공방 물레에서 양털로)' },
+  { id: 'ep_lunch', need: () => { const c = CROPS4.find(k => (inv[k] || 0) > 0) || 'carrot'; return [['egg', 2], [c, 1]]; }, txt: '달걀 2개 + 아무 채소 1개' },
+];
+function prepEntries() { return PREP.map(p => { const need = p.need(), ok = need.every(([k, n]) => (inv[k] || 0) >= n), it = ITEMS[p.id];
+  return { img: (() => { try { return itemImg(need[0][0]); } catch (e) { return null; } })(), name: `${it.name} (보유 ${inv[p.id] || 0})`, desc: `${p.txt} · ${it.desc.split(' · ').slice(1).join(' · ')}`, tag: ok ? '만들기' : '재료 부족', col: ok ? '#ffd23f' : '#d9cbb5', act: () => { if (!ok) { sfx('bonk'); return pmsg(`재료가 모자라요: ${p.txt}`, 1); } for (const [k, n] of need) { inv[k] -= n; if (inv[k] <= 0) delete inv[k]; } addItem(p.id); sfx('done'); pmsg(`${it.name} 완성!`); save(); } }; }); }
+
+// ===== 사건 수첩 (노랑폰 앱) =====
+function epbookEntries(m) {
+  const E = [];
+  if (m.ask) { const n = m.ask, s = todaySmall(); return [
+    { name: '사건 시작하기', desc: `${s.sp.name} · ${SMALL[s.kind].name} · 4컷 만화가 그려져요`, tag: '시작', col: '#ffd23f', act: () => { menu = null; smallStart(); } },
+    { name: '그냥 이야기하기', desc: '사건은 나중에 (사건 수첩에서 언제든 시작)', tag: '대화', col: '#efe2c8', act: () => { menu = null; n._epSkip = dayKey(); farmTalk(n); } }]; }
+  if (m.tab === 0) {
+    const s = todaySmall(), sd = smallDone();
+    E.push({ name: `오늘의 작은 사건 · ${s.title}`, desc: sd ? '오늘은 완료! 다시 해도 일상툰이 새로 그려져요' : `${s.sp.name} · ${npcName(s.who)}에게 말을 걸면 시작 (바로 시작도 가능)`, tag: sd ? '다시 하기' : '바로 가기', col: sd ? '#efe2c8' : '#ffd23f', act: () => { menu = null; smallStart(); } });
+    for (const b of BIG) { const got = b.ends ? Object.keys(EPS.album[b.id] || {}).length : 0, open = !b.need || accTotal() >= b.need;
+      E.push({ name: `${b.no}화 「${b.title}」`, desc: b.soon ? (open ? '다음 업데이트에서 열려요!' : `마을 인정 ♥${b.need} 모으면 열려요 (지금 ♥${accTotal()}) · 준비 중`) : `결말 ${got}/3 모음 · ${EPS.clear[b.id] === dayKey() ? '오늘 보상 받음' : '오늘 보상 있음'} · 광장 포스터에서 시작`, tag: b.soon ? '🔒' : '시작', col: b.soon ? '#d9cbb5' : '#9be37a', act: () => { if (b.soon) return pmsg('준비 중이에요!'); menu = null; epStart(b); } }); }
+  }
+  if (m.tab === 1) { E.push({ name: `마을 인정 ♥${accTotal()}`, desc: '사건을 함께 겪을수록 마을 친구들이 노랑이를 병아리로 인정해요', tag: '', act: () => { } });
+    for (const id of ['hen', 'pig', 'rabbit', 'duck', 'cow', 'sheep', 'sheep2', 'fox', 'raccoon']) { const n = npcById(id); if (!n) continue; const lv = accLv(id);
+      E.push({ img: window.NPC_IMG && NPC_IMG[n.name], name: n.name, desc: `${ACC_NAME[lv]} · ${lv < 3 ? `다음 단계까지 ${ACC_LV[lv + 1] - (EPS.acc[id] || 0)}` : '최고 단계!'}`, tag: '♥'.repeat(lv) + '♡'.repeat(3 - lv), col: lv >= 3 ? '#ffe066' : '#efe2c8', act: () => pmsg(`${n.name}: ${['저 덩치 큰 병아리는… 뭐지?', '노랑이…는 병아리… 맞겠지?', '노랑이는 우리 병아리 친구야!', '노랑이? 당연히 병아리지!'][lv]}`) }); } }
+  if (m.tab === 2) { E.push({ name: `착용 중: ${EPS.wear.filter(k => EPS.gear[k]).map(k => GEAR[k].name).join(', ') || '없음'}`, desc: '최대 2개까지 입을 수 있어요 · 공룡 티를 줄여 줘요', tag: '', act: () => { } });
+    for (const k in GEAR) { const G = GEAR[k], own = EPS.gear[k], on = gearOn(k);
+      E.push({ name: `${G.ico} ${G.name}`, desc: G.desc, tag: on ? '착용 중' : own ? '입기' : `✦ ${G.price}`, col: on ? '#9be37a' : own || hearts >= G.price ? '#ffd23f' : '#d9cbb5', act: () => {
+        if (!own) { if (hearts < G.price) { sfx('bonk'); return pmsg(`별사탕이 ${G.price - hearts}개 모자라!`, 1); } hearts -= G.price; EPS.gear[k] = 1; sfx('done'); pmsg(`${G.name} 구매!`); }
+        else if (on) { EPS.wear = EPS.wear.filter(x => x !== k); pmsg(`${G.name} 벗음`); }
+        else { if (EPS.wear.length >= 2) EPS.wear.shift(); EPS.wear.push(k); pmsg(`${G.name} 착용!`); sfx('blip'); }
+        save(); } }); } }
+  if (m.tab === 3) return prepEntries();
+  if (m.tab === 4) { E.push({ name: '만화책 펼치기', desc: `큰 사건 결말 ${BIG.filter(b => b.ends).reduce((a, b) => a + Object.keys(EPS.album[b.id] || {}).length, 0)}칸 · 일상툰 ${EPS.toons.length}편`, tag: '열기', col: '#ffd23f', act: () => { menu = null; openAlbum(); } }); }
+  return E;
+}
+async function openAlbum() {
+  const S = sheet4('안노랑 만화책', '사건을 겪으면 4컷 만화가 차곡차곡 쌓여요. 결말을 모두 모으면 표지가 금색이 돼요!'); if (!S) return;
+  const grid = (items) => { const w = document.createElement('div'); w.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0'; S.box.append(w); items.forEach(it => w.append(it)); };
+  const cell = (label, sub, k, ok) => { const d = document.createElement('div'); d.style.cssText = `border:2px solid #33222a;border-radius:10px;background:${ok ? '#fff' : '#efe2c8'};padding:6px;font-size:12px;text-align:center;cursor:${ok ? 'pointer' : 'default'};display:flex;flex-direction:column;gap:4px;align-items:center`;
+    const im = document.createElement('div'); im.style.cssText = 'width:100%;aspect-ratio:9/16;border-radius:6px;background:#e8dcc4 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:26px;color:#8a6a5a'; im.textContent = ok ? '' : '?'; d.append(im);
+    const t = document.createElement('div'); t.innerHTML = `<b>${label}</b><br><span style="color:#8a6a5a">${sub}</span>`; d.append(t);
+    if (ok && k) albGet(k).then(b => { if (!b) { im.textContent = '🖼️'; return; } const u = URL.createObjectURL(b); im.style.backgroundImage = `url(${u})`; d.onclick = () => { S.close(); const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').drawImage(img, 0, 0); showComic(c, { title: label, onClose: () => openAlbum() }); }; img.src = u; }; });
+    return d; };
+  for (const b of BIG) { if (!b.ends) continue; const got = EPS.album[b.id] || {}, all = Object.keys(b.ends).every(k => got[k]);
+    S.h(`${all ? '🏆 ' : ''}${b.no}화 「${b.title}」 ${Object.keys(got).length}/3`, 17);
+    grid(Object.entries(b.ends).map(([k, e]) => cell(got[k] ? e.name : '???', got[k] ? `${String(got[k]).slice(4, 6)}/${String(got[k]).slice(6)}` : e.hint, `${b.id}_${k}`, !!got[k]))); }
+  S.h(`일상툰 ${EPS.toons.length}편`, 17);
+  if (EPS.toons.length) grid(EPS.toons.slice(0, 12).map(t => cell(t.t, `${String(t.d).slice(4, 6)}/${String(t.d).slice(6)} · ${t.ok ? '성공' : '들킴'}`, t.k, true))); else S.p('아직 없어요. 오늘의 작은 사건을 해 보세요!');
+  S.btn('닫기', '#efe2c8', () => S.close());
+}
+{ const i = APPS.findIndex(a => a.id === 'friends'); APPS.splice(Math.max(0, i), 0, { id: 'epbook', name: '사건 수첩', ico: '📒', col: '#ffe066', go: () => { phone = null; menu = { kind: 'epbook', title: '사건 수첩', tabs: ['사건', '인정도', '변장', '준비물', '만화책'], tab: 0, sel: 0, page: 0 }; } }); }
+townEntries = (orig => m => m.kind === 'epbook' ? epbookEntries(m) : orig(m))(townEntries);
+
+// ===== 마을과 연결: 포스터 · 작은 사건 NPC · 말 걸기 =====
+function nearPoster() { return !EP && curRoom.id === 'v1' && Math.hypot(P.x - POSTER.x * T, P.y - (POSTER.y + .5) * T) < 22; }
+townNear = (orig => () => nearPoster() ? 'ep_poster' : orig())(townNear);
+townInteract = (orig => () => { if (nearPoster()) { epStart(EP1); return true; } return orig(); })(townInteract);
+townHint = (orig => () => nearPoster() ? { x: POSTER.x * T, y: POSTER.y * T - 30, t: `${KA()} 1화 병아리 운동회` } : orig())(townHint);
+const _farmTalk0 = farmTalk;
+farmTalk = (orig => n => { if (!window.__noAuto && !EP && tut.done && !smallDone() && n._epSkip !== dayKey()) { const s = todaySmall(), busy = (typeof questMark === 'function' && questMark(n)) || (STORY.st === 1 && TRIALS[n.id]); if (n.id === s.who && !busy) { menu = { kind: 'epbook', title: `📒 ${s.title}`, tabs: ['오늘의 작은 사건'], tab: 0, sel: 0, page: 0, ask: n }; sfx('blip'); return true; } } return orig(n); })(farmTalk);
+
+// ===== HUD: 공룡 티 게이지 · 삐약 타이밍 · 사건 표시 =====
+function drawEp() {
+  if (state !== 'play') return;
+  const u = Math.max(11 * DPR, Math.min(CW, CH) / 32) * TXS();
+  // 작은 사건 NPC 표시
+  if (!EP && tut.done && !smallDone() && USE3D && !menu && !dlg && !window.__noAuto) { const s = todaySmall(), n = npcById(s.who); if (n && Math.hypot(n.x - P.x, n.y - P.y) < 14 * T) { const p = epProject(n.x, n.y, 1.25); if (p) { const x = p.x * CW, y = p.y * CH - Math.abs(Math.sin(time * 3)) * 6 * DPR, t0 = '📒 사건'; ctx.font = `${Math.round(u * .85)}px ${FONT}`; const w = ctx.measureText(t0).width + u; ctx.fillStyle = '#ffe066'; rr(x - w / 2, y - u * 1.6, w, u * 1.4, u * .7); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.stroke(); text(t0, x, y - u * .9, u * .85, '#33222a', 'center'); } } }
+  if (!EP) return;
+  if (DG.on) { const w = Math.min(CW * .6, u * 16), x = CW / 2 - w / 2 + u * 1.2, y = CH * (CW < CH ? .155 : .12), v = DG.v / 100;
+    ctx.fillStyle = 'rgba(51,34,42,.88)'; rr(x - u * 3, y - u * .3, w + u * 3.6, u * 2.6, u * 1.2); ctx.fill();
+    text('🦖', x - u * 1.6, y + u * 1, u * 1.5, '#fff', 'center');
+    ctx.fillStyle = '#5a4a50'; rr(x, y + u * .25, w, u * 1.5, u * .75); ctx.fill();
+    const col = v < .5 ? '#9be37a' : v < .8 ? '#ffd23f' : '#ff6b6b'; ctx.fillStyle = DG.flash > 0 && Math.floor(time * 20) % 2 ? '#fff' : col; if (v > 0) { rr(x, y + u * .25, Math.max(u * 1.5, w * v), u * 1.5, u * .75); ctx.fill(); }
+    text(`공룡 티 ${Math.round(DG.v)}%${crouching() ? ' · 웅크림' : ''}`, x + w / 2, y + u * 1.02, u * .95, '#fff', 'center', true);
+    if (EP.def === EP1 && EP.step === 4) { const hen = npcById('hen'), watch = EP.d.watch; text(watch ? '👀 보고 있다! 멈추거나 종종걸음' : '🌸 무궁화 꽃이…', CW / 2, y + u * 3.4, u * 1.05, watch ? '#ff8fa3' : '#fff', 'center', true); }
+  }
+  if (DG.peep) { const k = DG.peep.t / DG.peep.t0, x = CW / 2, y = CH * .42; ctx.globalAlpha = .95; ctx.fillStyle = '#ffe066'; ctx.beginPath(); ctx.arc(x, y, u * 2.6, 0, 6.29); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 3 * DPR; ctx.stroke();
+    ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 6 * DPR; ctx.beginPath(); ctx.arc(x, y, u * 2.9, -Math.PI / 2, -Math.PI / 2 + k * 6.283); ctx.stroke(); ctx.globalAlpha = 1;
+    text(`${KA()}`, x, y - u * .5, u * 1.6, '#33222a', 'center'); text('삐약!', x, y + u * 1.1, u * .9, '#33222a', 'center'); }
+  if (EP.def === EP1 && EP.step === 3 && EP.d.cd > 0 && !dlg && !wipe) { const n = Math.ceil(EP.d.cd); text(n > 3 ? '' : String(n), CW / 2, CH * .4, u * 5, '#ffd23f', 'center', true); }
+  if (EP.def === EP1 && EP.step === 5 && !EP.freeze && EP.d.left <= 20) { const y = CH * (CW < CH ? .155 : .12); text(`남은 시간 ${Math.ceil(EP.d.left)}초`, CW / 2, y + u * .5, u * 1.1, '#fff', 'center', true); text(`${KA()} 콩주머니 (병아리답게)   ·   ${KB()} 꼬리 (공룡답게!)`, CW / 2, y + u * 2.1, u * .78, '#ffe066', 'center', true); }
+}
+drawOverlay4 = (o => () => { o(); drawEp(); })(drawOverlay4);
+updateTown = (orig => dt => { orig(dt); epTick(dt); })(updateTown);
+townSave = (orig => () => Object.assign(orig(), { ep: EPS }))(townSave);
+townLoad = (orig => d => { orig(d); const e = d && d.ep; if (!e) return; Object.assign(EPS.acc, e.acc || {}); Object.assign(EPS.album, e.album || {}); EPS.toons = e.toons || []; Object.assign(EPS.gear, e.gear || {}); EPS.wear = e.wear || []; Object.assign(EPS.clear, e.clear || {}); EPS.small = e.small || EPS.small; EPS.intro = e.intro || 0; })(townLoad);
+// 첫 안내
+startGame = (orig => () => { orig(); setTimeout(() => { if (state !== 'play' || EPS.intro || !tut.done || dlg || menu || window.__noAuto) return; EPS.intro = 1; save();
+  const s = todaySmall(); say([L('계획이', '노랑아! 이제부터 마을에 매일 "사건"이 생겨!'), L('먹보', `오늘은 ${s.sp.name} 쪽에서 ${josa(npcName(s.who), '이', '가')} 무슨 일이 있대. 머리 위에 📒 뜬 친구한테 말 걸어 봐!`), L('승부욕', '광장 포스터에는 큰 사건, 「병아리 운동회」도 붙었어!'), L('계획이', '노랑폰 "사건 수첩"에 인정도·변장·준비물·만화책이 다 모여. 털실로 응원 머리띠도 만들 수 있대!')]); }, 4500); })(startGame);
+
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
 let USE3D = false, R3 = null;
@@ -4019,7 +4432,7 @@ function sync3D(dt) {
   // statics state (breakable bushes, chest, shake, acorns)
   for (const [s, g] of R3.statMeshes) { g.visible = !s.gone; if (s.chest) { const lid = g.getObjectByName('lid'); if (lid) { lid.rotation.x = chestOpen ? -1.2 : 0; lid.position.y = chestOpen ? .75 : .55; lid.position.z = chestOpen ? -.25 : 0; } } }
   for (const a of ACORN_TREES) { const m = ent(a, () => grp(mesh('s', '#a0603f', .09, .1, .09, 0, 0, 0), mesh('hemi', '#6b4a3a', .1, .06, .1, 0, .06, 0))); m.visible = !!a.acorn; m.position.set(U(a.x) + .3, 1.05, ZU(a.y) - .2); }
-  shakeTrees(); syncLots3D(); syncCollect3D(); syncOrchard3D(); syncRanch3D(); try { syncTown3D(); } catch (e) { } try { syncHome3D(); } catch (e) { } try { syncLife3D(); } catch (e) { }
+  shakeTrees(); syncLots3D(); syncCollect3D(); syncOrchard3D(); syncRanch3D(); try { syncTown3D(); } catch (e) { } try { syncHome3D(); } catch (e) { } try { syncLife3D(); } catch (e) { } try { if (typeof syncEp3D === 'function') syncEp3D(dt); } catch (e) { console.warn('ep3d', e); }
   // tufts
   { const im = R3.tufts, d = new THREE.Object3D(); let i = 0; for (const t of tufts) { for (let k = 0; k < 3; k++) { const s = t.alive ? 1 : 0, ox = (k - 1) * .12, sw = Math.sin(time * 2.2 + t.x * .3) * .12; d.position.set(U(t.x) + ox, .12 * s, ZU(t.y) - .3 + (k === 1 ? -.05 : .04)); d.scale.set(.07 * s, (.26 + (k === 1 ? .08 : 0)) * s, .07 * s); d.rotation.set(0, 0, sw + (k - 1) * .25); d.updateMatrix(); im.setMatrixAt(i++, d.matrix); } } im.count = i; im.instanceMatrix.needsUpdate = true; if (!im.parent) R3.scene.add(im); }
   // crops (rebuild when changed)

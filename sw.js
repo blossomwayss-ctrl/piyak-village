@@ -1,5 +1,5 @@
-// 삐약마을 offline cache + 업데이트 + 마을 소식 알림 (fa851148)
-const CACHE = 'piyak-fa851148', NOTI = 'piyak-notify';
+// 삐약마을 offline cache + 업데이트 + 마을 소식 알림 (4dc32c57)
+const CACHE = 'piyak-4dc32c57', NOTI = 'piyak-notify';
 const CORE = ['./', './index.html', './three.min.js', './GLTFLoader.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== NOTI).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
