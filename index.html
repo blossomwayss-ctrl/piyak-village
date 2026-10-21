@@ -641,7 +641,7 @@ function panelEntries() {
     const type = ['eq', 'use', 'mat', 'seed', 'crit'][m.tab];
     for (const id in ITEMS) { const it = ITEMS[id]; if (it.type !== type || !(inv[id] > 0)) continue;
       if (type === 'eq') { const on = equip[it.slot] === id; E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: on ? '착용 중' : '착용', col: on ? '#9be37a' : '#ffd23f', act: () => { equipItem(id); pmsg(equip[it.slot] === id ? `${it.name} 착용!` : `${it.name} 벗음`); } }); }
-      else if (type === 'use') E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: it.desc, tag: '사용', col: '#ffd23f', act: () => { if (useItem(id)) { pmsg(`${it.name} 사용!`); if (it.warp) menu = null; } } });
+      else if (type === 'use') E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: it.desc, tag: '사용', col: '#ffd23f', act: () => { if (useItem(id)) { pmsg(typeof SNACK !== "undefined" && SNACK[id] ? `${it.name} 냠냠!` : `${it.name} 사용!`); if (it.warp) menu = null; } } });
       else if (type === 'crit') E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: whenStr(CRIT[id]), tag: DON[id] ? '기증 완료' : '', col: '#c9b6ff', act: () => pmsg(DON[id] ? '너구리 상점에 팔 수 있어' : '부엉 박사 박물관에 기증해 봐!') });
       else if (type === 'seed') E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: it.desc, tag: '', col: null, act: () => pmsg('밭 앞에서 A로 심을 수 있어') });
       else E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: it.desc, tag: '', col: null, act: () => pmsg(it.sell ? '너구리 상점에 팔 수 있어' : '부엉 박사의 연금술에 쓰는 재료야') }); }
@@ -2160,7 +2160,7 @@ function lifeEntries(m) {
     E.push({ name: '시간', desc: '실제 시간을 따라 낮과 밤이 바뀌어요', tag: TIME_NAME[CFG.time], col: '#ffd23f', act: cyc('time', ['auto', 'morning', 'day', 'evening', 'night']) });
     E.push({ name: '계절', desc: '실제 달력을 따라 봄·여름·가을·겨울', tag: SEASON_NAME[CFG.season], col: '#ffd23f', act: cyc('season', ['auto', 'spring', 'summer', 'autumn', 'winter']) });
     if (USE3D) E.push({ name: '그래픽', desc: '자동은 기기 속도에 맞춰 화질을 조절해요', tag: GFX_NAME[CFG.gfx], col: '#ffd23f', act: cyc('gfx', ['auto', 'high', 'mid', 'low']) });
-    E.push({ name: '날씨', desc: '실제는 날짜마다 맑음·비가 정해져요 (비 오는 날은 밭에 저절로 물!)', tag: { auto: '실제', clear: '맑음', rain: '비' }[CFG.weather || 'auto'], col: '#ffd23f', act: () => { const o = ['auto', 'clear', 'rain']; CFG.weather = o[(o.indexOf(CFG.weather || 'auto') + 1) % 3]; saveCfg(); sfx('blip'); } });
+    E.push({ name: '날씨', desc: '실제: 대부분 맑음, 가끔 3시간 소나기 (비 오는 날은 밭에 저절로 물!)', tag: { auto: '실제', clear: '맑음', rain: '비' }[CFG.weather || 'auto'], col: '#ffd23f', act: () => { const o = ['auto', 'clear', 'rain']; CFG.weather = o[(o.indexOf(CFG.weather || 'auto') + 1) % 3]; saveCfg(); sfx('blip'); } });
     E.push({ name: '시계 표시', desc: '화면 위쪽 시계', tag: CFG.clock ? '켜기' : '끄기', col: '#ffd23f', act: () => { CFG.clock = CFG.clock ? 0 : 1; saveCfg(); sfx('blip'); } });
     E.push({ name: '소리', desc: '효과음과 음악', tag: muted ? '꺼짐' : '켜짐', col: '#ffd23f', act: () => toggleMute() });
   }
@@ -2325,8 +2325,13 @@ const isFarmPlot = p => p.y !== 19;
 for (const p of plots) if (isFarmPlot(p)) { if (p.crop && SEEDS[p.crop]) { p.seed = p.crop; p.stage = SEEDS[p.crop].days; } else { p.crop = null; p.seed = null; p.stage = 0; } p.wet = false; p.day = 0; }
 function cropShow(p) { if (!p.seed) return null; const D = SEEDS[p.seed]; return p.stage >= D.days ? p.seed : p.stage === 0 ? 'seed' : p.seed === 'rice' ? 'ricesprout' : 'sprout'; }
 // ---- weather (deterministic per real day) ----
-function weatherOf(d = dayKey()) { if (CFG.weather && CFG.weather !== 'auto') return CFG.weather; const s = envSeason(); if (s === 'winter') return 'clear'; let h = d * 2654435761 % 4294967296; h = (h ^ (h >>> 13)) % 100; return h < (s === 'summer' ? 30 : 22) ? 'rain' : 'clear'; }
-function raining() { return weatherOf() === 'rain' && state !== 'title'; }
+// 날씨: 비 오는 날은 드물게(여름 16%, 그 밖 10%), 이틀 연속 비는 없어요. 비 오는 날도 하루 종일이 아니라 3시간 소나기.
+function dayRoll(d) { let h = Math.imul(d | 0, 2654435761) >>> 0; h = (h ^ (h >>> 15)) >>> 0; h = Math.imul(h, 2246822519) >>> 0; h = (h ^ (h >>> 13)) >>> 0; return h % 100; }
+function prevDayKey(d) { const y = Math.floor(d / 10000), m = Math.floor(d / 100) % 100, dd = d % 100, dt = new Date(y, m - 1, dd - 1); return dayKey(dt); }
+function rawRain(d) { const s = envSeason(); if (s === 'winter') return false; return dayRoll(d) < (s === 'summer' ? 16 : 10); }
+function weatherOf(d = dayKey()) { if (CFG.weather && CFG.weather !== 'auto') return CFG.weather; return rawRain(d) && !rawRain(prevDayKey(d)) ? 'rain' : 'clear'; }
+function showerHours(d = dayKey()) { const st = 9 + dayRoll(d * 7 + 3) % 8; return [st, st + 3]; }
+function raining() { if (state === 'title') return false; const w = weatherOf(); if (w !== 'rain') return false; if (CFG.weather === 'rain') return true; const h = envHour(), [a, b] = showerHours(); return h >= a && h < b; }
 function farmTick() {
   const today = dayKey(), rain = weatherOf(today) === 'rain';
   for (const p of plots) { if (!isFarmPlot(p) || !p.seed) continue;
@@ -4334,6 +4339,101 @@ townLoad = (orig => d => { orig(d); if (d && d.sn) Object.assign(SNACKB, d.sn); 
 // 가방 음식 버튼: 사용 → 먹기
 panelEntries = (orig => () => { const E = orig(); if (menu && menu.kind === 'bag') { const byName = {}; for (const id in SNACK) if (ITEMS[id]) byName[ITEMS[id].name] = id; for (const e of E) { const nm = String(e.name || '').replace(/ ×\d+$/, ''); if (byName[nm] && e.tag === '사용') e.tag = '먹기'; } } return E; })(panelEntries);
 
+// ---------- ui.js: 가방 격자 · 만들기 가능 표시 · 첫 획득 카드 ----------
+
+// ===== 8. 처음 얻은 아이템 카드 + NEW 표시 =====
+const ITSEEN = {}, ITNEW = {}, GETQ = []; let ITSEEN_INIT = false;
+function itShort(id) { const it = ITEMS[id]; if (!it) return ''; return (it.desc || '').split(' · ').slice(0, 2).join(' · '); }
+addItem = (orig => (id, n = 1) => { const r = orig(id, n);
+  if (n > 0 && ITEMS[id] && ITSEEN_INIT && !ITSEEN[id]) { ITSEEN[id] = 1; ITNEW[id] = 1; if (state === 'play') { GETQ.push({ id, t: 0 }); sfx('pop'); } }
+  return r; })(addItem);
+function getCardTick(dt) { if (!GETQ.length) return; const c = GETQ[0]; if (dlg || cardOpen) return; c.t += dt; if (c.t > 2.8) GETQ.shift(); }
+function drawGetCard() {
+  if (!GETQ.length || state !== 'play' || dlg || cardOpen) return; const c = GETQ[0], it = ITEMS[c.id]; if (!it) { GETQ.shift(); return; }
+  const u = Math.max(11 * DPR, Math.min(CW, CH) / 30) * TXS(), a = Math.min(1, c.t / .2, (2.8 - c.t) / .35), pop = c.t < .25 ? .8 + c.t / .25 * .25 : c.t < .4 ? 1.05 - (c.t - .25) / .15 * .05 : 1;
+  const w = Math.min(CW - 30 * DPR, u * 20), h = u * 4.4, x = CW / 2 - w / 2, y = Math.max(CH * (CW < CH ? .26 : .2), tut.step >= 0 && !tut.done && window.__tutBottom ? window.__tutBottom + 12 * DPR : 0);
+  ctx.save(); ctx.globalAlpha = Math.max(0, a); ctx.translate(CW / 2, y + h / 2); ctx.scale(pop, pop); ctx.translate(-CW / 2, -(y + h / 2));
+  ctx.fillStyle = 'rgba(51,34,42,.28)'; rr(x, y + 5 * DPR, w, h, u); ctx.fill(); ctx.fillStyle = '#fff8e7'; rr(x, y, w, h, u); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2.5 * DPR; ctx.stroke();
+  // 아이콘 (반짝 원 위에 통통)
+  const ic = h - u * 1.2, ix = x + u * .6, iy = y + u * .6; ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(ix + ic / 2, iy + ic / 2, ic / 2, 0, 6.29); ctx.fill();
+  for (let i = 0; i < 8; i++) { const an = i / 8 * 6.283 + time * 1.5, r0 = ic * .5, r1 = ic * .62; ctx.strokeStyle = 'rgba(255,210,63,.8)'; ctx.lineWidth = 2 * DPR; ctx.beginPath(); ctx.moveTo(ix + ic / 2 + Math.cos(an) * r0, iy + ic / 2 + Math.sin(an) * r0); ctx.lineTo(ix + ic / 2 + Math.cos(an) * r1, iy + ic / 2 + Math.sin(an) * r1); ctx.stroke(); }
+  try { const im = itemImg(c.id); if (im) { const k = ic * .78 / Math.max(im.width, im.height), bob = Math.sin(time * 5) * 2 * DPR; ctx.imageSmoothingEnabled = im.width > 40; ctx.drawImage(im, ix + (ic - im.width * k) / 2, iy + (ic - im.height * k) / 2 + bob, im.width * k, im.height * k); ctx.imageSmoothingEnabled = false; } } catch (e) { }
+  const tx = ix + ic + u * .7, tw = x + w - tx - u * .6;
+  ctx.fillStyle = '#ff6b8a'; rr(tx, y + u * .55, u * 3.6, u * 1.1, u * .55); ctx.fill(); text('새 아이템!', tx + u * 1.8, y + u * 1.12, u * .7, '#fff', 'center');
+  fitText(it.name, tx, y + u * 2.3, u * 1.1, '#33222a', tw); fitText(itShort(c.id), tx, y + u * 3.5, u * .72, '#8a6a5a', tw);
+  ctx.restore();
+}
+
+// ===== 7. 만들기 가능 표시 (부엌 · 공방) =====
+panelEntries = (orig => () => {
+  const m = menu; let E = orig(); if (!m) return E;
+  if (m.kind === 'cook' && m.tab === 0 && typeof COOK !== 'undefined' && E.length === COOK.length) {
+    E = E.map((e, i) => { const r = COOK[i], need = Object.entries(r.need), can = need.every(([k, n]) => (inv[k] || 0) >= n);
+      return Object.assign(e, { _can: can, desc: need.map(([k, n]) => { const h = inv[k] || 0; return `${ITEMS[k].name} ${Math.min(h, n)}/${n}${h >= n ? '✓' : '✗'}`; }).join(' · ') + (SNACK && SNACK[r.out] ? `  ▸ ${snackText(r.out).split(' · ')[0]}` : ''), tag: can ? '만들기' : '재료 부족', col: can ? '#ffd23f' : '#d9cbb5' }); });
+    E.sort((a, b) => (b._can ? 1 : 0) - (a._can ? 1 : 0)); const nCan = E.filter(e => e._can).length;
+    if (m.onlyCan) E = E.filter(e => e._can);
+    E.unshift({ name: m.onlyCan ? `만들 수 있는 것만 보는 중 (${nCan}개)` : `지금 만들 수 있는 요리 ${nCan}개`, desc: m.onlyCan ? '눌러서 전부 보기' : '눌러서 만들 수 있는 것만 보기', tag: m.onlyCan ? '전부' : '필터', col: '#efe2c8', act: () => { m.onlyCan = !m.onlyCan; m.sel = 0; m.page = 0; sfx('blip'); } });
+  }
+  if (m.kind === 'craft' && typeof MACH !== 'undefined') E.forEach((e, i) => { const mc = MACH[i]; if (!mc || !e.act) return; const s = WS[mc.k], have = (inv[mc.in] || 0) + (mc.alt ? inv[mc.alt] || 0 : 0), ready = wsReady(mc.k);
+    if (!ready && !(s && s.q >= 3) && have < mc.n) { e.tag = `재료 ${have}/${mc.n}`; e.col = '#d9cbb5'; } });
+  return E;
+})(panelEntries);
+
+// ===== 6. 가방: 아이콘 격자 + 아래 상세 =====
+const BAG_TYPES = ['eq', 'use', 'mat', 'seed', 'crit'];
+function bagIds(tab) { const t = BAG_TYPES[tab], out = []; for (const id in ITEMS) { const it = ITEMS[id]; if (it.type === t && inv[id] > 0) out.push(id); } return out; }
+function drawBagGrid() {
+  const m = menu, port = CW < CH, u = Math.max(12 * DPR, Math.min(CW, CH) / 25) * TXS();
+  const E = panelEntries(), ids = bagIds(m.tab), list = ids.length === E.length ? ids.map((id, i) => ({ id, e: E[i] })) : [];
+  const w = Math.min(CW - SA.l - SA.r - 20 * DPR, u * 24), x = SA.l + (CW - SA.l - SA.r - w) / 2, maxH = CH - SA.t - SA.b - 16 * DPR;
+  const cols = port ? 5 : 7, gp = u * .35, cs = (w - u * 1.2 - gp * (cols - 1)) / cols, detH = u * 6.2, closeH = u * 1.9;
+  const tabRows = (w - u * 1.2) / m.tabs.length < u * 3.8 ? 2 : 1, head = u * 2.2 + u * 1.9 * tabRows + u * 1.4;
+  const rowsFit = Math.max(1, Math.floor((maxH - head - detH - closeH - u * 1.6) / (cs + gp))), per = rowsFit * cols, pages = Math.max(1, Math.ceil(list.length / per)); if (m.page >= pages) m.page = 0;
+  const shown = list.slice(m.page * per, m.page * per + per), rowsN = Math.max(1, Math.ceil(shown.length / cols)), gridH = rowsN * (cs + gp) + (pages > 1 ? u * 1.6 : 0);
+  const h = head + gridH + detH + closeH + u * 1.4, y = Math.max(SA.t + 8 * DPR, (CH - h) / 2);
+  ctx.fillStyle = 'rgba(30,20,25,.5)'; ctx.fillRect(0, 0, CW, CH);
+  ctx.fillStyle = 'rgba(51,34,42,.28)'; rr(x - 3 * DPR, y + 4 * DPR, w + 6 * DPR, h + 6 * DPR, u * .8); ctx.fill(); ctx.fillStyle = '#33222a'; rr(x - 3 * DPR, y - 3 * DPR, w + 6 * DPR, h + 6 * DPR, u * .8); ctx.fill(); ctx.fillStyle = '#fff8e7'; rr(x, y, w, h, u * .7); ctx.fill();
+  text(m.title, x + u * .8, y + u * 1.15, u * 1.15, '#33222a'); text(`✦ ${hearts}`, x + w - u * .8, y + u * 1.15, u * 1.05, '#e8a92a', 'right');
+  let cy = y + u * 2.2; m.tabRects = []; m.vis = [];
+  { const perRow = Math.ceil(m.tabs.length / tabRows), tw = (w - u * 1.2) / perRow; m.tabs.forEach((t, i) => { const r = { x: x + u * .6 + (i % perRow) * tw + 2, y: cy + Math.floor(i / perRow) * u * 1.9, w: tw - 4, h: u * 1.5 }; m.tabRects.push(r); ctx.fillStyle = i === m.tab ? '#ffd23f' : '#efe2c8'; rr(r.x, r.y, r.w, r.h, u * .6); ctx.fill(); const nw = bagIds(i).some(id => ITNEW[id]); fitText(t, r.x + r.w / 2, r.y + r.h / 2 + 1, u * .8, '#33222a', r.w - u * .4, 'center'); if (nw) { ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.arc(r.x + r.w - u * .35, r.y + u * .3, u * .22, 0, 6.29); ctx.fill(); } }); cy += u * 1.9 * tabRows; }
+  fitText(`용기 ${hp}/${maxHp()} · 꼬리 힘 ${atkOf()} · 튼튼함 ${defOf()} · 우정 ♥${frTotal()}`, x + u * .8, cy + u * .55, u * .7, '#8a6a5a', w - u * 1.6); cy += u * 1.4;
+  if (m.bsel === undefined || !list[m.bsel]) m.bsel = list.length ? m.page * per : -1;
+  if (!list.length) { text(['장비가 없어요', '먹을 게 없어요', '재료가 없어요', '씨앗이 없어요', '채집한 게 없어요'][m.tab], x + w / 2, cy + cs / 2, u * .85, '#8a6a5a', 'center'); }
+  shown.forEach((c, j) => { const i = m.page * per + j, cx0 = x + u * .6 + (j % cols) * (cs + gp), cy0 = cy + Math.floor(j / cols) * (cs + gp), sel = i === m.bsel, it = ITEMS[c.id];
+    ctx.fillStyle = sel ? '#ffe9a8' : '#f6ecd8'; rr(cx0, cy0, cs, cs, u * .5); ctx.fill(); ctx.strokeStyle = sel ? '#e8a92a' : (it.dish ? '#7fcaf2' : it.type === 'eq' ? '#c9b6ff' : 'rgba(51,34,42,.15)'); ctx.lineWidth = (sel ? 3 : 2) * DPR; ctx.stroke();
+    try { const im = itemImg(c.id); if (im) { const k = cs * .72 / Math.max(im.width, im.height); ctx.imageSmoothingEnabled = im.width > 40; ctx.drawImage(im, cx0 + (cs - im.width * k) / 2, cy0 + (cs - im.height * k) / 2 - cs * .04, im.width * k, im.height * k); ctx.imageSmoothingEnabled = false; } } catch (e) { }
+    if (inv[c.id] > 1) { ctx.font = `${Math.round(u * .72)}px ${FONT}`; const s = `×${inv[c.id]}`, tw = ctx.measureText(s).width + u * .5; ctx.fillStyle = 'rgba(51,34,42,.8)'; rr(cx0 + cs - tw - u * .15, cy0 + cs - u * 1.05, tw, u * .9, u * .45); ctx.fill(); text(s, cx0 + cs - tw / 2 - u * .15, cy0 + cs - u * .58, u * .72, '#fff', 'center'); }
+    if (c.e.tag === '착용 중') { ctx.fillStyle = '#9be37a'; rr(cx0 + u * .15, cy0 + u * .15, u * 1.6, u * .8, u * .4); ctx.fill(); text('착용', cx0 + u * .95, cy0 + u * .56, u * .55, '#33222a', 'center'); }
+    if (ITNEW[c.id]) { ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.arc(cx0 + cs - u * .35, cy0 + u * .35, u * .28, 0, 6.29); ctx.fill(); }
+    m.vis.push({ x: cx0, y: cy0, w: cs, h: cs, act: () => { if (m.bsel === i) { c.e.act && c.e.act(); } else { m.bsel = i; delete ITNEW[c.id]; sfx('blip'); } } }); });
+  cy += rowsN * (cs + gp);
+  if (pages > 1) { const r = { x: x + u * .6, y: cy, w: w - u * 1.2, h: u * 1.3 }; ctx.fillStyle = '#efe2c8'; rr(r.x, r.y, r.w, r.h, u * .5); ctx.fill(); text(`◀ ${m.page + 1} / ${pages} ▶  다음 칸`, x + w / 2, r.y + r.h / 2 + 1, u * .75, '#8a6a5a', 'center'); m.vis.push(Object.assign(r, { act: () => { m.page = (m.page + 1) % pages; m.bsel = m.page * per; sfx('blip'); } })); cy += u * 1.6; }
+  // 상세
+  const dy = cy + u * .2, dx = x + u * .6, dw = w - u * 1.2; ctx.fillStyle = '#f6ecd8'; rr(dx, dy, dw, detH - u * .4, u * .6); ctx.fill();
+  const c = list[m.bsel];
+  if (c) { const it = ITEMS[c.id], ic = detH - u * 1.6; delete ITNEW[c.id];
+    ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(dx + u * .5 + ic / 2, dy + u * .6 + ic / 2, ic / 2, 0, 6.29); ctx.fill();
+    try { const im = itemImg(c.id); if (im) { const k = ic * .8 / Math.max(im.width, im.height); ctx.imageSmoothingEnabled = im.width > 40; ctx.drawImage(im, dx + u * .5 + (ic - im.width * k) / 2, dy + u * .6 + (ic - im.height * k) / 2 + Math.sin(time * 3) * 1.5 * DPR, im.width * k, im.height * k); ctx.imageSmoothingEnabled = false; } } catch (e) { }
+    const tx = dx + u * 1.1 + ic, tw = dx + dw - tx - u * .5;
+    fitText(`${it.name}${inv[c.id] > 1 ? ` ×${inv[c.id]}` : ''}`, tx, dy + u * 1.1, u * 1.0, '#33222a', tw);
+    ctx.font = `${Math.round(u * .7)}px ${FONT}`; const words = (it.desc || '').split(' · '), lines = []; let cur = ''; for (const wd of words) { const t = cur ? cur + ' · ' + wd : wd; if (ctx.measureText(t).width > tw && cur) { lines.push(cur); cur = wd; } else cur = t; } if (cur) lines.push(cur);
+    lines.slice(0, 3).forEach((l, i) => fitText(l, tx, dy + u * 2.1 + i * u * .95, u * .7, '#8a6a5a', tw));
+    if (c.e.act) { ctx.font = `${Math.round(u * .85)}px ${FONT}`; const bw = Math.max(u * 4, ctx.measureText(c.e.tag).width + u * 1.6), r = { x: dx + dw - bw - u * .4, y: dy + detH - u * 2.1, w: bw, h: u * 1.4 }; ctx.fillStyle = 'rgba(51,34,42,.25)'; rr(r.x, r.y + 3 * DPR, r.w, r.h, u * .7); ctx.fill(); ctx.fillStyle = c.e.col || '#ffd23f'; rr(r.x, r.y, r.w, r.h, u * .7); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.stroke(); text(c.e.tag, r.x + r.w / 2, r.y + r.h / 2 + 1, u * .85, '#33222a', 'center'); m.vis.push(Object.assign(r, { act: () => c.e.act() })); }
+  } else text('아이템을 눌러 보세요', dx + dw / 2, dy + (detH - u * .4) / 2, u * .8, '#8a6a5a', 'center');
+  // 닫기
+  const cr = { x: x + u * .6, y: y + h - closeH - u * .5, w: w - u * 1.2, h: closeH }; ctx.fillStyle = '#efe2c8'; rr(cr.x, cr.y, cr.w, cr.h, u * .5); ctx.fill(); text('닫기', cr.x + cr.w / 2, cr.y + cr.h / 2 + 1, u * .9, '#8a6a5a', 'center'); m.vis.push(Object.assign(cr, { act: () => { menu = null; sfx('blip'); } }));
+  if (m.sel >= m.vis.length) m.sel = 0;
+  if (m.msgT > 0) { ctx.globalAlpha = Math.min(1, m.msgT * 2); ctx.font = `${Math.round(u * .85)}px ${FONT}`; const mw = ctx.measureText(m.msg).width + u * 1.6, my = Math.min(CH - SA.b - u * 1.6, y + h + u * .3); ctx.fillStyle = m.bad ? '#ff6b8a' : '#9be37a'; rr(CW / 2 - mw / 2, my, mw, u * 1.4, u * .7); ctx.fill(); text(m.msg, CW / 2, my + u * .7, u * .85, m.bad ? '#fff' : '#33222a', 'center'); ctx.globalAlpha = 1; }
+}
+drawPanel = (orig => () => { if (menu && menu.kind === 'bag') return drawBagGrid(); return orig(); })(drawPanel);
+
+drawOverlay4 = (o => () => { o(); drawGetCard(); })(drawOverlay4);
+updateTown = (orig => dt => { orig(dt); getCardTick(dt); })(updateTown);
+townSave = (orig => () => Object.assign(orig(), { its: ITSEEN, itn: ITNEW }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.its) { Object.assign(ITSEEN, d.its); Object.assign(ITNEW, d.itn || {}); } })(townLoad);
+// 저장이 없던 기존 플레이어: 지금 가진 건 이미 본 걸로 (카드 폭탄 방지)
+startGame = (orig => () => { orig(); if (!ITSEEN_INIT) { if (!Object.keys(ITSEEN).length) for (const id in inv) if (inv[id] > 0) ITSEEN[id] = 1; ITSEEN_INIT = true; } })(startGame);
+
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
 let USE3D = false, R3 = null;
@@ -4377,7 +4477,7 @@ function init3D() {
           if (useMk > .5) { float o = 0.; for (int k = 0; k < 8; k++) { float a = float(k) * .785; o = max(o, texture2D(mk, vUv + vec2(cos(a), sin(a)) * olw / res).r); }
             float e = clamp(o - m, 0., 1.); c.rgb = mix(c.rgb, vec3(.31, .21, .15), e * .82); }
           
-          vec2 q = vUv - .5; c.rgb *= 1. - dot(q, q) * .35; gl_FragColor = vec4(c.rgb, 1.); }`,
+          vec2 q = vUv - .5; c.rgb *= 1. - dot(q, q) * .22; gl_FragColor = vec4(c.rgb, 1.); }`,
       depthTest: false, depthWrite: false });
     const postScene = new THREE.Scene(), postCam = new THREE.Camera(); postScene.add(new THREE.Mesh(new THREE.PlaneBufferGeometry(2, 2), postMat));
     const ocam = new THREE.OrthographicCamera(-5, 5, 4, -4, .1, 400);
@@ -4975,11 +5075,11 @@ function applyEnv3D(dt) {
   if (dun) { R3.hemi.intensity = .3; R3.sun.intensity = .16; scene.background.set('#120a16'); scene.fog.color.set('#120a16'); R3.renderer.toneMappingExposure = 1.12; }
   else if (curRoom.indoor && state === 'play') { const nn = typeof nightAmt === 'function' ? nightAmt() : 0; R3.hemi.intensity = 1.02 - nn * .3; R3.hemi.color.set(mixHex('#fff3df', '#c9b6ff', nn * .6)); R3.hemi.groundColor.set('#b8865e'); R3.sun.intensity = .72 - nn * .4; R3.sun.color.set(mixHex('#ffdcae', '#9fb0ff', nn)); scene.background.set(mixHex('#6b4a3a', '#2b1d24', nn)); scene.fog.color.set(mixHex('#6b4a3a', '#2b1d24', nn)); R3.renderer.toneMappingExposure = 1.04 - nn * .08; }
   else {
-    const rn = raining() ? 1 : 0; let sky = mixHex(mixHex('#bfe2f2', '#1b2340', n), '#f2a37a', tw * .8), fog = mixHex(mixHex('#f3e2c8', '#232a4a', n), '#efae86', tw * .75); if (rn) { sky = mixHex(sky, '#7d8a99', .55); fog = mixHex(fog, '#8e98a4', .55); }
+    const rn = raining() ? 1 : 0; let sky = mixHex(mixHex('#bfe2f2', '#1b2340', n), '#f2a37a', tw * .8), fog = mixHex(mixHex('#f3e2c8', '#232a4a', n), '#efae86', tw * .75); if (rn) { sky = mixHex(sky, '#a9bccb', .4); fog = mixHex(fog, '#c3cdd6', .35); }
     scene.background.setHex(sky); scene.fog.color.setHex(fog);
-    R3.hemi.color.setHex(mixHex('#fff6e8', '#8b97d6', n)); R3.hemi.groundColor.setHex(mixHex('#8fae6a', '#2c3550', n)); R3.hemi.intensity = .58 - n * .28 + tw * .05;
-    R3.sun.color.setHex(mixHex(mixHex('#ffe2b8', '#a9bcff', n), '#ff9455', tw)); R3.sun.intensity = (.95 - n * .62 - tw * .12) * (raining() ? .5 : 1);
-    R3.renderer.toneMappingExposure = (.9 - n * .06) * (envSeason() === 'winter' ? .9 : 1);
+    R3.hemi.color.setHex(mixHex('#fff6e8', '#8b97d6', n)); R3.hemi.groundColor.setHex(mixHex('#8fae6a', '#2c3550', n)); R3.hemi.intensity = .68 - n * .32 + tw * .05 + rn * .06;
+    R3.sun.color.setHex(mixHex(mixHex('#ffe2b8', '#a9bcff', n), '#ff9455', tw)); R3.sun.intensity = (1.02 - n * .66 - tw * .12) * (rn ? .74 : 1);
+    R3.renderer.toneMappingExposure = (.99 - n * .1 + rn * .03) * (envSeason() === 'winter' ? .94 : 1);
   }
   const az = ((h - 6) / 12) * Math.PI, day = h >= 6 && h <= 18;
   const sx = day ? -Math.cos(az) * 12 : -6, sy = day ? 6 + Math.sin(az) * 14 : 16;
