@@ -1,5 +1,5 @@
-// 삐약마을 offline cache (8e0aefa0)
-const CACHE = 'piyak-8e0aefa0';
+// 삐약마을 offline cache (12079aa3)
+const CACHE = 'piyak-12079aa3';
 const CORE = ['./', './index.html', './three.min.js', './GLTFLoader.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

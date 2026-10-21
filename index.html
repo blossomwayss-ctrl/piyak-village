@@ -35,20 +35,49 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
 <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button id="pwano" style="font:inherit;font-size:14px;border:0;background:#efe2c8;color:#5a3a26;border-radius:12px;padding:8px 14px">다음에</button><button id="pwayes" style="font:inherit;font-size:14px;border:2px solid #3b2a2f;background:#ffd23f;color:#3b2a2f;border-radius:12px;padding:8px 16px">설치하기</button></div></div>
 <script>
 (function(){
-  var KEY='annorang_pwa_v1', el=document.getElementById('pwa'), msg=document.getElementById('pwamsg'), yes=document.getElementById('pwayes'), no=document.getElementById('pwano'), bip=null;
-  function store(v){ try{ localStorage.setItem(KEY,v); }catch(e){} } function seen(){ try{ return localStorage.getItem(KEY); }catch(e){ return '1'; } }
+  var KEY='annorang_pwa_v1', el=document.getElementById('pwa'), msg=document.getElementById('pwamsg'), yes=document.getElementById('pwayes'), no=document.getElementById('pwano'), bip=null, mode=null, forced=false;
+  function store(v){ try{ localStorage.setItem(KEY,v); }catch(e){} } function seen(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
   var top=false; try{ top = window.top===window; }catch(e){}
-  var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || (window.matchMedia && matchMedia('(display-mode: fullscreen)').matches) || navigator.standalone;
-  var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
-  function show(mode){ if(!top||standalone||seen()||!window.__PWA) return; if(mode==='ios'){ msg.innerHTML='Safari 아래쪽 <b>공유 버튼 ⬆️</b> → <b>\'홈 화면에 추가\'</b>를 눌러 주세요'; yes.textContent='알겠어요'; } setTimeout(function(){ if(typeof state==='undefined'||state==='title') el.style.display='block'; },1800); }
-  window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); bip=e; show('android'); });
+  function isStandalone(){ return (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || navigator.standalone===true; }
+  var ua=navigator.userAgent||'';
+  var ios = /iphone|ipad|ipod/i.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  var android = /android/i.test(ua);
+  var inapp = /KAKAOTALK|Instagram|NAVER\(inapp|FBAN|FBAV|FB_IAB|Line\/|everytimeApp|DaumApps|SamsungBrowser\/[\d.]+.*CrossApp/i.test(ua);
+  var kakao = /KAKAOTALK/i.test(ua);
+  var iosSafari = ios && !/CriOS|FxiOS|EdgiOS|Whale|NAVER|KAKAOTALK|Instagram|FBAN/i.test(ua);
+  var samsung = /SamsungBrowser/i.test(ua);
+  function setMode(m){
+    mode=m;
+    if(m==='inapp'){ msg.innerHTML = kakao ? '카톡 안에서는 설치가 안 돼요.<br>오른쪽 아래 <b>⋯</b> → <b>\'다른 브라우저로 열기\'</b>' : '앱 안 브라우저에서는 설치가 안 돼요.<br>메뉴 <b>⋯</b> → <b>\'브라우저로 열기\'</b>'; yes.textContent = (kakao&&android)||(android&&!kakao) ? '브라우저로 열기' : '알겠어요'; if(ios) yes.textContent='알겠어요'; }
+    else if(m==='ios'){ msg.innerHTML = iosSafari ? 'Safari 아래쪽 <b>공유 버튼 <span style="font-size:15px">⬆️</span></b> → <b>\'홈 화면에 추가\'</b>' : '<b>Safari</b>로 열고 공유 버튼 ⬆️ → <b>\'홈 화면에 추가\'</b><br>(크롬은 주소창 옆 공유 ⬆️ → 홈 화면에 추가)'; yes.textContent='알겠어요'; }
+    else if(m==='android'){ msg.innerHTML='앱처럼 전체 화면으로, 인터넷 없이도 플레이!'; yes.textContent='설치하기'; }
+    else if(m==='desktop'){ msg.innerHTML='PC 크롬·엣지: 주소창 오른쪽 <b>설치 아이콘 ⊕</b> 클릭<br>폰에서는 이 주소를 열면 홈 화면에 추가할 수 있어요'; yes.textContent='알겠어요'; }
+    else if(m==='manual'){ msg.innerHTML = samsung ? '아래 메뉴 <b>≡</b> → <b>\'현재 페이지 추가\'</b> → <b>\'홈 화면\'</b>' : '오른쪽 위 메뉴 <b>⋮</b> → <b>\'홈 화면에 추가\'</b> 또는 <b>\'앱 설치\'</b>'; yes.textContent='알겠어요'; }
+  }
+  function onTitle(){ return typeof state==='undefined' || state==='title'; }
+  function bootGone(){ var b=document.getElementById('boot'); return !b || b.style.display==='none' || getComputedStyle(b).opacity<.1 || !b.isConnected; }
+  function canShow(){ return top && !isStandalone() && window.__PWA && (forced || !seen()); }
+  // pop the sheet as soon as we know which guide to show (loading screen, title or in-game: whichever comes first)
+  var tries=0, timer=setInterval(function(){
+    tries++; if(tries>600){ clearInterval(timer); return; }
+    if(!mode || !canShow()) return;
+    el.style.display='block'; clearInterval(timer);
+  },400);
+  window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); bip=e; if(!inapp) setMode('android'); });
   window.addEventListener('appinstalled',function(){ store('installed'); el.style.display='none'; });
-  if(ios) show('ios');
-  no.onclick=function(){ store('later'); el.style.display='none'; };
-  yes.onclick=function(){ el.style.display='none'; if(bip){ bip.prompt(); bip.userChoice.then(function(r){ store(r.outcome); }); bip=null; } else store('ios'); };
+  if(inapp && (ios||android)) setMode('inapp');
+  else if(ios) setMode('ios');
+  else if(android) setTimeout(function(){ if(!mode) setMode(bip?'android':'manual'); },2500);
+  else setTimeout(function(){ if(!mode) setMode(bip?'android':'desktop'); },2500);
+  window.__pwaGuide=function(){ forced=true; if(isStandalone()){ return '이미 앱으로 실행 중이에요'; } if(!mode) setMode(bip?'android':(ios?'ios':'manual')); el.style.display='block'; return ''; };
+  no.onclick=function(){ store('later'); el.style.display='none'; forced=false; };
+  yes.onclick=function(){
+    el.style.display='none'; forced=false;
+    if(mode==='android' && bip){ bip.prompt(); bip.userChoice.then(function(r){ store(r.outcome); }); bip=null; return; }
+    if(mode==='inapp' && android){ var u=location.href; if(kakao) location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(u); else location.href='intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;end'; return; }
+    store(mode||'ok');
+  };
   if(window.__PWA && 'serviceWorker' in navigator && top && (location.protocol==='https:'||location.hostname==='localhost')) window.addEventListener('load',function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
-  // hide the sheet once the game leaves the title screen
-  setInterval(function(){ if(el.style.display==='block' && typeof state!=='undefined' && state!=='title') el.style.display='none'; },500);
 })();
 </script>
 <div id="probe"></div><div id="svh"></div><canvas id="c" tabindex="0"></canvas><div id="sa"></div>
@@ -3335,6 +3364,9 @@ lifeEntries = (orig => m => (m.kind === 'friends' && m.tabs[m.tab] === '병아�
 updateTown = (orig => dt => { orig(dt); unlockTick(); holiTick(); routineTick(dt); })(updateTown);
 townSave = (orig => () => Object.assign(orig(), { t3: { us: UNL_SEEN, hr: HOLI_REC, cx: CHICKX } }))(townSave);
 townLoad = (orig => d => { orig(d); const t = d && d.t3; if (!t) return; Object.assign(UNL_SEEN, t.us || {}); Object.assign(HOLI_REC, t.hr || {}); Object.assign(CHICKX, t.cx || {}); })(townLoad);
+
+// ---------- 홈 화면 설치 안내 다시 보기 ----------
+lifeEntries = (orig => m => { const E = orig(m); if (m.kind === 'settings' && window.__pwaGuide) E.splice(E.length - 1, 0, { name: '홈 화면에 앱 추가', desc: '폰 홈 화면에 삐약마을 아이콘 만들기', tag: '안내', col: '#ffd23f', act: () => { menu = null; const r = window.__pwaGuide(); if (r && typeof toast === 'function') toast(r); } }); return E; })(lifeEntries);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
