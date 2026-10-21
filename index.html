@@ -35,7 +35,7 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
 <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button id="pwano" style="font:inherit;font-size:14px;border:0;background:#efe2c8;color:#5a3a26;border-radius:12px;padding:8px 14px">다음에</button><button id="pwayes" style="font:inherit;font-size:14px;border:2px solid #3b2a2f;background:#ffd23f;color:#3b2a2f;border-radius:12px;padding:8px 16px">설치하기</button></div></div>
 <script>
 (function(){
-  var KEY='annorang_pwa_v1', el=document.getElementById('pwa'), msg=document.getElementById('pwamsg'), yes=document.getElementById('pwayes'), no=document.getElementById('pwano'), bip=null, mode=null, forced=false;
+  var KEY='annorang_pwa_v2', el=document.getElementById('pwa'), msg=document.getElementById('pwamsg'), yes=document.getElementById('pwayes'), no=document.getElementById('pwano'), bip=null, mode=null, forced=false;
   function store(v){ try{ localStorage.setItem(KEY,v); }catch(e){} } function seen(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
   var top=false; try{ top = window.top===window; }catch(e){}
   function isStandalone(){ return (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || navigator.standalone===true; }
@@ -52,7 +52,9 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
     else if(m==='ios'){ msg.innerHTML = iosSafari ? 'Safari 아래쪽 <b>공유 버튼 <span style="font-size:15px">⬆️</span></b> → <b>\'홈 화면에 추가\'</b>' : '<b>Safari</b>로 열고 공유 버튼 ⬆️ → <b>\'홈 화면에 추가\'</b><br>(크롬은 주소창 옆 공유 ⬆️ → 홈 화면에 추가)'; yes.textContent='알겠어요'; }
     else if(m==='android'){ msg.innerHTML='앱처럼 전체 화면으로, 인터넷 없이도 플레이!'; yes.textContent='설치하기'; }
     else if(m==='desktop'){ msg.innerHTML='PC 크롬·엣지: 주소창 오른쪽 <b>설치 아이콘 ⊕</b> 클릭<br>폰에서는 이 주소를 열면 홈 화면에 추가할 수 있어요'; yes.textContent='알겠어요'; }
-    else if(m==='manual'){ msg.innerHTML = samsung ? '아래 메뉴 <b>≡</b> → <b>\'현재 페이지 추가\'</b> → <b>\'홈 화면\'</b>' : '오른쪽 위 메뉴 <b>⋮</b> → <b>\'홈 화면에 추가\'</b> 또는 <b>\'앱 설치\'</b>'; yes.textContent='알겠어요'; }
+    else if(m==='check'){ msg.innerHTML='설치 중이에요! 30초쯤 뒤 <b>홈 화면</b>이나 <b>앱스 화면(위로 쓸기)</b>에서 <b>\'삐약마을\'</b>을 찾아보세요.<br>안 생기면 <b>크롬</b>으로 설치하는 게 가장 확실해요'; yes.textContent='크롬으로 설치'; no.textContent='닫기'; }
+    else if(m==='done'){ msg.innerHTML='설치 완료! 홈 화면이나 앱스 화면의 <b>\'삐약마을\'</b> 아이콘으로 켜 주세요'; yes.textContent='좋아요'; no.textContent='닫기'; }
+    else if(m==='manual'){ msg.innerHTML = samsung ? '아래 메뉴 <b>≡</b> → <b>\'현재 페이지 추가\'</b> → <b>\'홈 화면\'</b><br>또는 <b>크롬</b>에서 열면 버튼 한 번으로 설치돼요' : '오른쪽 위 메뉴 <b>⋮</b> → <b>\'홈 화면에 추가\'</b> 또는 <b>\'앱 설치\'</b>'; yes.textContent= samsung ? '크롬으로 설치' : '알겠어요'; }
   }
   function onTitle(){ return typeof state==='undefined' || state==='title'; }
   function bootGone(){ var b=document.getElementById('boot'); return !b || b.style.display==='none' || getComputedStyle(b).opacity<.1 || !b.isConnected; }
@@ -64,17 +66,20 @@ canvas{outline:none;position:fixed;left:0;top:0;width:100vw;height:100vh;display
     el.style.display='block'; clearInterval(timer);
   },400);
   window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); bip=e; if(!inapp) setMode('android'); });
-  window.addEventListener('appinstalled',function(){ store('installed'); el.style.display='none'; });
+  var instT=null; function show(m){ setMode(m); forced=true; el.style.display='block'; }
+  window.addEventListener('appinstalled',function(){ store('installed'); if(instT){ clearTimeout(instT); instT=null; } show('done'); });
   if(inapp && (ios||android)) setMode('inapp');
   else if(ios) setMode('ios');
   else if(android) setTimeout(function(){ if(!mode) setMode(bip?'android':'manual'); },2500);
   else setTimeout(function(){ if(!mode) setMode(bip?'android':'desktop'); },2500);
   window.__pwaGuide=function(){ forced=true; if(isStandalone()){ return '이미 앱으로 실행 중이에요'; } if(!mode) setMode(bip?'android':(ios?'ios':'manual')); el.style.display='block'; return ''; };
+  function toChrome(){ var u=location.href; location.href='intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(u)+';end'; }
   no.onclick=function(){ store('later'); el.style.display='none'; forced=false; };
   yes.onclick=function(){
     el.style.display='none'; forced=false;
-    if(mode==='android' && bip){ bip.prompt(); bip.userChoice.then(function(r){ store(r.outcome); }); bip=null; return; }
-    if(mode==='inapp' && android){ var u=location.href; if(kakao) location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(u); else location.href='intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;end'; return; }
+    if(mode==='android' && bip){ var b=bip; bip=null; b.prompt(); b.userChoice.then(function(r){ store(r.outcome); if(r.outcome==='accepted') instT=setTimeout(function(){ instT=null; show('check'); },9000); }); return; }
+    if(android && (mode==='check' || (mode==='manual' && samsung))){ toChrome(); return; }
+    if(mode==='inapp' && android){ if(kakao) location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href); else toChrome(); return; }
     store(mode||'ok');
   };
   if(window.__PWA && 'serviceWorker' in navigator && top && (location.protocol==='https:'||location.hostname==='localhost')) window.addEventListener('load',function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
