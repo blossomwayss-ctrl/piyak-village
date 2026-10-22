@@ -531,7 +531,7 @@ const HATS = {
   straw: { name: '밀짚모자', skill: '꼬리', price: 5, desc: '외형 · 여름 농부 느낌 물씬' },
   wool: { name: '털모자', skill: '꼬리', price: 8, desc: '외형 · 겨울에도 따끈따끈' },
   pumpkin: { name: '호박모자', skill: '꼬리', price: 10, desc: '외형 · 할로윈 한정 호박 모자' },
-  baseball: { name: '야구모자', skill: '꼬리', price: 0, desc: '외형 · 승부욕을 이긴 증표' },
+  baseball: { name: '야구모자', skill: '꼬리', price: 12, desc: '외형 · 승부욕이 아끼는 모자' },
 };
 const HAT_ORDER = ['egg', 'straw', 'wool', 'pumpkin', 'baseball'];
 let shakeT = 0, shakeA = 0, stopT = 0; const pickups = [];
@@ -2213,7 +2213,6 @@ const FARM = [
   { k: 'jangdok', x: 5, y: 7, w: 2, h: 2 },
   { k: 'wondumak', x: 13, y: 18, w: 2, h: 1 },
   { k: 'wall', x: 4, y: 12, w: 3, h: 1 },
-  { k: 'claw', x: 15, y: 10, w: 1, h: 1 },
   { k: 'fountain', x: 20, y: 13, w: 2, h: 2 },
 ];
 for (const f of FARM) for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) {
@@ -2535,7 +2534,7 @@ function dexEntries(m) {
   return E;
 }
 // phone: swap the sound app (now in settings) for the critter guide
-{ const i = APPS.findIndex(a => a.id === 'sound'); if (i >= 0) APPS[i] = { id: 'dex', name: '채집 도감', ico: '🦋', col: '#9be37a', go: () => { phone = null; menu = { kind: 'dex', title: '채집 도감', tabs: ['곤충', '물고기', '가축 품종', '인형'], tab: 0, sel: 0, page: 0 }; } }; }
+{ const i = APPS.findIndex(a => a.id === 'sound'); if (i >= 0) APPS[i] = { id: 'dex', name: '채집 도감', ico: '🦋', col: '#9be37a', go: () => { phone = null; menu = { kind: 'dex', title: '채집 도감', tabs: ['곤충', '물고기', '가축 품종'], tab: 0, sel: 0, page: 0 }; } }; }
 STAMPS.push({ k: 'bug', name: '곤충 박사', d: n => `곤충 ${n}마리 잡기`, t: [3, 15, 50] }, { k: 'fish', name: '낚시왕', d: n => `물고기 ${n}마리 낚기`, t: [3, 15, 50] }, { k: 'donate', name: '박물관 후원자', d: n => `박물관에 ${n}종 기증하기`, t: [3, 10, 25] });
 DAILY_POOL.push(['bug', 2, '곤충 2마리 잡기'], ['fish', 2, '물고기 2마리 낚기']);
 
@@ -2889,9 +2888,10 @@ function cardDraw() {
   text('같은 그림 두 장을 맞히면 1점! 맞히면 한 번 더', B.x + u * 1.2, B.y + u * 3.2, u * .75, '#8a6a5a');
 }
 // world spots
-const MINI_SPOTS = [{ k: 'claw', x: 15.5 * T, y: 10.9 * T, label: '인형뽑기' }, { k: 'baseball', x: 22.5 * T, y: 29.5 * T, label: '동네 야구' }, { k: 'cards', x: 14 * T, y: 7.2 * T, label: '카드놀이' }];
+// 미니게임(인형뽑기·동네 야구·카드놀이)은 삭제했어요 — 입구를 비워 둬요
+const MINI_SPOTS = [];
 function miniNear() { return MINI_SPOTS.find(s => Math.hypot(s.x - P.x, s.y - P.y) < 22); }
-STAMPS.push({ k: 'claw', name: '뽑기 장인', d: n => `인형 ${n}개 뽑기`, t: [1, 5, 20] }, { k: 'bb', name: '동네 홈런왕', d: n => `야구 ${n}번 이기기`, t: [1, 5, 15] }, { k: 'card', name: '평상의 고수', d: n => `카드놀이 ${n}번 이기기`, t: [1, 5, 15] });
+if (false) STAMPS.push({ k: 'claw', name: '뽑기 장인', d: n => `인형 ${n}개 뽑기`, t: [1, 5, 20] }, { k: 'bb', name: '동네 홈런왕', d: n => `야구 ${n}번 이기기`, t: [1, 5, 15] }, { k: 'card', name: '평상의 고수', d: n => `카드놀이 ${n}번 이기기`, t: [1, 5, 15] });
 
 // ================= 삐약마을 생활 2: 공방(가공) · 5일장 · 레시피 · 계절 축제 · 감정 말풍선 =================
 // ---------- items ----------
