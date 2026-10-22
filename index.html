@@ -4392,7 +4392,7 @@ function drawBagGrid() {
   const E = panelEntries(), ids = bagIds(m.tab), list = ids.length === E.length ? ids.map((id, i) => ({ id, e: E[i] })) : [];
   const w = Math.min(CW - SA.l - SA.r - 20 * DPR, u * 24), x = SA.l + (CW - SA.l - SA.r - w) / 2, maxH = CH - SA.t - SA.b - 16 * DPR;
   const cols = port ? 5 : 7, gp = u * .35, cs = (w - u * 1.2 - gp * (cols - 1)) / cols, detH = u * 7.6, closeH = u * 1.9;
-  const tabRows = (w - u * 1.2) / m.tabs.length < u * 3.8 ? 2 : 1, head = u * 2.2 + u * 1.9 * tabRows + u * 1.4;
+  const tabRows = (w - u * 1.2) / m.tabs.length < u * 3.8 ? 2 : 1, stripH = m.tab === 0 && typeof drawEqStrip === 'function' ? Math.min(u * 3.2, (w - u * 1.2) / 5 - u * .3) + u * 1.2 : 0, head = u * 2.2 + u * 1.9 * tabRows + u * 1.4 + stripH;
   const rowsFit = Math.max(1, Math.floor((maxH - head - detH - closeH - u * 1.6) / (cs + gp))), per = rowsFit * cols, pages = Math.max(1, Math.ceil(list.length / per)); if (m.page >= pages) m.page = 0;
   const shown = list.slice(m.page * per, m.page * per + per), rowsN = Math.max(1, Math.ceil(shown.length / cols)), gridH = rowsN * (cs + gp) + (pages > 1 ? u * 1.6 : 0);
   const h = head + gridH + detH + closeH + u * 1.4, y = Math.max(SA.t + 8 * DPR, (CH - h) / 2);
@@ -4402,6 +4402,7 @@ function drawBagGrid() {
   let cy = y + u * 2.2; m.tabRects = []; m.vis = [];
   { const perRow = Math.ceil(m.tabs.length / tabRows), tw = (w - u * 1.2) / perRow; m.tabs.forEach((t, i) => { const r = { x: x + u * .6 + (i % perRow) * tw + 2, y: cy + Math.floor(i / perRow) * u * 1.9, w: tw - 4, h: u * 1.5 }; m.tabRects.push(r); ctx.fillStyle = i === m.tab ? '#ffd23f' : '#efe2c8'; rr(r.x, r.y, r.w, r.h, u * .6); ctx.fill(); const nw = bagIds(i).some(id => ITNEW[id]); fitText(t, r.x + r.w / 2, r.y + r.h / 2 + 1, u * .8, '#33222a', r.w - u * .4, 'center'); if (nw) { ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.arc(r.x + r.w - u * .35, r.y + u * .3, u * .22, 0, 6.29); ctx.fill(); } }); cy += u * 1.9 * tabRows; }
   fitText(`용기 ${hp}/${maxHp()} · 꼬리 힘 ${atkOf()} · 튼튼함 ${defOf()} · 우정 ♥${frTotal()}`, x + u * .8, cy + u * .55, u * .7, '#8a6a5a', w - u * 1.6); cy += u * 1.4;
+  if (stripH) { const st = drawEqStrip(x, cy, w, u); for (const r of st.rects) m.vis.push({ x: r.x, y: r.y, w: r.w, h: r.h, act: () => { const id = eqOn(r.s); if (!id) return pmsg(`${SLOT_NAME[r.s]} 칸이 비어 있어요`); equipItem(id); pmsg(`${ITEMS[id].name} 벗음`); } }); cy += stripH; }
   if (m.bsel === undefined || !list[m.bsel]) m.bsel = list.length ? m.page * per : -1;
   if (!list.length) { text(['장비가 없어요', '먹을 게 없어요', '재료가 없어요', '씨앗이 없어요', '채집한 게 없어요'][m.tab], x + w / 2, cy + cs / 2, u * .85, '#8a6a5a', 'center'); }
   shown.forEach((c, j) => { const i = m.page * per + j, cx0 = x + u * .6 + (j % cols) * (cs + gp), cy0 = cy + Math.floor(j / cols) * (cs + gp), sel = i === m.bsel, it = ITEMS[c.id];
@@ -5307,6 +5308,133 @@ drawOverlay4 = (o => () => { o(); drawWorldMap(); })(drawOverlay4);
 APPS.forEach(a => { if (a.id === 'map') a.name = '지도'; });
 addEventListener('pointerdown', e => { if (!WMAP) return; WMAP = false; e.stopImmediatePropagation(); const x = (e.clientX - cvOff.l) * DPR, y = (e.clientY - cvOff.t) * DPR, r = window.__wmV1; if (r && !inWV() && Math.hypot(x - r.x, y - r.y) < r.r * 1.6) mapOpen = true; }, true);
 addEventListener('keydown', e => { if (WMAP) { WMAP = false; } }, true);
+
+// ---------- equip.js: 장비 5칸 (모자·장갑·옷·망토·꼬리 무기) · 마을별 장비 세트 · 3D 외형 ----------
+const SLOT_NAME = { hat: '모자', glove: '장갑', body: '옷', cape: '망토', tail: '꼬리 무기' };
+const SLOTS = ['hat', 'glove', 'body', 'cape', 'tail'];
+const VIL = { farm: { name: '삐약 농장 세트', col: '#ffd23f', b3: { hp: 3 }, b5: { atk: 1, def: 1 } }, cave: { name: '버섯 동굴 세트', col: '#c9b6ff', b3: { atk: 1, def: 1 }, b5: { atk: 2 } }, water: { name: '꽥꽥 물가 세트', col: '#7fcaf2', b3: { hp: 2, spd: 1 }, b5: { atk: 2, def: 1 } } };
+function bonusTxt(b) { return Object.entries(b).map(([k, v]) => k === 'hp' ? `용기 +${v}` : k === 'atk' ? `꼬리 힘 +${v}` : k === 'def' ? `튼튼함 +${v}` : '발걸음 빠르게').join(' · '); }
+
+// 1) 모자도 장비로: 모자마다 작은 능력치 + 마을
+Object.assign(HATS, {
+  lotus: { name: '연잎 모자', skill: '꼬리', price: 0, desc: '외형 · 물가마을 · 용기 +2' },
+  beak: { name: '노란 부리 마스크', skill: '꼬리', price: 0, desc: '외형 · 물가마을 · 오리 인정 UP' },
+  mush: { name: '버섯돌이 모자', skill: '꼬리', price: 0, desc: '외형 · 버섯 동굴 · 튼튼함 +1' },
+});
+const HAT_STAT = { egg: {}, straw: { hp: 1, vil: 'farm' }, wool: { hp: 2, vil: 'farm' }, pumpkin: { atk: 1 }, baseball: { spd: 1 }, crown: { hp: 3, vil: 'farm' }, chef: { cook: 1, vil: 'farm' }, witch: { atk: 1 }, santa: { hp: 2 }, lotus: { hp: 2, vil: 'water' }, beak: { def: 1, vil: 'water' }, mush: { def: 1, vil: 'cave' } };
+for (const h in HATS) { const s = HAT_STAT[h] || {}; ITEMS['hat_' + h] = { name: HATS[h].name, type: 'eq', slot: 'hat', hatK: h, atk: s.atk, def: s.def, hp: s.hp, spd: s.spd, vil: s.vil, sell: 0 }; }
+// 노란 부리 마스크는 이제 모자칸
+if (ITEMS.beak) { ITEMS.beak.slot = 'hat'; ITEMS.beak.hidden = 1; }
+
+// 2) 장비 목록 정리 (마을 · 칸 · 능력치)
+Object.assign(ITEMS, {
+  farmglove: { name: '농부 목장갑', type: 'eq', slot: 'glove', atk: 1, price: 10, sell: 4, vil: 'farm' },
+  waspglove: { name: '말벌 침 장갑', type: 'eq', slot: 'glove', atk: 2, sell: 10, vil: 'cave' },
+  webglove: { name: '물갈퀴 장갑', type: 'eq', slot: 'glove', spd: 1, def: 1, price: 16, sell: 6, vil: 'water' },
+  lifevest: { name: '구명조끼', type: 'eq', slot: 'body', def: 2, hp: 2, price: 24, sell: 9, vil: 'water' },
+  raincape: { name: '노랑 비옷 망토', type: 'eq', slot: 'cape', def: 1, hp: 1, price: 14, sell: 5, vil: 'water' },
+  mosscape: { name: '이끼 망토', type: 'eq', slot: 'cape', def: 2, sell: 12, vil: 'cave' },
+});
+ITEMS.cape.slot = 'cape'; ITEMS.cape.vil = 'farm';            // 풀잎 망토 → 망토칸
+ITEMS.vest.vil = 'farm'; ITEMS.shell.vil = 'cave';
+for (const id of ['ribbon', 'bell', 'cone']) if (ITEMS[id]) ITEMS[id].vil = 'farm';
+for (const id of ['shroomcrown', 'starring']) if (ITEMS[id]) ITEMS[id].vil = 'cave';
+for (const id of ['shellbell', 'bubbletail', 'pearl']) if (ITEMS[id]) ITEMS[id].vil = 'water';
+function statLine(it) { const a = []; if (it.atk) a.push(`꼬리 힘 +${it.atk}`); if (it.def) a.push(`튼튼함 +${it.def}`); if (it.hp) a.push(`용기 +${it.hp}`); if (it.spd) a.push('발걸음 빠르게'); if (it.cook) a.push('요리 대성공 ↑'); return a.join(' · '); }
+function eqDesc(id) { const it = ITEMS[id]; if (!it || it.type !== 'eq') return; const v = it.vil && VIL[it.vil], tw = typeof TWPN !== 'undefined' && TWPN[id];
+  const fx = tw ? (tw.txt.split(' · ').slice(2).join(' · ')) : ''; it.desc = `${SLOT_NAME[it.slot]}${v ? ` · ${v.name.replace(' 세트', '')}` : ''} · ${statLine(it) || '외형'}${fx ? ' · ' + fx : ''}`; }
+for (const id in ITEMS) eqDesc(id);
+// 드롭: 동굴 장난꾸러기가 동굴 장비를 드물게
+ENEMY.shroom.rare.push(['mush_hat', .04], ['mosscape', .03]); ENEMY.wasp.rare.push(['waspglove', .04]);
+addItem = (orig => (id, n) => { if (id === 'mush_hat') { if (!hatOwned.includes('mush')) { hatOwned.push('mush'); banner('새 모자!', '버섯돌이 모자 · 가방 > 장비', '#c9b6ff'); } return; } return orig(id, n); })(addItem);
+ITEMS.mush_hat = { name: '버섯돌이 모자', type: 'mat', hidden: 1 };
+
+// 3) 착용 상태: 모자는 hat 변수와 맞춰요
+function eqOn(slot) { if (slot === 'hat') return hat && hat !== 'egg' ? 'hat_' + hat : null; const id = equip[slot]; return id && ITEMS[id] ? id : null; }
+function eqItems() { return SLOTS.map(eqOn).filter(Boolean).map(id => ITEMS[id]); }
+function setCounts() { const c = {}; for (const it of eqItems()) if (it.vil) c[it.vil] = (c[it.vil] || 0) + 1; return c; }
+function setBonus() { const out = { hp: 0, atk: 0, def: 0, spd: 0 }, c = setCounts(); for (const v in c) { const S = VIL[v]; if (c[v] >= 3) for (const k in S.b3) out[k] += S.b3[k]; if (c[v] >= 5) for (const k in S.b5) out[k] += S.b5[k]; } return out; }
+function eqSum(k, skip) { let s = 0; for (const slot of SLOTS) { if (skip.includes(slot)) continue; const id = eqOn(slot); if (id) s += ITEMS[id][k] || 0; } return s; }
+// 기존 계산(꼬리=공격, 옷=튼튼/용기)에 나머지 칸 + 세트 보너스를 더해요
+maxHp = (o => () => o() + eqSum('hp', ['body']) + setBonus().hp)(maxHp);
+atkOf = (o => () => o() + eqSum('atk', ['tail']) + setBonus().atk)(atkOf);
+defOf = (o => () => o() + eqSum('def', ['body']) + setBonus().def)(defOf);
+function eqSpd() { return eqSum('spd', []) + setBonus().spd; }
+updateTown = (o => dt => { o(dt); if (state !== 'play') return; const s = eqSpd(); if (s > 0 && !(typeof EP !== 'undefined' && EP && DG.on)) window.__spdMul = (window.__spdMul === undefined ? 1 : window.__spdMul) * (1 + .08 * Math.min(3, s)); })(updateTown);
+// 모자 아이템 ↔ hatOwned 동기화 + 옛 세이브(풀잎 망토가 옷칸에 있던 것) 정리
+function eqSync() { for (const h of hatOwned) if (ITEMS['hat_' + h] && !(inv['hat_' + h] > 0)) inv['hat_' + h] = 1; if (equip.body === 'cape') { equip.body = null; equip.cape = 'cape'; } if (equip.body === 'beak' || inv.beak > 0) { delete inv.beak; if (!hatOwned.includes('beak')) hatOwned.push('beak'); if (equip.body === 'beak') { equip.body = null; hat = 'beak'; } } }
+{ let t = 0; updateTown = (o => dt => { o(dt); if ((t -= dt) <= 0) { t = 1; eqSync(); } })(updateTown); }
+startGame = (o => () => { o(); eqSync(); })(startGame);
+equipItem = (o => id => { const it = ITEMS[id]; if (it && it.hatK) { for (const k in dinoCache) delete dinoCache[k]; if (hat === it.hatK) { hat = 'egg'; poof(P.x, P.y - 12); save(); } else setHat(it.hatK); sfx('pick'); return; } o(id); })(equipItem);
+itemImg = (o => id => { const it = ITEMS[id]; if (it && it.hatK) return hatImg(it.hatK); return o(id); })(itemImg);
+// 가방 장비 칸: 착용 표시를 모자까지 맞추기
+panelEntries = (orig => () => { const E = orig(); const m = menu; if (m && m.kind === 'bag' && m.tab === 0) { const ids = bagIds(0); E.forEach((e, i) => { const id = ids[i], it = id && ITEMS[id]; if (!it) return; const on = eqOn(it.slot) === id; e.tag = on ? '착용 중' : '착용'; e.col = on ? '#9be37a' : '#ffd23f'; e.desc = it.desc; e.act = () => { equipItem(id); pmsg(eqOn(it.slot) === id ? `${it.name} 착용!` : `${it.name} 벗음`); }; }); } return E; })(panelEntries);
+bagIds = (o => tab => o(tab).filter(id => !ITEMS[id].hidden).sort((a, b) => tab === 0 ? SLOTS.indexOf(ITEMS[a].slot) - SLOTS.indexOf(ITEMS[b].slot) : 0))(bagIds);
+
+// 4) 상점: 너구리 상점 '장비'에 목장갑, 수달 상점에 물가 장비
+// (너구리 상점 장비 탭은 ['ribbon','bell','cone','cape','vest'] → 목장갑 추가)
+townEntries = (orig => m => orig(m))(townEntries);
+panelEntries = (orig => () => { const E = orig(), m = menu; if (m && m.kind === 'shop' && m.tab === 1 && !E.some(e => e.name === ITEMS.farmglove.name)) { const id = 'farmglove', it = ITEMS[id], own = inv[id] > 0; E.splice(2, 0, { img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (own) return; if (hearts < it.price) return pmsg('별사탕이 모자라요', 1); hearts -= it.price; addItem(id); sfx('pick'); pmsg(`${it.name} 샀어요!`); save(); } }); } return E; })(panelEntries);
+function openWvShop2() { menu = { kind: 'wvshop', title: '수달 상점', tabs: ['꼬리 무기', '물가 장비', '특산 재료', '팔기'], tab: 0, sel: 0, page: 0 }; sfx('blip'); }
+openWvShop = openWvShop2;
+wvEntries = (o => m => { if (m.tabs[1] !== '물가 장비') return o(m); const t = m.tab; if (t === 0) return o(Object.assign({}, m, { tab: 0 })); if (t === 2) return o(Object.assign({}, m, { tab: 1 })); if (t === 3) return o(Object.assign({}, m, { tab: 3 }));
+  const E = []; const buyHat = (h, price) => { if (hatOwned.includes(h)) return; if (hearts < price) return pmsg('별사탕이 모자라요', 1); hearts -= price; hatOwned.push(h); eqSync(); sfx('pick'); pmsg(`${HATS[h].name} 샀어요!`); save(); };
+  for (const [h, price] of [['lotus', 12], ['beak', 15]]) { const own = hatOwned.includes(h), it = ITEMS['hat_' + h]; E.push({ img: hatImg(h), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${price}`, col: own ? '#9be37a' : hearts >= price ? '#ffd23f' : '#d9cbb5', act: () => buyHat(h, price) }); }
+  for (const id of ['webglove', 'lifevest', 'raincape']) { const it = ITEMS[id], own = inv[id] > 0; E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (!own) wvBuy(id); } }); }
+  E.push({ name: `🦆 ${VIL.water.name}`, desc: `3개: ${bonusTxt(VIL.water.b3)} · 5개: ${bonusTxt(VIL.water.b5)}`, tag: '', col: '#bfe8ff', act: () => { } }); return E; })(wvEntries);
+// 구명조끼: 수영 대회에서 덜 가라앉아요
+updateTown = (o => dt => { o(dt); if (typeof EP !== 'undefined' && EP && EP.def && EP.def.id === 'epw' && EP.step === 2 && EP.d.f !== undefined && eqOn('body') === 'lifevest') EP.d.f = Math.min(100, EP.d.f + 5 * dt); })(updateTown);
+// 요리사 모자: 냄비 대성공 확률 UP (12% → 30%)
+{ const R = Math.random; potCook = (o => m => { if (hat === 'chef') { Math.random = () => R() * .4; try { return o(m); } finally { Math.random = R; } } return o(m); })(potCook); }
+
+// 5) 아이콘
+iconModel = (o => id => { const G = (...a) => grp(...a), m = mesh;
+  if (id === 'farmglove') return G(m('s', '#f2e6c8', .2, .16, .24, 0, .2, 0), m('s', '#f2e6c8', .07, .1, .07, .17, .26, .05), m('c', '#e2543b', .21, .05, .21, 0, .08, 0));
+  if (id === 'waspglove') return G(m('s', '#ffd23f', .2, .16, .24, 0, .2, 0), m('b', '#2b2328', .41, .05, .3, 0, .22, 0), m('co', '#2b2328', .04, .16, .04, 0, .38, .1));
+  if (id === 'webglove') return G(m('s', '#ffab2e', .22, .08, .26, 0, .18, 0), ...[-1, 0, 1].map(k => m('co', '#ff8a2e', .06, .18, .03, k * .1, .15, .22)));
+  if (id === 'lifevest') return G(m('c', '#ff7a2e', .3, .4, .26, 0, .25, 0), m('b', '#ffffff', .62, .06, .54, 0, .3, 0), m('b', '#ffffff', .62, .06, .54, 0, .16, 0));
+  if (id === 'raincape') return G(m('co', '#ffd23f', .36, .5, .2, 0, .25, 0), m('s', '#ffe680', .12, .06, .12, 0, .5, 0));
+  if (id === 'mosscape') return G(m('co', '#5f8a4a', .36, .5, .2, 0, .25, 0), m('s', '#9db758', .1, .06, .1, -.1, .2, .14), m('s', '#9db758', .08, .05, .08, .1, .32, .12));
+  return o(id); })(iconModel);
+buildHat = (o => kind => { const g = new THREE.Group(), m = mesh;
+  if (kind === 'lotus') { g.add(m('c', '#5aa548', .42, .03, .42, 0, 0, 0), m('c', '#4e974c', .2, .1, .2, 0, .05, 0)); for (let i = 0; i < 6; i++) { const p = m('s', i % 2 ? '#ffb3c6' : '#ff8fb5', .06, .11, .04, Math.cos(i) * .06, .18, Math.sin(i) * .06); p.rotation.set(Math.sin(i) * .5, 0, Math.cos(i) * .5); g.add(p); } g.add(m('s', '#ffe066', .04, .04, .04, 0, .2, 0)); return g; }
+  if (kind === 'beak') { g.add(m('c', '#ffd23f', .3, .05, .3, 0, 0, 0)); const b = m('co', '#ff9a2e', .12, .22, .08, 0, -.18, .3); b.rotation.x = Math.PI / 2; g.add(b, m('b', '#ff9a2e', .02, .2, .02, -.18, -.08, .18), m('b', '#ff9a2e', .02, .2, .02, .18, -.08, .18)); return g; }
+  if (kind === 'mush') { g.add(m('hemi', '#e2543b', .34, .22, .34, 0, -.02, 0)); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, r = i % 2 ? .22 : .13; g.add(m('s', '#ffffff', .05, .03, .05, Math.cos(a) * r, .14 - r * .3, Math.sin(a) * r)); } return g; }
+  return o(kind); })(buildHat);
+
+// 6) 3D 외형: 장갑(양손) · 옷(몸통) · 망토(등) — 꾸미기 옷(옷장)을 입으면 옷 장비는 감춰요
+function eqModel(slot, id) { const G = (...a) => grp(...a), m = mesh;
+  if (slot === 'glove') { const col = { farmglove: '#f2e6c8', waspglove: '#ffd23f', webglove: '#ffab2e' }[id] || '#ffffff'; const g = G(m('s', col, .1, .09, .1, 0, 0, 0), m('c', id === 'farmglove' ? '#e2543b' : id === 'waspglove' ? '#2b2328' : '#ff8a2e', .1, .03, .1, 0, .05, 0)); if (id === 'webglove') for (const k of [-1, 0, 1]) g.add(m('co', '#ff8a2e', .03, .08, .02, k * .04, -.08, 0)); return g; }
+  if (slot === 'body') {
+    if (id === 'vest') { const g = G(); for (let i = 0; i < 12; i++) { const a = i / 12 * 6.28; g.add(m('s', i % 2 ? '#fff8e7' : '#ffeec8', .1, .09, .1, Math.cos(a) * .3, 0, Math.sin(a) * .3)); } return g; }
+    if (id === 'shell') return G(m('hemi', '#6a8a4a', .3, .34, .26, 0, -.12, -.24), m('tor', '#4e6a38', .24, .24, .2, 0, 0, -.32));
+    if (id === 'lifevest') { const g = G(); const band = new THREE.Mesh(new THREE.CylinderBufferGeometry(.32, .34, .32, 22, 1, true), M('#ff7a2e', { side: THREE.DoubleSide })); g.add(band); for (const y of [-.07, .07]) g.add(m('tor', '#ffffff', .33, .33, .15, 0, y, 0)); g.children.slice(1).forEach(t => t.rotation.x = Math.PI / 2); return g; }
+    return null; }
+  if (slot === 'cape') { const col = { cape: '#7cc95a', raincape: '#ffd23f', mosscape: '#5f8a4a' }[id] || '#ff8fb5'; const g = G(); const c = new THREE.Mesh(new THREE.CylinderBufferGeometry(.2, .42, .62, 18, 1, true, Math.PI * .55, Math.PI * .9), M(col, { side: THREE.DoubleSide, roughness: .9 })); c.position.set(0, -.3, -.02); g.add(c); g.add(m('s', id === 'raincape' ? '#ffe680' : '#ffffff', .07, .06, .05, 0, 0, .22));
+    if (id === 'cape') for (let i = 0; i < 4; i++) g.add(m('s', '#5aa548', .07, .12, .02, (i - 1.5) * .12, -.5, -.36)); if (id === 'raincape') { const hood = m('hemi', '#ffd23f', .14, .08, .12, 0, .02, -.24); hood.rotation.x = -1.4; g.add(hood); } return g; }
+  return null; }
+function annoFrame(A) { const rig = A.rig, v = new THREE.Vector3(); A.model.updateMatrixWorld(true); let yMin = 1e9, yMax = -1e9; for (const n in rig) { rig[n].b.getWorldPosition(v); yMin = Math.min(yMin, v.y); yMax = Math.max(yMax, v.y); }
+  const head = rig.Head && rig.Head.b, hf = rig.headfront && rig.headfront.b; let fwd = new THREE.Vector3(0, 0, 1); if (head && hf) { const a = head.getWorldPosition(new THREE.Vector3()), b = hf.getWorldPosition(new THREE.Vector3()); fwd.set(b.x - a.x, 0, b.z - a.z); if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, 1); fwd.normalize(); }
+  return { yMin, H: Math.max(.2, yMax - yMin), fwd, yaw: Math.atan2(fwd.x, fwd.z) }; }
+function attachAt(bone, obj, worldPos, yaw, scaleH) { const holder = new THREE.Group(), ws = bone.getWorldScale(new THREE.Vector3()); obj.scale.multiplyScalar(scaleH / Math.max(.0001, ws.x)); const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw); holder.quaternion.copy(bone.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(q)); holder.position.copy(bone.worldToLocal(worldPos.clone())); holder.add(obj); obj.traverse(o => { if (o.isMesh) o.castShadow = true; }); bone.add(holder); return holder; }
+function syncEquip3D() { const A = R3 && R3.anno; if (!A || !R3.annoOn) return; const outfitOn = typeof OUTFIT !== 'undefined' && OUTFIT && OUTFIT !== 'none';
+  const key = [equip.glove, outfitOn ? '-' : equip.body, equip.cape].join('|'); if (A.eqKey === key) return; A.eqKey = key; (A.eqG || []).forEach(o => o.parent && o.parent.remove(o)); A.eqG = [];
+  const F = annoFrame(A), rig = A.rig, hips = rig.Hips && rig.Hips.b, sp = (rig.Spine02 || rig.Spine01 || rig.Spine || rig.Hips).b, hp = hips.getWorldPosition(new THREE.Vector3());
+  if (equip.glove) for (const hn of ['LeftHand', 'RightHand']) { const hb = rig[hn] && rig[hn].b; if (!hb) continue; const md = eqModel('glove', equip.glove); if (md) A.eqG.push(attachAt(hb, md, hb.getWorldPosition(new THREE.Vector3()), F.yaw, F.H * .55)); }
+  if (equip.body && !outfitOn) { const md = eqModel('body', equip.body); if (md) A.eqG.push(attachAt(sp, md, new THREE.Vector3(hp.x, F.yMin + F.H * .4, hp.z), F.yaw, F.H * (equip.body === 'shell' ? .9 : .72))); }
+  if (equip.cape) { const md = eqModel('cape', equip.cape), back = F.fwd.clone().multiplyScalar(-F.H * .2); if (md) A.eqG.push(attachAt(sp, md, new THREE.Vector3(hp.x + back.x, F.yMin + F.H * .56, hp.z + back.z), F.yaw, F.H * .78)); } }
+drawOverlay4 = (o => () => { try { syncEquip3D(); } catch (e) { console.warn('eq3d', e); } o(); })(drawOverlay4);
+updateTown = (o => dt => { o(dt); try { syncEquip3D(); } catch (e) { } })(updateTown);
+
+// 7) 가방 '장비' 탭 위에 5칸 착용판 + 세트 효과
+function drawEqStrip(x, y, w, u) { const cs = Math.min(u * 3.2, (w - u * 1.2) / 5 - u * .3), gp = (w - u * 1.2 - cs * 5) / 4, rects = [];
+  SLOTS.forEach((s, i) => { const id = eqOn(s), rx = x + u * .6 + i * (cs + gp); ctx.fillStyle = id ? '#fff3c4' : '#efe2c8'; rr(rx, y, cs, cs, u * .5); ctx.fill(); ctx.strokeStyle = id ? '#e8a92a' : 'rgba(51,34,42,.2)'; ctx.lineWidth = 2 * DPR; ctx.stroke();
+    if (id) { try { const im = itemImg(id); if (im) { const k = cs * .7 / Math.max(im.width, im.height); ctx.imageSmoothingEnabled = im.width > 40; ctx.drawImage(im, rx + (cs - im.width * k) / 2, y + (cs - im.height * k) / 2 - cs * .06, im.width * k, im.height * k); ctx.imageSmoothingEnabled = false; } } catch (e) { } }
+    text(SLOT_NAME[s].replace(' 무기', ''), rx + cs / 2, y + cs - u * .38, u * .55, '#8a6a5a', 'center'); rects.push({ x: rx, y, w: cs, h: cs, s }); });
+  const c = setCounts(), sets = Object.keys(c).filter(v => c[v] >= 2).map(v => `${VIL[v].name} ${c[v]}/5${c[v] >= 5 ? ' ★★' : c[v] >= 3 ? ' ★' : ''}`);
+  fitText(sets.length ? sets.join('  ·  ') : '같은 마을 장비 3개 → 세트 효과!', x + w / 2, y + cs + u * .6, u * .62, sets.length ? '#5a8a3a' : '#8a6a5a', w - u, 'center');
+  return { h: cs + u * 1.2, rects }; }
+drawBagGrid = (o => () => { const m = menu; if (!m || m.tab !== 0) return o(); m.eqStrip = true; return o(); })(drawBagGrid);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
