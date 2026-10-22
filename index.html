@@ -1216,6 +1216,7 @@ function update(dt) {
   if (Math.hypot(trail[0].x - P.x, trail[0].y - P.y) > 40) { resetTrail(); chicks.forEach((c, i) => { c.x = P.x - 12 - i * 11; c.y = P.y; }); }
   const last = trail[0]; if (Math.hypot(last.x - P.x, last.y - P.y) > 1.2) { trail.unshift({ x: P.x, y: P.y }); trail.length = 80; }
   chicks.forEach((c, i) => {
+    if (typeof chickHold === 'function' && chickHold(c, i, dt)) return;
     const tp = trail[Math.min(trail.length - 1, 12 + i * 11)];
     const dx = tp.x - c.x, dy = tp.y - c.y;
     c.moving = Math.hypot(dx, dy) > .5; c.x += dx * Math.min(1, dt * 10); c.y += dy * Math.min(1, dt * 10);
@@ -1888,8 +1889,8 @@ function openSaveUI() {
   const h = document.createElement('div'); h.textContent = '저장 코드'; h.style.cssText = 'font-size:22px';
   const p = document.createElement('div'); p.textContent = '다른 폰이나 브라우저에서 이어하려면 이 코드를 복사해서 메모나 카톡에 보관해두세요.'; p.style.cssText = 'font-size:14px;color:#8a6a5a;line-height:1.4';
   const ta = document.createElement('textarea'); ta.readOnly = true; ta.value = encodeSave(); ta.style.cssText = 'width:100%;height:64px;box-sizing:border-box;border-radius:10px;border:2px solid #e8a92a;padding:8px;font-size:11px;font-family:monospace;resize:none';
-  const copy = btn('코드 복사하기', '#ffd23f');
-  copy.onclick = async () => { let ok = false; try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) { } if (!ok) { ta.focus(); ta.select(); try { ok = document.execCommand('copy'); } catch (e) { } } copy.textContent = ok ? '복사됐어요!' : '코드를 길게 눌러 복사하세요'; };
+  const copy = btn('📋 백업 코드 복사하기', '#ffd23f'); copy.style.fontSize = '19px'; copy.style.padding = '14px 18px'; ta.addEventListener('copy', () => window.__bkMark && window.__bkMark());
+  copy.onclick = async () => { let ok = false; try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) { } if (!ok) { ta.focus(); ta.select(); try { ok = document.execCommand('copy'); } catch (e) { } } copy.textContent = ok ? '복사됐어요! 메모나 카톡에 붙여넣어 두세요' : '코드를 길게 눌러 복사하세요'; if (ok && window.__bkMark) window.__bkMark(); };
   const h2 = document.createElement('div'); h2.textContent = '코드로 불러오기'; h2.style.cssText = 'font-size:18px;margin-top:6px';
   const ta2 = document.createElement('textarea'); ta2.placeholder = '여기에 저장 코드(ANR-...)를 붙여넣기'; ta2.style.cssText = 'width:100%;height:64px;box-sizing:border-box;border-radius:10px;border:2px solid #d9cbb5;padding:8px;font-size:12px;font-family:monospace;resize:none';
   const msg = document.createElement('div'); msg.style.cssText = 'font-size:14px;color:#e2543b;min-height:18px';
@@ -5397,7 +5398,7 @@ equipItem = (o => id => { const it = ITEMS[id]; if (it && it.hatK) { for (const 
 itemImg = (o => id => { const it = ITEMS[id]; if (it && it.hatK) return hatImg(it.hatK); return o(id); })(itemImg);
 // 가방 장비 칸: 착용 표시를 모자까지 맞추기
 panelEntries = (orig => () => { const E = orig(); const m = menu; if (m && m.kind === 'bag' && m.tab === 0) { const ids = bagIds(0); E.forEach((e, i) => { const id = ids[i], it = id && ITEMS[id]; if (!it) return; const on = eqOn(it.slot) === id; e.tag = on ? '착용 중' : '착용'; e.col = on ? '#9be37a' : '#ffd23f'; e.desc = it.desc; e.act = () => { equipItem(id); pmsg(eqOn(it.slot) === id ? `${it.name} 착용!` : `${it.name} 벗음`); }; }); } return E; })(panelEntries);
-bagIds = (o => tab => o(tab).filter(id => !ITEMS[id].hidden).sort((a, b) => tab === 0 ? SLOTS.indexOf(ITEMS[a].slot) - SLOTS.indexOf(ITEMS[b].slot) : 0))(bagIds);
+bagIds = (o => tab => o(tab).filter(id => !ITEMS[id].hidden && id !== 'hat_egg').sort((a, b) => tab === 0 ? SLOTS.indexOf(ITEMS[a].slot) - SLOTS.indexOf(ITEMS[b].slot) : 0))(bagIds);
 
 // 4) 상점: 너구리 상점 '장비'에 목장갑, 수달 상점에 물가 장비
 // (너구리 상점 장비 탭은 ['ribbon','bell','cone','cape','vest'] → 목장갑 추가)
@@ -5769,8 +5770,8 @@ function buildCV3D() { const S = R3.scene, g = new THREE.Group(); S.add(g); R3.c
   // 풍차
   { const X = cx_(6) + .5, Z = cz(6) + .5, mill = grp(mesh('c', '#fff3e0', .9, 2.4, .9, X, 1.2, Z), mesh('co', '#e2543b', 1.1, .9, 1.1, X, 2.85, Z), mesh('b', '#8a5a3c', .4, .6, .06, X, .3, Z + .9)); const bl = new THREE.Group(); for (let i = 0; i < 4; i++) { const p = new THREE.Group(); p.add(mesh('b', '#fff8e7', .3, 1.4, .04, 0, .75, 0), mesh('b', '#c98a5a', .05, 1.5, .05, 0, .75, .03)); p.rotation.z = i * Math.PI / 2; bl.add(p); } bl.position.set(X, 2.3, Z + .95); mill.add(bl); g.add(mill); R3.cvMill = bl; }
   // 양 유르트 2채 · 상점 · 할매 오두막 · 케이블카 정류장
-  for (const [lx, ly, col] of [[22, 5, '#fff8e7'], [26, 9, '#f2eaff']]) { const X = cx_(lx) + .5, Z = cz(ly) + .5; g.add(mesh('c', col, 1.4, 1.0, 1.4, X, .5, Z), mesh('hemi', col, 1.45, .8, 1.45, X, 1.0, Z), mesh('s', '#ffd23f', .12, .12, .12, X, 1.82, Z), mesh('b', '#8a5a3c', .45, .7, .06, X, .35, Z + 1.38)); }
-  { const X = cx_(23.5) + .5, Z = cz(16.5) + .5, s = grp(mesh('b', '#e8d8f0', 3.6, 1.3, 1.8, X, .65, Z), mesh('b', '#a0705a', 3.8, .1, 2, X, 1.35, Z)); for (let i = 0; i < 6; i++) { const a = mesh('b', i % 2 ? '#ffffff' : '#c9b6ff', .62, .06, .9, X - 1.55 + i * .62, 1.15, Z + 1.2); a.rotation.x = .35; s.add(a); } const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.2, .5), new THREE.MeshBasicMaterial({ map: farmText('알파카 상점', 256, 58, '#fff8e7', '#3b2a2f') })); sg.position.set(X, 1.7, Z + .95); s.add(sg); g.add(s); }
+  for (const [lx, ly, col, roof] of [[22, 5, '#fff3f8', '#b9a4f2'], [26, 9, '#f3fbff', '#8cc6f2']]) { const X = cx_(lx) + .5, Z = cz(ly) + .5; g.add(mesh('c', col, 1.4, 1.0, 1.4, X, .5, Z), mesh('hemi', roof, 1.45, .8, 1.45, X, 1.0, Z), mesh('tor', '#ff8fb5', 1.42, 1.42, .08, X, 1.0, Z), mesh('s', '#ffd23f', .12, .12, .12, X, 1.82, Z), mesh('b', '#6a4a3a', .45, .7, .06, X, .35, Z + 1.38)); g.children[g.children.length - 3].rotation.x = Math.PI / 2; }
+  { const X = cx_(23.5) + .5, Z = cz(16.5) + .5, s = grp(mesh('b', '#fbeefd', 3.6, 1.3, 1.8, X, .65, Z), mesh('b', '#8f74d6', 3.8, .1, 2, X, 1.35, Z)); for (let i = 0; i < 6; i++) { const a = mesh('b', i % 2 ? '#ffffff' : '#c9b6ff', .62, .06, .9, X - 1.55 + i * .62, 1.15, Z + 1.2); a.rotation.x = .35; s.add(a); } const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.2, .5), new THREE.MeshBasicMaterial({ map: farmText('알파카 상점', 256, 58, '#fff8e7', '#3b2a2f') })); sg.position.set(X, 1.7, Z + .95); s.add(sg); g.add(s); }
   { const X = cx_(3.5) + .5, Z = cz(10.5) + .5; g.add(mesh('c', '#e8d8b0', .9, .9, .9, X, .45, Z), mesh('co', '#a0705a', 1.3, .8, 1.3, X, 1.3, Z)); }
   g.add(cableStation(CVP.station.x / T, ZU(CVP.station.y) - .6));
   { const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.8, .6), new THREE.MeshBasicMaterial({ map: farmText('몽글몽글 구름언덕', 320, 70, '#c9b6ff', '#fff') })); sg.position.set(cx_(11), 1.2, cz(20.5)); g.add(sg, mesh('c', '#8a5a3c', .05, 1.2, .05, cx_(9.8), .55, cz(20.5) - .05), mesh('c', '#8a5a3c', .05, 1.2, .05, cx_(12.2), .55, cz(20.5) - .05)); }
@@ -5824,6 +5825,16 @@ function perfSync() { if (!R3) return; const away = P.y >= H * T && state === 'p
   if (away) { const ents = new Set(R3.ents.values()); for (const o of R3.scene.children) { if (ents.has(o)) continue; if (!OWHID.has(o)) { if (!owOnly(o)) continue; OWHID.set(o, o.visible); } o.visible = false; } }
   else if (OWHID.size) { for (const [o, v] of OWHID) o.visible = v; OWHID.clear(); } }
 __SYNC3D.push(() => perfSync());
+// 고정 소품(나무·울타리·장식)의 공은 낮은 해상도 공으로 바꾸고, 아주 작은 소품은 그림자를 끄기 (캐릭터·엔티티는 그대로)
+const LODDONE = new WeakSet(); let LOD_T = 0, LOD_N = 0;
+function lodPass() { const G = geos(); if (!G.sLow) return; const ents = new Set(R3.ents.values()); const s = new THREE.Vector3();
+  for (const root of R3.scene.children) { if (ents.has(root) || LODDONE.has(root) || root.isLight || root.isCamera || root === R3.homeRoom || (root.userData && root.userData.isAnno)) continue; LODDONE.add(root);
+    root.traverse(o => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return; if (o.geometry === G.s) { o.geometry = G.sLow; LOD_N++; } o.getWorldScale(s); if (Math.max(s.x, s.y, s.z) < .09) o.castShadow = false; }); } }
+__SYNC3D.push(dt => { if (!R3 || state === 'title') return; if ((LOD_T -= (dt || .016)) > 0) return; LOD_T = 2; try { lodPass(); } catch (e) { } });
+// 멀리 있는 동물·주민은 낮은 해상도 공으로 (가까이 오면 다시 고해상도)
+{ let t = 0; const v = new THREE.Vector3(); __SYNC3D.push(dt => { if (!R3 || state === 'title') return; if ((t -= (dt || .016)) > 0) return; t = .4; const G = geos(), pm = R3.ents.get(P); if (!pm || !G.sLow) return; const px = pm.position.x, pz = pm.position.z;
+  for (const [k, o] of R3.ents) { if (k === P || !o.visible) continue; const far = Math.hypot(o.position.x - px, o.position.z - pz) > 7.5; if (o.userData.lodFar === far) continue; o.userData.lodFar = far;
+    o.traverse(m => { if (!m.isMesh || m.isInstancedMesh) return; if (far && m.geometry === G.s) { m.geometry = G.sLow; m.userData.wasHi = 1; } else if (!far && m.userData.wasHi) { m.geometry = G.s; } }); } }); }
 
 // ---------- travel.js: 마을 이동 정리 · 세계 지도 빠른 이동 · 마지막 마을 기억 ----------
 // 마을 이동 방법
@@ -5878,8 +5889,9 @@ TIPS.travel = { ico: '🗺️', t: '빠른 이동', l: () => [`노랑폰 > 지�
 { let t = 0; updateTown = (o => dt => { o(dt); if (state !== 'play') return; if ((t -= dt) > 0) return; t = .5; const h = hereV();
     if (!TRV.vis[h]) { TRV.vis[h] = 1; if (h !== 'v1') setTimeout(() => tip('travel'), 4000); }
     TRV.last = h;
-    if (!TRV.unl.wv && wvUnlocked()) { TRV.unl.wv = 1; if (!TRV.vis.wv && !dlg) setTimeout(() => { banner('나룻배가 다시 다녀요!', '연못가 꽥선장에게 가면 꽥꽥 물가마을로 (✦3)', '#2f6e9e'); }, 3500); }
-    if (!TRV.unl.cv && cvUnlocked()) { TRV.unl.cv = 1; if (!TRV.vis.cloud && !dlg) setTimeout(() => { banner('케이블카가 다시 다녀요!', '북쪽 언덕 곰돌 기사에게 가면 구름언덕으로 (✦5)', '#6a5a9a'); }, 3500); }
+    if (!TRV.unl.wv && wvUnlocked()) { TRV.unl.wv = 1; if (!TRV.vis.wv) TRV.pend = 'wv'; }
+    if (!TRV.unl.cv && cvUnlocked()) { TRV.unl.cv = 1; if (!TRV.vis.cloud) TRV.pend = 'cv'; }
+    if (TRV.pend && h === 'v1' && !dlg && !menu && !(typeof EP !== 'undefined' && EP) && !curRoom.dungeon && !wipe) { const k = TRV.pend; TRV.pend = null; if (k === 'wv') banner('나룻배가 다시 다녀요!', '연못가 꽥선장에게 가면 꽥꽥 물가마을로 (✦3)', '#2f6e9e'); else banner('케이블카가 다시 다녀요!', '북쪽 언덕 곰돌 기사에게 가면 구름언덕으로 (✦5)', '#6a5a9a'); }
     if (cvUnlocked() && CVP.home && curRoom.id === 'v1' && Math.hypot(P.x - CVP.home.x, P.y - CVP.home.y) < 90) tip('cable'); })(updateTown); }
 townSave = (orig => () => Object.assign(orig(), { trv: TRV }))(townSave);
 townLoad = (orig => d => { orig(d); if (d && d.trv) { Object.assign(TRV.vis, d.trv.vis || {}); TRV.last = d.trv.last || 'v1'; Object.assign(TRV.unl, d.trv.unl || {}); } else { TRV.unl.wv = wvUnlocked() ? 1 : 0; TRV.unl.cv = cvUnlocked() ? 1 : 0; } })(townLoad);
@@ -5967,6 +5979,10 @@ function drawFirstDay() { if (FD.done || state !== 'play' || menu || phone || dl
 drawOverlay4 = (o => () => { try { drawFirstDay(); } catch (e) { } o(); })(drawOverlay4);
 townSave = (orig => () => Object.assign(orig(), { fd: FD }))(townSave);
 townLoad = (orig => d => { orig(d); if (d && d.fd) Object.assign(FD, d.fd); else if (d) { /* 원래 하던 플레이어: 이미 다 했으면 조용히 완료 */ FD.hunt = (STAT.mob || 0) > 0 ? 1 : 0; if (FD_LIST.every(g => g.ok())) FD.done = 1; } })(townLoad);
+
+// 소동(달리기·수영) 중에는 노랑이 병아리들이 출발선 옆 관중석에서 응원해요
+function chickHold(c, i, dt) { if (typeof EP === 'undefined' || !EP || EP.step < 1) return false; const R = (typeof EP4 !== 'undefined' && EP.def === EP4) ? WIND : (typeof EPW !== 'undefined' && EP.def === EPW) ? SWIM : null; if (!R) return false;
+  const tx = R.x0 - 26 - i * 14, ty = R.y + 34; c.x += (tx - c.x) * Math.min(1, dt * 6); c.y += (ty - c.y) * Math.min(1, dt * 6); c.moving = false; c.face = 1; c.hop += dt * 6; return true; }
 
 // ---------- ep4.js: 소동 4화 「뭉게뭉게 바람 축제」 + 메기·먹구름 대장 화해 4컷 만화 ----------
 
@@ -6069,6 +6085,123 @@ function bossComic(k, title, kicker, last) { const S = BOSSC[k]; setTimeout(() =
 catBeaten = (o => () => { const first = !CATS.beaten; o(); if (first) bossComic('cat', '심술 메기 대장의 속사정', '안노랑 외전 · 꽥꽥 물가 소동', [{ who: '메기 대장', text: '물이 흐려서 안 보였어…' }, { who: '안노랑', text: '(꽥! 우리 친구 하자)' }]); })(catBeaten);
 clBeaten = (o => () => { const first = !CLOUDS.beaten; o(); if (first) bossComic('cl', '먹구름 대장의 눈물', '안노랑 외전 · 구름언덕 소동', [{ who: '먹구름 대장', text: '바람이 자꾸 밀어서…' }, { who: '안노랑', text: '(매에… 이제 쉬어도 돼)' }]); })(clBeaten);
 
+// ---------- ep2.js: 소동 2화 「사진관 대소동」 (삐약마을 광장) ----------
+// 너구리 상점이 사진관을 열었어요. 마을 앨범용 사진 세 장!
+//  컷1 단체 사진: 빈자리에 서서 찰칵 할 때 웅크리기(B 꾹)   컷2 프로필: "삐약~" 할 때 A, 찍는 동안 움직이면 흔들림
+//  컷3 바람에 삼각대가 넘어져요 → 근처에서 B(꼬리)로 받치면 영웅 결말 (대신 꼬리가 찍혀요)
+const STU = { x: 21.6 * T, y: 15.2 * T };
+STU.cam = { x: STU.x, y: STU.y + 2.6 * T }; STU.spot = { x: STU.x + .1 * T, y: STU.y };
+const EP2 = { id: 'ep2', no: 2, title: '사진관 대소동', cast: ['raccoon', 'hen', 'pig', 'rabbit'], ends: {
+  perfect: { name: '완벽한 병아리 사진', hint: '한 번도 안 흔들리고, 안 들키면' },
+  caught: { name: '흔들린 사진', hint: '머리가 잘리거나 들킨 적이 있으면' },
+  hero: { name: '꼬리 삼각대', hint: '넘어지는 카메라를 꼬리로 받치면' } }, steps: [] };
+const raccoonN = () => (npcById('raccoon') || { name: '너구리 상점' }).name;
+function stuFloat(t, col = '#fff') { floaters.push({ x: STU.cam.x, y: STU.cam.y - 44, t: 1.3, text: t, col }); }
+EP2.steps = [
+  { // 0. 개막
+    enter(E) { window.__cutscene = true; E.d.cam = { tilt: 0, fall: 0 }; startWipe(() => { warpTo(STU.x - 2.2 * T, STU.y + 1.2 * T, 'up');
+        epMakeChicks(6); EPC.forEach((c, i) => { c.x = STU.x + (-1.9 + i * .64 + (i >= 3 ? .7 : 0)) * T; c.y = STU.y; c.look = 0; });
+        epHold('raccoon', STU.cam.x, STU.cam.y + 10, 1); epHold('hen', STU.x - 3.4 * T, STU.y + 3 * T, 1); epHold('pig', STU.x + 3.2 * T, STU.y + 3.2 * T, -1); epHold('rabbit', STU.x + 4 * T, STU.y + 2.2 * T, -1);
+        setTimeout(() => whenCalm(() => say([L(raccoonN(), '너구리 사진관 개업 기념! 오늘은 삐약마을 앨범 사진을 찍어요~'), L('꼬꼬 아줌마', '병아리들 다 같이 예쁘게 찍자~ 꼬꼬!'), L('안노랑', '(사진… 공룡이 찍히면 끝이야.)'), L('계획이', `찰칵 할 때는 ${KB()} 꾹 웅크리기! "삐약~" 하면 ${KA()}! 그리고 찍는 동안은 움직이지 마!`)], () => { epPanel(0, P.x, P.y, [{ who: raccoonN(), text: '사진관 개업이에요~!' }, { who: '안노랑', text: '(찍히면 끝이야…)' }], '두근'); window.__cutscene = false; })), 700); }); },
+    tick(E) { if (E.t > 15 && !dlg) window.__cutscene = false; return E.t > 1.5 && !window.__cutscene; } },
+  { // 1. 단체 사진 (웅크리기 3번)
+    enter(E) { E.d.shots = 0; E.d.miss = 0; E.d.cd = 3; DG.on = true; DG.onCaught = () => stuCaught(E); toast('줄 가운데 반짝이는 빈자리로! 찰칵 할 때 웅크리기'); },
+    lockA: true,
+    tick(E, dt) { E.d.cd -= dt; if (E.d.cd < 1.5 && !E.d.cnt) { E.d.cnt = 1; stuFloat('하나, 둘…'); }
+      if (E.d.cd <= 0) { E.d.cnt = 0; E.d.cd = 2.4 + Math.random(); sfx('shutter'); if (R3) R3.flash = .2; const inSpot = Math.hypot(P.x - STU.spot.x, P.y - STU.spot.y) < 14, ok = inSpot && crouching(); E.d.shots++;
+        stuFloat('찰칵!', '#fff3b0'); if (!ok) { E.d.miss++; dgGain(inSpot ? 38 : 28, 'all'); floaters.push({ x: P.x, y: P.y - 40, t: 1.2, text: inSpot ? '머리가 잘렸다!' : '사진에서 빠졌다!', col: '#ff8fa3' }); }
+        if (E.d.shots === 2) epPanel(1, P.x, P.y, [{ who: raccoonN(), text: '자~ 웃어요! 김치~' }, { who: '안노랑', text: ok ? '(납작…!)' : '(앗 머리…)' }], '찰칵!');
+        if (E.d.shots >= 3) return true; } return false; } },
+  { // 2. 프로필 사진: 삐약 3번 + 가만히
+    enter(E) { E.d.calls = 3; E.d.cd = 1.6; E.d.still = 0; E.d.shake = 0; warpTo(STU.spot.x, STU.spot.y, 'down'); banner('프로필 사진!', `"삐약~" 하면 ${KA()} · 움직이면 흔들려요`, '#ffd23f'); },
+    tick(E, dt) { if (dlg) return false; if (P.moving) { E.d.shake += dt; if (E.d.shake > .6) { E.d.shake = 0; E.d.miss++; dgGain(15, 'all'); floaters.push({ x: P.x, y: P.y - 40, t: 1, text: '흔들렸다!', col: '#ff8fa3' }); } }
+      E.d.cd -= dt; if (E.d.cd <= 0 && E.d.calls > 0 && !DG.peep) { E.d.calls--; E.d.cd = 2.3; stuFloat('자~ 삐약~!'); dgPeep(1.0); }
+      if (E.d.calls <= 0 && !DG.peep && E.d.cd < 1.4) { sfx('shutter'); if (R3) R3.flash = .2; stuFloat('찰칵!', '#fff3b0'); return true; } return false; } },
+  { // 3. 마지막 가족사진 · 바람에 삼각대가…!
+    enter(E) { E.d.t3 = 0; E.d.wob = 2.4 + Math.random(); E.d.fallT = 0; E.d.saved = 0; E.d.broke = 0; toast('마지막 가족사진! 가만히~'); },
+    lockA: true,
+    onB(E) { if (E.d.fallT > 0 && !E.d.saved) { if (Math.hypot(P.x - STU.cam.x, P.y - STU.cam.y) < 3.4 * T) { E.d.saved = 1; E.d.fallT = 0; E.d.cam.tilt = 0; DG.on = false; sfx('tada'); floaters.push({ x: STU.cam.x, y: STU.cam.y - 40, t: 1.4, text: '꼬리로 턱!', col: '#ffd23f' }); epPanel(2, STU.cam.x, STU.cam.y, [{ who: raccoonN(), text: '내 카메라~!!' }, { who: '안노랑', text: '(꼬리 삼각대… 가동!)' }], '턱!', { sfxCol: '#ffd23f', mode: 'low' }); dgGain(40, 'all'); }
+        else toast('카메라 가까이 가서 꼬리!'); return true; } return false; },
+    tick(E, dt) { E.d.t3 += dt; const c = E.d.cam;
+      if (!E.d.fallT && !E.d.saved && !E.d.broke && E.d.t3 > E.d.wob) { E.d.fallT = 2.6; sfx('caught'); stuFloat('휘이잉~ 카메라가 넘어진다!', '#ff8fa3'); emote(null, 'shock', 1.2); toast(`카메라 근처에서 ${KB()} = 꼬리로 받치기!`); }
+      if (E.d.fallT > 0) { E.d.fallT -= dt; c.tilt = Math.min(1.3, c.tilt + dt * .55); if (E.d.fallT <= 0) { E.d.broke = 1; c.tilt = 1.45; sfx('bonk'); shake(3, .3); stuFloat('쿵! 사진이 삐뚤…', '#ff8fa3'); if (!E.panels[2]) epPanel(2, STU.cam.x, STU.cam.y, [{ who: raccoonN(), text: '아이고 내 카메라…' }, { who: '안노랑', text: '(꼬리를 썼어야 했나…)' }], '쿵', { mode: 'low' }); } }
+      if ((E.d.saved || E.d.broke) && (E.d.after = (E.d.after || 1.6) - dt) <= 0) { E.d.end = E.d.saved ? 'hero' : (E.d.miss || E.d.caught) ? 'caught' : 'perfect'; return true; } return false; } },
+  { // 4. 결말
+    enter(E) { DG.on = false; DG.peep = null; E.freeze = true; const end = E.d.end; E.d.cam.tilt = 0;
+      const L3 = { hero: [[L(raccoonN(), '노랑이 꼬리 덕분에 카메라가 살았어! 근데… 사진에 꼬리가 찍혔네?'), L('꼬꼬 아줌마', '호호, 우리 마을 앨범엔 꼬리 달린 병아리가 하나 있어도 돼!'), L('안노랑', '(…꼬리까지 인정받았다!)')], [{ who: raccoonN(), text: '카메라가 살았어!' }, { who: '꼬꼬 아줌마', text: '꼬리 병아리도 우리 식구!' }], '찰칵!'],
+        perfect: [[L(raccoonN(), '완벽해! 병아리 일곱 마리가 다 웃고 있어!'), L('계획이', '…일곱? 우리 여섯인데.'), L('안노랑', '(병아리 일곱 마리! 후훗.)')], [{ who: raccoonN(), text: '완벽한 사진이야!' }, { who: '안노랑', text: '(병아리 일곱 마리…!)' }], '반짝'],
+        caught: [[L(raccoonN(), '음… 사진마다 커다란 노란 게 흐릿하게 찍혔네?'), L('승부욕', '그거 노랑이야. 흔들렸어.'), L('안노랑', '(그래도 앨범엔 들어갔어…!)')], [{ who: raccoonN(), text: '이 노란 건 뭐지…?' }, { who: '안노랑', text: '(흐릿한 병아리…)' }], '흐릿'] }[end];
+      sfx(end === 'caught' ? 'wahwah' : 'tada'); if (end === 'hero') burst(P.x, P.y - 30, '#ffd23f', 30);
+      setTimeout(() => { epPanel(3, STU.x, STU.y, L3[1], L3[2], { sfxCol: '#ffd23f', mode: 'front', span: 3.2 }); say(L3[0], () => epNext()); }, 500); },
+    tick() { return false; } },
+];
+function stuCaught(E) { E.d.caught = (E.d.caught || 0) + 1; shake(4, .4); sfx('caught'); emote(null, 'shock', 1.6);
+  say([L(raccoonN(), '어?! 렌즈에… 공룡 꼬리가?!'), L('먹보', '아니에요! 노랑이 털이 좀 길어서 그래요!'), L(raccoonN(), '…그, 그런가? 다시 찍자~')], () => { DG.v = 40; }); }
+EP2.finish = E => {
+  const end = E.d.end || 'caught', first = !EPS.album.ep2 || !EPS.album.ep2[end], today = EPS.clear.ep2 !== dayKey();
+  EPS.album.ep2 = EPS.album.ep2 || {}; EPS.album.ep2[end] = dayKey(); const rew = [];
+  if (today) { EPS.clear.ep2 = dayKey(); const c = end === 'hero' ? 2 : 1; for (const id of EP2.cast) accAdd(id, c); const cand = end === 'caught' ? 10 : 16; hearts += cand; rew.push(`✦+${cand}`, `병아리 인정 ♥+${c}`); }
+  stat('ep'); save(); const panels = E.panels; for (let i = 0; i < 4; i++) if (!panels[i]) panels[i] = { img: epCapture(P.x, P.y), lines: [], sfx: '' };
+  const C = composeComic({ kicker: '안노랑 시즌 1 · 2화', title: EP2.title, ending: EP2.ends[end].name }, panels); toBlob(C).then(b => { if (b) albPut(`ep2_${end}`, b); });
+  setTimeout(() => { banner(`결말: ${EP2.ends[end].name}`, first ? '만화책에 새 칸이 생겼어요!' : '만화책 그림이 새로 바뀌었어요', '#ffd23f'); if (rew.length) toast(rew.join(' · ')); }, 300);
+  setTimeout(() => showComic(C, { title: `2화 「${EP2.title}」 완성!`, desc: `결말 <b>${EP2.ends[end].name}</b> · 만화책 ${Object.keys(EPS.album.ep2).length}/3칸` }), 1300); };
+{ const i = BIG.findIndex(b => b.id === 'ep2'); if (i >= 0) BIG[i] = EP2; else BIG.splice(1, 0, EP2); }
+epbookEntries = (o => m => { const E = o(m); if (m.tab === 0) for (const e of E) if (e.name && e.name.includes('사진관 대소동')) e.desc = e.desc.replace('광장 포스터에서 시작', '여기서 바로 시작 · 광장 사진관'); return E; })(epbookEntries);
+// 3D: 삼각대 카메라 · 반짝이는 빈자리
+window.__SYNC3D.push(() => { if (!R3) return; if (!(EP && EP.def === EP2)) return; const m = ent('ep2cam', () => { const g = new THREE.Group(), legs = new THREE.Group(); for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28, l = mesh('c', '#5a3a26', .03, 1.0, .03, Math.cos(a) * .18, .48, Math.sin(a) * .18); l.rotation.set(Math.sin(a) * .25, 0, -Math.cos(a) * .25); legs.add(l); } g.add(legs);
+    const cam = grp(mesh('b', '#33222a', .42, .3, .26, 0, 1.05, 0), mesh('c', '#555', .09, .14, .09, 0, 1.05, -.2), mesh('b', '#ffd23f', .1, .06, .06, .12, 1.24, 0)); cam.children[1].rotation.x = Math.PI / 2; g.add(cam); return g; });
+  const c = EP.d.cam || { tilt: 0 }; m.position.set(U(STU.cam.x), 0, ZU(STU.cam.y) - .2); m.rotation.set(0, 0, 0); m.rotation.x = -c.tilt; if (EP.d.fallT > 0) m.rotation.z = Math.sin(time * 20) * .05;
+  if (EP.step === 1) { const s = ent('ep2spot', () => grp(mesh('c', M('#fff3a0', { emissive: '#ffe066', emissiveIntensity: .8, transparent: true, opacity: .55 }), .3, .02, .3, 0, .02, 0))); s.position.set(U(STU.spot.x), 0, ZU(STU.spot.y) - .2); s.scale.setScalar(1 + Math.sin(time * 4) * .08); } });
+
+// ---------- today.js: 노랑폰 '오늘' 카드 · 저장 백업 안내 ----------
+const BK = { last: 0, nag: 0 };
+function dayDiff(a, b) { if (!a || !b) return 999; return Math.round((dk2t(b) - dk2t(a)) / 864e5); }
+window.__bkMark = () => { if (typeof markBackedUp === 'function') markBackedUp(); };
+function bkDays() { const at = typeof CFG !== 'undefined' && CFG.bakAt; return at ? Math.floor((Date.now() - at) / 864e5) : null; }
+// 오늘 할 일 모음
+function todayRows() { const R = [];
+  try { const s = todaySmall(), d = smallDone(); R.push({ ico: '📒', t: d ? '오늘의 소동 완료!' : `오늘의 소동 · ${s.title}`, ok: d }); } catch (e) { }
+  try { const st = QB.filter(q => !qbBlocked || !qbBlocked(q)).map(q => qbState(q)); const rd = st.filter(x => x === 'ready').length, dg = st.filter(x => x === 'doing').length;
+    R.push({ ico: '📜', t: rd ? `퀘스트 보고하기 ★${rd}` : dg ? `진행 중인 퀘스트 ${dg}개` : '새 퀘스트를 받으러 가요 (!)', ok: !rd && !dg && false, hot: rd > 0 }); } catch (e) { }
+  try { const n = readyCount(); R.push({ ico: '💮', t: n ? `스탬프·할 일 보상 ${n}개 받기` : '오늘의 할 일 진행 중', hot: n > 0 }); } catch (e) { }
+  { const b = []; if (typeof bossRematch === 'function' && bossRematch()) b.push('버섯 대왕'); if (typeof catOK === 'function' && CATS.beaten && catOK()) b.push('메기 대장'); if (typeof clOK === 'function' && CLOUDS.beaten && clOK()) b.push('먹구름'); if (b.length) R.push({ ico: '⚔️', t: `보스 재도전 가능 · ${b.join(', ')}` }); }
+  if (typeof FD !== 'undefined' && !FD.done) R.push({ ico: '🌱', t: `첫날 목표 ${FD_LIST.filter(g => g.ok()).length}/3`, hot: true });
+  const dd = bkDays(); R.push({ ico: '💾', t: dd === null ? '저장 코드 백업을 아직 안 했어요 (설정 > 저장)' : dd <= 0 ? '오늘 백업 완료' : `마지막 백업 ${dd}일 전`, ok: dd !== null && dd < 7, warn: dd === null || dd >= 7 });
+  return R; }
+drawPhone = (o => () => { o(); if (!phone || !phone.box || phone.t < .12) return; const b = phone.box, u = Math.max(11 * DPR, Math.min(CW, CH) / 28), rows = todayRows(), lh = u * 1.25;
+  const w = b.w, h = u * 1.6 + rows.length * lh + u * .3; let y = b.y + b.h + u * .7; if (y + h > CH - SA.b - 6 * DPR) y = Math.max(SA.t + 6 * DPR, b.y - h - u * .7); const x = b.x;
+  uiPanel(x, y, w, h, u * .8); text('☀️ 오늘', x + u * .8, y + u * .9, u * .85, UIC.ink, 'left', true);
+  rows.forEach((r, i) => { const yy = y + u * 1.9 + i * lh; text(r.ico, x + u * .9, yy, u * .75, UIC.ink, 'center'); fitText(r.t, x + u * 1.7, yy, u * .66, r.warn ? '#d9363e' : r.hot ? '#b07a10' : r.ok ? '#5a8a3a' : UIC.ink2, w - u * 2.4); }); })(drawPhone);
+// 백업 알림은 town4.js(일주일마다)가 이미 해요
+townSave = (orig => () => Object.assign(orig(), { bk: BK }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.bk) Object.assign(BK, d.bk); })(townLoad);
+
+// ---------- halloween.js: 할로윈 주간 꾸미기 (기존 '삐약 할로윈' 이벤트 10/24~11/1 위에 더해요) ----------
+// · 마을 곳곳 호박등(밤엔 반짝) · 숨은 사탕 바구니 6개(매일) · 할로윈 대사 · 물가마을/구름언덕 친구들도 사탕
+function hwOn() { const h = typeof holiday === 'function' && holiday(); return !!(h && h.id === 'halloween'); }
+const HW_LAMPS = [[19.2, 13.4], [24.2, 13.4], [19.2, 17.6], [24.2, 17.6], [13.0, 12.2], [9.5, 15.2], [27.2, 18.4], [33.0, 15.2], [36.8, 18.6], [16.2, 9.8], [30.0, 9.6], [42.0, 15.4]];
+const HW_BASKET_POOL = [[6.5, 16.5], [12.5, 20.5], [17.5, 25.5], [27.5, 26.5], [34.5, 22.5], [38.5, 12.5], [30.5, 4.5], [22.5, 6.5], [11.5, 6.5], [3.5, 10.5], [40.5, 26.5], [24.5, 22.5], [14.5, 15.5], [36.5, 6.5]];
+const HWB = { d: 0, got: {}, all: 0 }; let HW_LIST = [];
+function hwBaskets() { const d = dayKey(); if (HWB.d !== d) { HWB.d = d; HWB.got = {}; HWB.all = 0; } if (HW_LIST.d === d) return HW_LIST;
+  const pool = HW_BASKET_POOL.map(([x, y]) => nearFree(x, y)), out = []; let s0 = d % 9973 + 7; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  while (out.length < 6 && pool.length) out.push(pool.splice(Math.floor(r() * pool.length), 1)[0]); HW_LIST = out.map(([x, y], i) => ({ i, x, y })); HW_LIST.d = d; return HW_LIST; }
+{ let t = 0; updateTown = (o => dt => { o(dt); if (!hwOn() || state !== 'play' || curRoom.id !== 'v1' || dlg || menu) return; if ((t -= dt) > 0) return; t = .15;
+    for (const b of hwBaskets()) { if (HWB.got[b.i] || Math.hypot(P.x - b.x, P.y - b.y) > 14) continue; HWB.got[b.i] = 1; addItem('hcandy', 1); hearts += 3; sfx('pick'); burst(b.x, b.y - 8, '#ff9a2e', 12); const n = Object.keys(HWB.got).length;
+      floaters.push({ x: b.x, y: b.y - 24, t: 1.2, text: `사탕 바구니 ${n}/6 · ✦+3`, col: '#ffb347' }); if (n >= 6 && !HWB.all) { HWB.all = 1; hearts += 15; setTimeout(() => banner('사탕 바구니 다 찾았다!', '별사탕 ✦15 보너스 · 내일 또 숨겨져요', '#ff9a2e'), 600); } save(); } })(updateTown); }
+// 3D: 호박등 · 바구니
+function jackModel(big) { const s = big ? 1.25 : 1, g = grp(mesh('s', '#f08a24', .3 * s, .24 * s, .3 * s, 0, .24 * s, 0, { roughness: .6 }), mesh('c', '#3b8f5a', .03, .1, .03, 0, .5 * s, 0));
+  const glow = M('#ffd23f', { emissive: '#ffb020', emissiveIntensity: 1 }); for (const x of [-.1, .1]) g.add(mesh('co', glow, .05 * s, .07 * s, .02, x * s, .3 * s, .28 * s)); const mo = mesh('b', glow, .16 * s, .04 * s, .02, 0, .17 * s, .29 * s); g.add(mo); g.userData.glow = glow; return g; }
+function basketModel() { const g = grp(mesh('c', '#a8743c', .18, .14, .18, 0, .07, 0), mesh('tor', '#8a5a30', .15, .15, .03, 0, .26, 0)); g.children[1].rotation.z = Math.PI / 2; for (let i = 0; i < 5; i++) g.add(mesh('s', ['#ff6b8a', '#ffd23f', '#9be37a', '#7fcaf2', '#c9b6ff'][i], .05, .05, .05, Math.cos(i * 1.3) * .08, .16, Math.sin(i * 1.3) * .08)); return g; }
+window.__SYNC3D.push(() => { if (!R3) return; const on = hwOn() && curRoom.id === 'v1' && state !== 'title';
+  if (on && !R3.hwRoot) { const g = new THREE.Group(); HW_LAMPS.forEach(([x, y], i) => { const j = jackModel(i < 4); j.position.set(U(x * T), 0, ZU(y * T)); j.rotation.y = (i % 2 ? .4 : -.4) + Math.PI * (y > 15 ? 1 : 0); g.add(j); }); R3.scene.add(g); R3.hwRoot = g; }
+  if (R3.hwRoot) { R3.hwRoot.visible = on; if (on) { const n = nightAmt(); R3.hwRoot.children.forEach((j, i) => { j.userData.glow.emissiveIntensity = .5 + n * 1.6 + Math.sin(time * 3 + i) * .15 * n; }); } }
+  if (on) for (const b of hwBaskets()) { if (HWB.got[b.i]) continue; const m = ent('hwb' + b.i, basketModel); m.position.set(U(b.x), Math.abs(Math.sin(time * 2 + b.i)) * .04, ZU(b.y) - .2); } });
+// 할로윈 대사
+{ const HWL = { hen: '호박등 켜 놨어! 노랑이는 무슨 분장 했니? …원래 그 모습이야?', cow: '음메… 할로윈이라 다들 분장했는데, 노랑이는 공룡 분장이 아주 진짜 같구나.', pig: '꿀! 사탕 바구니 어딘가 숨겨져 있대! 나도 찾을래!', rabbit: '깡총! 마을에 사탕 바구니가 6개 숨어 있대. 반짝이는 바구니를 찾아 봐!', duck: '꽥! 호박등이 무서워… 아니 안 무서워!', sheep: '메에… 유령 분장 하려고 털을 하얗게… 원래 하얗구나.', sheep2: '몽글~ 마녀 모자 쓰면 사탕 더 준대! 진짜야?', squirrel: '할로윈엔 도토리 대신 사탕을 볼에 넣을 거야!', hedgehog: '형아 공룡 분장 최고야! …분장 맞지?' };
+  for (const id in HWL) { if (!CHAT[id]) CHAT[id] = []; CHAT[id].unshift([() => hwOn(), HWL[id]]); } }
+townSave = (orig => () => Object.assign(orig(), { hwb: HWB }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.hwb) Object.assign(HWB, d.hwb); })(townLoad);
+
 // ---------- region.js: 마을 전용 생물·채집물 (물가마을 · 구름언덕) ----------
 function regionArea() { return (typeof inWV === 'function' && inWV()) ? 'wv' : (typeof inCV === 'function' && inCV()) ? 'cv' : null; }
 const SEA4R = ['spring', 'summer', 'autumn', 'winter'];
@@ -6167,6 +6300,63 @@ const SFXX = {
 };
 sfx = (o => k => { if (k === 'swipe' && window.__tailSwing) { const f = SFXX['tw_' + (equip.tail || 'none')] || SFXX.tw_none; try { return f(); } catch (e) { } } const f = SFXX[k]; if (f) { try { return f(); } catch (e) { } } return o(k); })(sfx);
 swipe = (o => () => { window.__tailSwing = 1; try { return o(); } finally { window.__tailSwing = 0; } })(swipe);
+
+// ---------- rest.js: 박물관 마을 세트 보상 · 구름 낚시 · 다음 마을 예고 · 소리 크기 · 느긋 모드 · 2D 화면 보완 ----------
+
+// ===== 1) 구름 낚시 (구름언덕 고원 가장자리에서 구름 바다로) =====
+const CLOUD_FISH = [
+  { id: 'fish_cloudcarp', name: '솜구름붕어', sea: SEA4R, time: 'any', loc: 'cloud', c1: '#f4f2ff', w: 8, sell: 10, sz: .8 },
+  { id: 'fish_rainbowfry', name: '무지개 송사리', sea: SEA4R, time: 'day', loc: 'cloud', c1: '#ff9fd0', w: 4, sell: 16, sz: .6 },
+];
+for (const f of CLOUD_FISH) { FISH.push(f); CRIT[f.id] = Object.assign(f, { kind: 'fish' }); ITEMS[f.id] = { name: f.name, type: 'crit', icon: critterIcon(f), desc: '물고기 · 몽글몽글 구름언덕 구름 바다에만 살아요 · 박물관에 기증하거나 팔 수 있어요', sell: f.sell }; }
+whenStr = (o => c => c.loc === 'cloud' ? o(c).replace(/ · (연못|개울|물가마을)/, ' · 구름 바다') : o(c))(whenStr);
+waterAhead = (o => () => { const w = o(); if (w || !(typeof inCV === 'function' && inCV())) return w; const d = dirVec();
+  for (let k = 1; k <= 3; k++) { const x = P.x + d.x * k * 14, y = P.y - 4 + d.y * k * 14, tx = Math.floor(x / T), ty = Math.floor(y / T); if (!inMap(tx, ty)) continue; const g = ground[ty][tx]; if (g === G_CLAND || g === G_CDECK) continue; if (solid[ty][tx] && tx >= CVO.x && tx < CVO.x + CVO.w && ty >= CVO.y && ty < CVO.y + CVO.h) return { x, y, loc: 'cloud' }; return null; } return null; })(waterAhead);
+
+// ===== 2) 박물관: 마을별 생물을 다 기증하면 가구 보상 =====
+FURN.lotuslamp = { name: '연꽃 램프', t: [[41, 44]], desc: '박물관: 물가마을 생물 5종 기증 보상' };
+FURN.cloudcushion = { name: '구름 쿠션', t: [[45, 44]], desc: '박물관: 구름언덕 생물 4종 기증 보상' };
+furnModel = (o => k => { const m = mesh, G = (...a) => grp(...a);
+  if (k === 'lotuslamp') { const g = G(m('c', '#5aa548', .32, .05, .32, 0, .03, 0), m('c', '#4e974c', .03, .5, .03, 0, .28, 0)); for (let i = 0; i < 7; i++) { const a = i / 7 * 6.28, p = m('s', i % 2 ? '#ffb3c6' : '#ff8fb5', .09, .18, .05, Math.cos(a) * .1, .62, Math.sin(a) * .1); p.rotation.set(Math.sin(a) * .5, 0, -Math.cos(a) * .5); g.add(p); } g.add(m('s', M('#fff3a0', { emissive: '#ffd23f', emissiveIntensity: .9 }), .09, .09, .09, 0, .64, 0)); return g; }
+  if (k === 'cloudcushion') return G(m('s', '#ffffff', .42, .2, .36, 0, .2, 0), m('s', '#f4f2ff', .26, .18, .24, -.25, .3, .05), m('s', '#f4f2ff', .24, .17, .22, .26, .29, -.04), m('s', '#c9b6ff', .05, .05, .03, -.1, .3, .33), m('s', '#c9b6ff', .05, .05, .03, .1, .3, .33));
+  return o(k); })(furnModel);
+const MUS_SETS = [{ k: 'wv', name: '꽥꽥 물가마을', ids: () => NEW_FISH.map(c => c.id).concat(['bug_diving', 'bug_strider']), furn: 'lotuslamp' },
+  { k: 'cv', name: '몽글몽글 구름언덕', ids: () => ['bug_cloudmoth', 'bug_windhopper'].concat(CLOUD_FISH.map(c => c.id)), furn: 'cloudcushion' }];
+function musSetCheck() { for (const S of MUS_SETS) { if (FOWN[S.furn]) continue; const ids = S.ids(); if (ids.every(id => DON[id])) { giveFurn(S.furn); hearts += 20; sfx('star'); setTimeout(() => banner(`${S.name} 생물 다 모았다!`, `${FURN[S.furn].name} (집 가구) + ✦20`, '#c9b6ff'), 900); save(); } } }
+museumReward = (o => () => { o(); try { musSetCheck(); } catch (e) { } })(museumReward);
+// 박물관 화면에 마을 세트 진행도
+museumEntries = typeof museumEntries === 'function' ? (o => m => { const E = o(m); try { for (const S of MUS_SETS) { const ids = S.ids(), n = ids.filter(id => DON[id]).length; E.splice(1, 0, { name: `${S.name} 세트 ${n}/${ids.length}`, desc: FOWN[S.furn] ? `${FURN[S.furn].name} 받음!` : `다 기증하면 ${FURN[S.furn].name}(가구) + ✦20 · 남은: ${ids.filter(id => !DON[id]).map(id => ITEMS[id].name).join(', ')}`, tag: FOWN[S.furn] ? '완료' : `${n}/${ids.length}`, col: FOWN[S.furn] ? '#9be37a' : '#efe2c8', act: () => { } }); } } catch (e) { } return E; })(museumEntries) : undefined;
+
+// ===== 3) 다음 마을 예고 (세계 지도에서 잠긴 마을을 누르면) =====
+const TEASE = { acorn: [L('계획이', '도토리 시티…! 다람쥐들이 사는 커다란 나무 도시래.'), L('계획이', '거기선… 다람쥐인 척! 꼬리는 크니까 오히려 잘 맞을지도?'), L('안노랑', '(볼에 도토리를 가득 넣으면… 다람쥐 같겠지?)'), L('계획이', '다음 업데이트에서 열려요! 기대해 줘!')],
+  snow: [L('계획이', '반짝 눈꽃마을…! 펭귄들이 사는 얼음 마을이래.'), L('계획이', '거기선… 펭귄인 척! 뒤뚱뒤뚱 걸어야 해.'), L('안노랑', '(공룡은… 추위에 약한데…)'), L('계획이', '겨울 업데이트에서 열려요! 기대해 줘!')] };
+fastTravel = (o => id => { const v = WORLD.find(w => w.id === id); if (v && !v.open() && TEASE[id]) { WMAP = false; say(TEASE[id]); return true; } return o(id); })(fastTravel);
+
+// ===== 4) 소리 크기: 음악 · 효과음 따로 (작게 / 보통 / 크게) =====
+const VOL = [.4, 1, 1.6], VOL_N = ['작게', '보통', '크게'];
+if (CFG.mv === undefined) CFG.mv = 1; if (CFG.sv === undefined) CFG.sv = 1;
+tone = (o => (f, d, type, v = .06, t0, sl) => o(f, d, type, v * VOL[window.__musOn ? CFG.mv : CFG.sv], t0, sl))(tone);
+noise = (o => (d, v = .08, fq) => o(d, v * VOL[window.__musOn ? CFG.mv : CFG.sv], fq))(noise);
+musicTick = (o => dt => { window.__musOn = 1; try { return o(dt); } finally { window.__musOn = 0; } })(musicTick);
+lifeEntries = (orig => m => { const E = orig(m); if (m.kind === 'settings' && m.tab === 0) {
+    E.splice(1, 0, { name: '🎵 음악 크기', desc: '배경 음악만 크게/작게', tag: VOL_N[CFG.mv], col: '#ffd23f', act: () => { CFG.mv = (CFG.mv + 1) % 3; saveCfg(); } },
+      { name: '🔔 효과음 크기', desc: '꼬리·줍기·요리 소리', tag: VOL_N[CFG.sv], col: '#ffd23f', act: () => { CFG.sv = (CFG.sv + 1) % 3; saveCfg(); sfx('pick'); } },
+      { name: '🌼 느긋 모드', desc: '받는 피해 절반 · 보스 체력 -30% (아이·처음 하는 분께 추천)', tag: CFG.easy ? '켜짐' : '꺼짐', col: CFG.easy ? '#9be37a' : '#efe2c8', act: () => { CFG.easy = CFG.easy ? 0 : 1; saveCfg(); pmsg(CFG.easy ? '느긋 모드 켰어요' : '느긋 모드 껐어요'); } }); }
+  return E; })(lifeEntries);
+
+// ===== 5) 느긋 모드 =====
+hurtPlayer = (o => (dmg, src) => o(CFG.easy && dmg > 0 ? Math.max(1, Math.round(dmg * .5)) : dmg, src))(hurtPlayer);
+function easyBoss(b) { if (!CFG.easy || !b || b._easy) return; b._easy = 1; b.max = Math.round(b.max * .7); b.hp = Math.min(b.hp, b.max); }
+startBoss = (o => () => { o(); easyBoss(typeof boss !== 'undefined' && boss); })(startBoss);
+catStart = (o => () => { o(); easyBoss(CATB); })(catStart);
+clStart = (o => () => { o(); easyBoss(CLB); })(clStart);
+
+// ===== 6) 2D 화면(3D가 안 되는 기기): 물가마을 · 구름언덕 바닥을 색으로 그려요 =====
+prerenderGround = (o => () => { o(); if (typeof USE3D !== 'undefined' && USE3D) return; const g = groundC.getContext('2d');
+  const inR = (O, x, y) => x >= O.x && x < O.x + O.w && y >= O.y && y < O.y + O.h, COL = { [G_WATER]: '#7fcaf2', [G_DECK]: '#c98a5a', [G_ISLE]: '#8fd16f', [G_MARSH]: '#7a9a5a', [G_SHAL]: '#a8dcf0', [G_CLAND]: '#6fc65e', [G_CDECK]: '#fff3e0' };
+  for (let y = 58; y < HT; y++) for (let x = 0; x < W; x++) { const c = ground[y][x]; let col = COL[c]; if (!col) col = inR(CVO, x, y) || y >= CVO.y - 2 ? '#d8d2f5' : '#5aa8d8';
+    else if (solid[y][x] && (c === G_CLAND || c === G_ISLE || c === G_DECK)) col = '#e8d8f0';
+    g.fillStyle = col; g.fillRect(x * T, y * T, T, T); if (c === G_WATER || c === G_SHAL) { g.fillStyle = 'rgba(255,255,255,.25)'; if ((x * 7 + y * 3) % 5 === 0) g.fillRect(x * T + 3, y * T + 6, 8, 2); } if (col === '#d8d2f5' && (x * 5 + y * 11) % 7 === 0) { g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x * T + 8, y * T + 8, 6, 0, 6.29); g.fill(); } } })(prerenderGround);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
@@ -6287,7 +6477,7 @@ function buildWorld3D() {
   const mkInst = (geo, mat, list, fn) => { const im = new THREE.InstancedMesh(geo, mat, list.length); im.castShadow = true; im.receiveShadow = true; list.forEach((s, i) => { fn(d, s); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); im.instanceMatrix.needsUpdate = true; scene.add(im); return im; };
   const rnd3 = s => ((s.x * 928371 + s.y * 1237) % 997) / 997;
   R3.trunks = mkInst(GEO.c, M('#8a5a3c'), trunkL, (d, s) => { d.position.set(U(s.x), .3, ZU(s.y) - .5); d.scale.set(.13, .6, .13); d.rotation.set(0, 0, 0); });
-  const sMid = new THREE.SphereBufferGeometry(1, 15, 11); // 나무 머리: 성능용 중간 해상도
+  const sMid = new THREE.SphereBufferGeometry(1, 12, 9); // 나무 머리: 성능용 중간 해상도
   R3.round = mkInst(sMid, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .8 }), roundL, (d, s) => { const r = rnd3(s), k = s.sc || 1; d.position.set(U(s.x), (.98 + r * .12) * k, ZU(s.y) - .5); d.scale.set((.62 + r * .1) * k, (.56 + r * .1) * k, (.62 + r * .1) * k); d.rotation.set(0, r * 6, 0); });
   R3.round2 = mkInst(sMid, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .8 }), roundL, (d, s) => { const r = rnd3(s), k = s.sc || 1; d.position.set(U(s.x) - .12 * k, (1.28 + r * .12) * k, ZU(s.y) - .5 - .12 * k); d.scale.set(.36 * k, .3 * k, .36 * k); });
   R3.pine = mkInst(GEO.co, new THREE.MeshStandardMaterial({ color: '#4a9a52', roughness: .8 }), pineL, (d, s) => { const r = rnd3(s), k = s.sc || 1; d.position.set(U(s.x), (1.1 + r * .1) * k, ZU(s.y) - .5); d.scale.set(.55 * k, (1.4 + r * .2) * k, .55 * k); d.rotation.set(0, r * 6, 0); });
