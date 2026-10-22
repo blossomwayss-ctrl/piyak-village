@@ -527,11 +527,11 @@ const Q = {
 };
 let hearts = 0, stars = 0, partyReady = false, partyDone = false;
 const HATS = {
-  egg: { name: '계란 베레모', skill: '꼬리', price: 0, desc: '꼬리 휘두르기' },
-  straw: { name: '밀짚모자', skill: '물뿌리기', price: 5, desc: '물을 뿌리면 당근이 쑥쑥 자라요' },
-  wool: { name: '털모자', skill: '데굴데굴', price: 8, desc: '몸을 말아 데굴데굴 돌진!' },
-  pumpkin: { name: '호박모자', skill: '호박펑', price: 10, desc: '주변을 넓게 펑! (할로윈 한정)' },
-  baseball: { name: '야구모자', skill: '꼬리', price: 0, desc: '승부욕을 이긴 증표' },
+  egg: { name: '계란 베레모', skill: '꼬리', price: 0, desc: '안노랑의 상징 · 기본 모자' },
+  straw: { name: '밀짚모자', skill: '꼬리', price: 5, desc: '외형 · 여름 농부 느낌 물씬' },
+  wool: { name: '털모자', skill: '꼬리', price: 8, desc: '외형 · 겨울에도 따끈따끈' },
+  pumpkin: { name: '호박모자', skill: '꼬리', price: 10, desc: '외형 · 할로윈 한정 호박 모자' },
+  baseball: { name: '야구모자', skill: '꼬리', price: 0, desc: '외형 · 승부욕을 이긴 증표' },
 };
 const HAT_ORDER = ['egg', 'straw', 'wool', 'pumpkin', 'baseball'];
 let shakeT = 0, shakeA = 0, stopT = 0; const pickups = [];
@@ -630,11 +630,11 @@ function panelEntries() {
   if (m.kind === 'ranch') return ranchEntries(m);
   if (m.kind === 'dex') return dexEntries(m);
   const buy = (id, price, once) => () => { if (once && (inv[id] > 0)) { pmsg('이미 갖고 있어!'); return; } if (hearts < price) { sfx('bonk'); pmsg(`별사탕이 ${price - hearts}개 모자라!`, 1); return; } hearts -= price; addItem(id); sfx('done'); pmsg(`${ITEMS[id].name} 구매! (보유 ${inv[id]})`); save(); };
-  if (m.kind === 'shop' && m.tab === 0) for (const h of HAT_ORDER) { if (!HATS[h].price) continue; const H0 = HATS[h], own = hatOwned.includes(h), wear = hat === h; E.push({ img: hatImg(h), name: H0.name, desc: `${KB()} ${H0.skill} · ${H0.desc}`, tag: wear ? '착용 중' : own ? '쓰기' : `✦ ${H0.price}`, col: wear ? '#9be37a' : (own || hearts >= H0.price) ? '#ffd23f' : '#d9cbb5', act: () => {
+  if (m.kind === 'shop' && m.tab === 0) for (const h of HAT_ORDER) { if (!HATS[h].price) continue; const H0 = HATS[h], own = hatOwned.includes(h), wear = hat === h; E.push({ img: hatImg(h), name: H0.name, desc: H0.desc, tag: wear ? '착용 중' : own ? '쓰기' : `✦ ${H0.price}`, col: wear ? '#9be37a' : (own || hearts >= H0.price) ? '#ffd23f' : '#d9cbb5', act: () => {
       if (own) { setHat(h); menu = null; return; }
       if (hearts < H0.price) { sfx('bonk'); pmsg(`별사탕이 ${H0.price - hearts}개 모자라! 풀숲을 꼬리로 쳐봐`, 1); return; }
       hearts -= H0.price; hatOwned.push(h); hatOwned.sort((a, b) => HAT_ORDER.indexOf(a) - HAT_ORDER.indexOf(b)); hat = h; menu = null; sfx('star'); poof(P.x, P.y - 12); burst(P.x, P.y - 18, '#ffd23f', 24);
-      say([L('너구리 상점', `${H0.name} 구매 완료! 바로 써봐~`), L('안노랑', `${KB()}${TOUCH() ? ' 버튼' : ' 키'}로 ${H0.skill}! 모자는 ${TOUCH() ? '왼쪽 위 모자 칸을 눌러서' : 'C 키로'} 바꿀 수 있어.`)]); save(); } }); }
+      say([L('너구리 상점', `${H0.name} 구매 완료! 바로 써봐~`), L('안노랑', `(어울려…? 멋내기용 모자는 ${TOUCH() ? '왼쪽 위 모자 칸을 눌러서' : 'C 키로'} 바꿔 쓸 수 있어.)`)]); save(); } }); }
   if (m.kind === 'shop' && m.tab === 1) for (const id of ['ribbon', 'bell', 'cone', 'cape', 'vest']) { const it = ITEMS[id], own = inv[id] > 0; E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: buy(id, it.price, true) }); }
   if (m.kind === 'shop' && m.tab === 2) for (const id of ['tomato', 'bread', 'pot_red', 'feather']) { const it = ITEMS[id]; E.push({ img: itemImg(id), name: `${it.name}  (보유 ${inv[id] || 0})`, desc: it.desc, tag: `✦ ${it.price}`, col: hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: buy(id, it.price, false) }); }
   if (m.kind === 'bag') {
@@ -760,9 +760,9 @@ function updateDungeon(dt) {
     else if (b.st === 'crouch' && b.t <= 0) { b.st = 'jump'; b.t = .62; b.sx = b.x; b.sy = b.y; const r = ROOMS.find(q => q.id === 'R4'); b.jx = Math.max((r.x0 + 2.5) * T, Math.min((r.x1 - 2.5) * T, P.x)); b.jy = Math.max((r.y0 + 3) * T, Math.min((r.y1 - 1.5) * T, P.y)); sfx('swipe'); }
     else if (b.st === 'jump') { const k = 1 - Math.max(0, b.t) / .62; b.x = b.sx + (b.jx - b.sx) * k; b.y = b.sy + (b.jy - b.sy) * k; b.z = Math.sin(k * Math.PI) * 34; if (b.t <= 0) { b.z = 0; b.st = 'wait'; b.t = fast ? .55 : .95; b.ring = 1; shake(3.2, .3); sfx('bonk'); noise(.25, .14, 300); for (let i = 0; i < 16; i++) parts.push({ x: b.x + (Math.random() - .5) * 30, y: b.y, vx: (Math.random() - .5) * 120, vy: -30 - Math.random() * 40, t: .5, c: '#8a7f8c', g: 200 }); } }
     else if (b.st === 'dead' && b.t <= 0) {
-      boss = null; bossDead = true; roomState.R4.cleared = true; setDoor(DOORS[2], true); stars++; hpBonus += 4; hp = maxHp();
+      const first = !bossDead; boss = null; bossDead = true; roomState.R4.cleared = true; setDoor(DOORS[2], true); if (first) { stars++; hpBonus += 4; } hp = maxHp(); if (typeof bossBeaten === 'function') bossBeaten(first);
       portal = { x: 10 * T, y: 42 * T };
-      itemGet(SP.heartc, '버섯 대왕과 화해!', '★+1 · 용기 하트 +2칸'); save(); if (typeof caveMakeUp === 'function') caveMakeUp();
+      if (first) { itemGet(SP.heartc, '버섯 대왕과 화해!', '★+1 · 용기 하트 +2칸'); save(); if (typeof caveMakeUp === 'function') caveMakeUp(); } else { hearts += 15; addItem('cap', 3); itemGet(SP.heartc, '오늘도 화해 완료!', '✦+15 · 버섯 갓 ×3 · 내일 또 심술 부릴지도?'); save(); }
     }
     if (b.st !== 'dead' && b.st !== 'dizzy' && b.st !== 'rage' && b.z < 6 && Math.hypot(P.x - b.x, P.y - b.y) < (b.st === 'charge' ? 20 : 16)) hurtPlayer(3, b);
   }
@@ -1042,7 +1042,7 @@ function tutText() {
 function startGame() {
   state = 'play'; audio(); musicOn = true;
   initLivestock();
-  if (loaded && !STARTER) { STARTER = 1; for (let i = 0; i < 3; i++) addItem('seed_carrot'); setTimeout(() => banner('농장 선물 도착!', '당근 씨앗 3개 · 밭에 심고 밀짚모자로 물을 줘요', '#9be37a'), 1500); }
+  if (loaded && !STARTER) { STARTER = 1; for (let i = 0; i < 3; i++) addItem('seed_carrot'); setTimeout(() => banner('농장 선물 도착!', '당근 씨앗 3개 · 밭에 심고 밭 앞에서 A로 물을 줘요', '#9be37a'), 1500); }
   if (loaded) { toast(partyDone ? '다시 왔구나! 마을에서 마음껏 놀자' : '이어하기! 반가워 노랑아'); if (!tut.done) { tut.done = true; } return; }
   say([L('계획이', '노랑아! 드디어 삐약마을에 이사 왔어!'), L('먹보', '여긴 병아리들만 사는 마을이래… 노랑이는 좀… 많이 크지만.'), L('안노랑', '(괜찮아. 달걀 모자도 썼고… 나는 병아리야!)'), L('승부욕', '마을 친구들 부탁을 들어주면 다들 진짜 병아리로 인정해 줄걸? 축제 날까지 시합이다!'), L('안노랑', `좋아, ! 뜬 친구들한테 가보자! (${KA()} 대화 · ${KB()} 꼬리) 풀숲을 치면 별사탕도 나와!`)], () => startTut());
 }
@@ -1103,7 +1103,8 @@ function dirVec() { return P.dir === 'left' ? { x: -1, y: 0 } : P.dir === 'right
 function action() {
   if (fishing) { fishing = null; toast('낚싯대를 거뒀다'); return; }
   if (P.cool > 0 || P.roll > 0) return;
-  if (typeof combatNear === 'function' && combatNear()) swipe(); else if (hat === 'straw') spray(); else if (hat === 'wool') roll(); else if (hat === 'pumpkin') pumpkinBlast(); else swipe();
+  // 모자는 외형만! 꼬리(B)는 늘 꼬리 공격 · 목마른 밭/꽃밭 앞에서는 물뿌리기
+  if (!(typeof combatNear === 'function' && combatNear()) && typeof waterTarget === 'function' && waterTarget()) spray(); else swipe();
 }
 function spray() {
   P.cool = .45; P.spray = .35; sfx('water');
@@ -1291,7 +1292,7 @@ function enterRoom(r) {
     if (r.id === 'R1') { mk('shroom', -40, -10); mk('shroom', 40, -18); mk('shroom', 0, -30); }
     if (r.id === 'R2') { mk('wasp', -30, -20); mk('wasp', 40, 10); }
     if (r.id === 'R3') { mk('shroom', -46, 0); mk('shroom', 46, 0); mk('wasp', 0, -30); mk('wasp', -20, 24); }
-    if (r.id === 'R4' && !bossDead) startBoss();
+    if (r.id === 'R4' && (!bossDead || (typeof bossRematch === 'function' && bossRematch()))) startBoss();
   }
 }
 function npcBlock(x, y) { for (const n of NPCS) if (!n.follow && Math.abs(n.x - x) < 9 && Math.abs(n.y - y) < 5) return true; return false; }
@@ -1739,7 +1740,7 @@ function drawHUD() {
     { const b = B.quick, id = quickItem(); if (id) { uiCircle(b, 'rgba(255,248,231,.82)'); const img = itemImg(id), k = b.r * 1.15 / Math.max(img.width, img.height); ctx.imageSmoothingEnabled = img.width > 40; ctx.drawImage(img, b.x - img.width * k / 2, b.y - img.height * k / 2, img.width * k, img.height * k); text('×' + inv[id], b.x + b.r * .6, b.y + b.r * .62, b.r * .45, UIC.ink, 'center'); } }
     if (stick.id !== null) { ctx.fillStyle = 'rgba(255,248,231,.25)'; ctx.beginPath(); ctx.arc(stick.ox, stick.oy, 46 * DPR, 0, 6.29); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2 * DPR; ctx.stroke(); const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy), k = Math.min(1, 40 * DPR / (d || 1)); ctx.fillStyle = 'rgba(255,248,231,.85)'; ctx.beginPath(); ctx.arc(stick.ox + dx * k, stick.oy + dy * k, 20 * DPR, 0, 6.29); ctx.fill(); }
     else if (time < 30 && dragHints() < 3) { const hx = SA.l + (CW - SA.l - SA.r) * .25, hy = CH - SA.b - 34 * DPR; ctx.font = `${13 * DPR}px ${FONT}`; const hw = ctx.measureText('여기를 드래그해서 이동').width + 26 * DPR; ctx.fillStyle = 'rgba(59,42,47,.55)'; rr(hx - hw / 2, hy - 13 * DPR, hw, 26 * DPR, 13 * DPR); ctx.fill(); text('여기를 드래그해서 이동', hx, hy + 1, 13 * DPR, '#fff', 'center'); }
-  } else if (state === 'play' && time < 25) text(`방향키 이동 · Z 대화 · X ${HATS[hat].skill}${hatOwned.length > 1 ? ' · C 모자' : ''} · I 가방 · Q 물약 · P 노랑폰 · Tab 지도`, CW / 2, CH - SA.b - 22 * DPR, 13 * DPR, '#fff', 'center', true);
+  } else if (state === 'play' && time < 25) text(`방향키 이동 · Z 대화 · X 꼬리 · V 구르기${hatOwned.length > 1 ? ' · C 모자' : ''} · I 가방 · Q 물약 · P 노랑폰 · Tab 지도`, CW / 2, CH - SA.b - 22 * DPR, 13 * DPR, '#fff', 'center', true);
   if (state === 'play' || state === 'party' || state === 'end') drawMinimap();
   drawClock(u);
   // top-right: 노랑폰 (with stamp badge) + fullscreen
@@ -2014,8 +2015,8 @@ function stat(k, n = 1) {
 
 // ---------- 보금자리 (Pokopia style habitats) ----------
 const HABS = {
-  flower: { name: '꽃밭', cost: { candy: 3 }, finish: 'water', fin: '밀짚모자로 물 주기', visitor: 'bee', desc: '알록달록 꽃밭. 꿀을 좋아하는 친구가 올지도?' },
-  pond: { name: '작은 물웅덩이', cost: { candy: 5 }, finish: 'water', fin: '밀짚모자로 물 채우기', visitor: 'turtle', desc: '찰랑찰랑 웅덩이. 느긋한 친구가 좋아해요' },
+  flower: { name: '꽃밭', cost: { candy: 3 }, finish: 'water', fin: '꼬리(B)로 물 주기', visitor: 'bee', desc: '알록달록 꽃밭. 꿀을 좋아하는 친구가 올지도?' },
+  pond: { name: '작은 물웅덩이', cost: { candy: 5 }, finish: 'water', fin: '꼬리(B)로 물 채우기', visitor: 'turtle', desc: '찰랑찰랑 웅덩이. 느긋한 친구가 좋아해요' },
   hay: { name: '포근한 짚더미', cost: { candy: 4, acorn: 1 }, finish: 'tail', fin: '꼬리로 툭툭 다지기', visitor: 'cat', desc: '햇볕에 데운 짚더미. 낮잠꾸러기가 찾아와요' },
   log: { name: '통나무 쉼터', cost: { candy: 3, acorn: 3 }, finish: 'tail', fin: '꼬리로 툭툭 다지기', visitor: 'goat', desc: '튼튼한 통나무 쉼터. 뛰노는 친구가 좋아해요' },
 };
@@ -2045,7 +2046,7 @@ function buildHab(lot, k) {
   const H0 = HABS[k]; if (!canPay(H0.cost)) { sfx('bonk'); pmsg('재료가 모자라!', 1); return; }
   for (const [c, n] of Object.entries(H0.cost)) { if (c === 'candy') hearts -= n; else inv[c] -= n; }
   lot.kind = k; lot.st = 1; lot.prog = 0; menu = null; poof(lot.x, lot.y - 6); burst(lot.x, lot.y - 6, '#ffd23f', 16); sfx('done');
-  say([L('계획이', `${H0.name} 자리를 잡았어! 이제 ${H0.fin}만 하면 완성이야.`), ...(H0.finish === 'water' && !hatOwned.includes('straw') ? [L('먹보', '물뿌리기는... 너구리 상점의 밀짚모자가 있어야 해!')] : [])]); save();
+  say([L('계획이', `${H0.name} 자리를 잡았어! 이제 ${H0.fin}만 하면 완성이야.`), ...(H0.finish === 'water' ? [L('먹보', '그 앞에서 꼬리(B)를 누르면 물이 촥~ 뿌려져!')] : [])]); save();
 }
 function habFinishHit(x, y, R, how) {
   for (const l of LOTS) if (l.st === 1 && HABS[l.kind].finish === how && Math.hypot(l.x - x, l.y - y) < R + 16) {
@@ -2085,7 +2086,7 @@ const APPS = [
   { id: 'photo', name: '사진', ico: '📸', col: '#c9b6ff', go: () => { phone = null; makeCard(true); } },
   { id: 'save', name: '저장', ico: '💾', col: '#bfe0ff', go: () => { phone = null; openSaveUI(); } },
   { id: 'set', name: '설정', ico: '⚙️', col: '#d9cbb5', go: () => { phone = null; menu = { kind: 'settings', title: '설정', tabs: ['설정'], tab: 0, sel: 0, page: 0 }; } },
-  { id: 'help', name: '도움말', ico: '💡', col: '#ffe066', go: () => { phone = null; say([L('계획이', `조작법 정리해 줄게! ${TOUCH() ? '왼쪽 드래그로 이동, A 대화, B 모자 기술!' : '방향키 이동, Z 대화, X 모자 기술, C 모자 바꾸기, I 가방, Q 물약, P 노랑폰!'}`), L('먹보', '친구한테 매일 첫인사하면 우정 하트가 쌓여! 하트가 많아지면 최대 HP도 늘어나.'), L('승부욕', '노랑폰 스탬프에서 오늘의 할 일을 깨면 별사탕을 줘. 내가 더 빨리 깰 거야!'), L('계획이', '팻말 있는 빈 터에 보금자리를 지으면 새 친구가 이사 와. 모자 기술로 마무리하는 거 잊지 마!'), L('먹보', '밭에 씨앗을 심고 밀짚모자로 물을 주면 다음 날 쑥 자라! 수확한 걸로 집 문 앞에서 요리하자. 요리는 내가 다 먹어줄게…'), L('계획이', '곤충은 꼬리로 톡 잡고, 물가에서 ' + KA() + '를 누르면 낚시! 찌가 쏙 들어갈 때 다시 눌러. 잡은 건 숲의 부엉 박사 박물관에 기증하자.'), L('승부욕', '매일 아침 병아리 집 앞 둥지에 달걀이 생기고, 음메 할아버지는 우유를 줘. 양은 꼬리로 톡 치면 양털! 남는 건 너구리 상점에 팔자!')]); } },
+  { id: 'help', name: '도움말', ico: '💡', col: '#ffe066', go: () => { phone = null; say([L('계획이', `조작법 정리해 줄게! ${TOUCH() ? '왼쪽 드래그로 이동, A 대화, B 꼬리(밭 앞에선 물뿌리기), 구르기 버튼으로 휙! 모자는 멋내기용이야.' : '방향키 이동, Z 대화, X 꼬리(밭 앞에선 물뿌리기), V 구르기, C 모자 바꾸기(멋내기), I 가방, Q 물약, P 노랑폰!'}`), L('먹보', '친구한테 매일 첫인사하면 우정 하트가 쌓여! 하트가 많아지면 최대 HP도 늘어나.'), L('승부욕', '노랑폰 스탬프에서 오늘의 할 일을 깨면 별사탕을 줘. 내가 더 빨리 깰 거야!'), L('계획이', '팻말 있는 빈 터에 보금자리를 지으면 새 친구가 이사 와. 모자 기술로 마무리하는 거 잊지 마!'), L('먹보', '밭에 씨앗을 심고 밀짚모자로 물을 주면 다음 날 쑥 자라! 수확한 걸로 집 문 앞에서 요리하자. 요리는 내가 다 먹어줄게…'), L('계획이', '곤충은 꼬리로 톡 잡고, 물가에서 ' + KA() + '를 누르면 낚시! 찌가 쏙 들어갈 때 다시 눌러. 잡은 건 숲의 부엉 박사 박물관에 기증하자.'), L('승부욕', '매일 아침 병아리 집 앞 둥지에 달걀이 생기고, 음메 할아버지는 우유를 줘. 양은 꼬리로 톡 치면 양털! 남는 건 너구리 상점에 팔자!')]); } },
   { id: 'sound', name: '소리', ico: '🔊', col: '#ffd23f', go: () => { toggleMute(); } },
 ];
 let STARTER = 0;
@@ -2365,7 +2366,8 @@ function farmInteract() {
   if (nearKitchen()) { menu = { kind: 'cook', title: '안노랑 부엌', tabs: ['요리하기', '레시피 도감'], tab: 0, sel: 0, page: 0 }; sfx('blip'); return true; }
   const p = frontPlot(); if (!p || moles.some(m => m.px === p.x && m.py === p.y && m.up > 0)) return false;
   if (p.seed && p.stage >= SEEDS[p.seed].days) { const k = p.seed; p.seed = null; p.stage = 0; p.crop = null; p.wet = false; addItem(k); if (typeof chickBonus === 'function') chickBonus('harvest', k); sfx('pick'); if (typeof emote === 'function') emote(null, 'note', 1.3); burst(p.x * T + 8, p.y * T + 8, '#9be37a', 10); floaters.push({ x: p.x * T + 8, y: p.y * T, t: 1.2, text: `${SEEDS[k].name} 수확!` }); stat('harvest'); save(); return true; }
-  if (p.seed) { toast(p.wet ? `${SEEDS[p.seed].name}: 오늘 물 줬어! 내일 또 자라 (${p.stage}/${SEEDS[p.seed].days})` : `${SEEDS[p.seed].name}: 목말라 보여… 밀짚모자로 물을 주자 (${p.stage}/${SEEDS[p.seed].days})`); return true; }
+  if (p.seed && !p.wet && p.stage < SEEDS[p.seed].days && !raining()) { spray(); return true; }
+  if (p.seed) { toast(p.wet ? `${SEEDS[p.seed].name}: 오늘 물 줬어! 내일 또 자라 (${p.stage}/${SEEDS[p.seed].days})` : `${SEEDS[p.seed].name}: 목말라 보여… 밭 앞에서 A나 꼬리로 물 주기 (${p.stage}/${SEEDS[p.seed].days})`); return true; }
   const own = seedsOwned().filter(k => !!SEEDS[k].paddy === isPaddy(p));
   if (!own.length) { toast(isPaddy(p) ? '여긴 논이야. 벼 모종을 심자 (너구리 상점)' : '빈 밭이야. 너구리 상점에서 이번 계절 씨앗을 사 오자'); return true; }
   if (own.length === 1) { plantSeed(p, own[0]); return true; }
@@ -3124,7 +3126,7 @@ function briefEntries() {
   row(marketDay() ? '🛒 오늘은 5일장!' : '5일장', marketDay() ? `인기 품목: ${marketHot().map(k => ITEMS[k].name).join(' · ')} (×2)` : `${daysToMarket()}일 뒤 장날`, marketDay() ? '오늘' : `D-${daysToMarket()}`, marketDay() ? '#ff8fa3' : '#efe2c8');
   const ws = MACH.filter(m => wsReady(m.k)); if (ws.length) row('🧀 공방 완성품이 기다려요', ws.map(m => ITEMS[m.out].name).join(' · '), '완성', '#9be37a');
   const crops = plots.filter(p => isFarmPlot(p) && p.seed && p.stage >= SEEDS[p.seed].days).length; if (crops) row(`🥕 수확할 작물 ${crops}개`, '밭으로 가 보자', '수확', '#9be37a');
-  const dry = plots.filter(p => isFarmPlot(p) && p.seed && !p.wet && p.stage < SEEDS[p.seed].days).length; if (dry && !raining()) row(`💧 목마른 작물 ${dry}개`, '밀짚모자로 물을 주자', '물', '#bfe0ff');
+  const dry = plots.filter(p => isFarmPlot(p) && p.seed && !p.wet && p.stage < SEEDS[p.seed].days).length; if (dry && !raining()) row(`💧 목마른 작물 ${dry}개`, '밭 앞에서 A로 물 주기', '물', '#bfe0ff');
   const prod = typeof LIVE !== 'undefined' ? LIVE.filter(a => prodReady(a)).length : 0; if (prod) row(`🐔 가축 선물 ${prod}개`, '쓰다듬어서 받기', '선물', '#9be37a');
   const today = Object.keys(BDAY).filter(id => isBday(id)); if (today.length) row(`🎂 오늘 생일: ${today.map(id => npcById(id).name).join(', ')}`, `좋아하는 요리를 선물하면 우정 3배!`, '생일', '#ff8fa3');
   else { const u = upcomingBdays(1)[0]; if (u) row(`다가오는 생일: ${npcById(u.id).name}`, `좋아하는 것: ${ITEMS[FAVE[u.id]].name}`, `D-${u.d}`); }
@@ -4628,6 +4630,38 @@ function bossLook3D() { if (!R3 || !boss) return; const m = R3.ents.get('boss');
   bb.rotation.x = boss.st === 'charge' ? boss.roll : 0; bb.rotation.z = boss.st === 'dizzy' ? Math.sin(time * 8) * .18 : boss.st === 'rage' ? Math.sin(time * 40) * .05 : 0; }
 updateTown = (orig => dt => { orig(dt); if (state === 'play' && !dlg && !menu) sporeTick(dt); })(updateTown);
 drawOverlay4 = (o => () => { bossLook3D(); drawBossFx(); o(); drawDodgeBtn(); })(drawOverlay4);
+
+// ===== 물뿌리기: 모자 없이도, 목마른 밭·꽃밭·웅덩이 앞에서 꼬리(B) =====
+function waterTarget() {
+  if (curRoom.dungeon) return false; const d = dirVec();
+  for (const dist of [6, 16, 26]) for (const off of [-6, 0, 6]) { const px = P.x + d.x * dist + (d.y ? off : 0), py = P.y - 4 + d.y * dist + (d.x ? off * .6 : 0), p = plotAt(Math.floor(px / T), Math.floor(py / T)); if (!p) continue;
+    if (isFarmPlot(p) && p.seed && !p.wet && p.stage < SEEDS[p.seed].days) return true; if (p.y === 19 && (p.crop === 'picked' || p.crop === 'sprout')) return true; }
+  const hx = P.x + d.x * 18, hy = P.y + d.y * 18; return LOTS.some(l => l.st === 1 && HABS[l.kind].finish === 'water' && Math.hypot(l.x - hx, l.y - hy) < 30);
+}
+
+// ===== 몬스터 리젠 =====
+// 숲: 동시에 최대 6마리 · 하나 놀래 주면 60초 뒤 다른 곳에 새로 나타나요 (안노랑 근처 150 안에는 안 나타나요)
+// 동굴 방(입구·수정·보물): 마지막으로 다 정리하고 10분 지나서 동굴에 다시 들어오면 장난꾸러기가 다시 모여요 (문·열쇠·퍼즐은 그대로)
+// 버섯 대왕: 화해한 다음 날부터 하루 한 번 다시 심술 (재대결 보상 ✦15 + 버섯 갓 3개)
+const REGEN = { forestMax: 6, forestDelay: 60, caveMin: 10 };
+const RESPQ = []; // 숲 리젠 예정 시각(초)
+let ROOMCLR = {}, BOSSDAY = 0, REFILL = {};
+killEnemy = (orig => e => { const forest = !e.room; orig(e); if (forest) RESPQ.push(playClock() + REGEN.forestDelay); })(killEnemy);
+function playClock() { return performance.now() / 1000; }
+// 기존 5초마다 채우기 → 처음엔 천천히 채우고, 놀래 준 뒤엔 60초 대기
+spawnEnemy = (orig => () => { const now = playClock(), alive = enemies.filter(e => !e.room).length; for (let i = RESPQ.length - 1; i >= 0; i--) if (RESPQ[i] <= now) RESPQ.splice(i, 1); if (alive + RESPQ.length >= REGEN.forestMax) return; orig(); })(spawnEnemy);
+function caveRefill() { const now = Date.now(), back = [];
+  for (const id of ['R1', 'R2', 'R3']) { const st = roomState[id]; if (!st.cleared || !st.visited) continue; const t0 = ROOMCLR[id] || 0; if (now - t0 >= REGEN.caveMin * 60000) { st.visited = false; REFILL[id] = 1; back.push(id); } }
+  if (back.length) { toast('장난꾸러기들이 다시 모였어요! 살금살금…'); if (back.includes(curRoom.id)) enterRoom(curRoom); } }
+function bossRematch() { return bossDead && BOSSDAY !== dayKey(); }
+function bossBeaten(first) { BOSSDAY = dayKey(); }
+function regenTick() {
+  const inCave = !!curRoom.dungeon; if (inCave && !HUNT.wasCave && state === 'play') { caveRefill(); if (bossRematch()) roomState.R4.visited = false; } HUNT.wasCave = inCave;
+  for (const id of ['R1', 'R2', 'R3']) { const st = roomState[id]; if (st.visited && st.cleared && !enemies.some(e => e.room === id) && (REFILL[id] || !ROOMCLR[id])) { ROOMCLR[id] = Date.now(); delete REFILL[id]; } }
+}
+updateTown = (orig => dt => { orig(dt); if (state === 'play') regenTick(); })(updateTown);
+townSave = (orig => () => Object.assign(orig(), { rg: { rc: ROOMCLR, bd: BOSSDAY } }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.rg) { ROOMCLR = d.rg.rc || {}; BOSSDAY = d.rg.bd || 0; } })(townLoad);
 
 // ---------- weapon.js: 꼬리 무기 — 꼬리 끝에 달고 휘둘러요 (외형 + 효과) ----------
 const TWPN = {
