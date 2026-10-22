@@ -165,7 +165,7 @@ function tileCanvas(i) {
 let seed = 7; function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
 
 // ---------- map ----------
-const W = 72, H = 34, T = 16, FX = 44, HT = 58; // H: overworld rows, HT: total rows (dungeon below)
+const W = 72, H = 34, T = 16, FX = 44, HT = 86; // H: overworld rows, HT: total rows (dungeon below)
 const G_GRASS = 0, G_PATH = 1, G_WATER = 2, G_MUD = 3, G_PLOT = 4;
 const ground = [], solid = [], fence = [];
 for (let y = 0; y < HT; y++) { ground.push(new Array(W).fill(0)); solid.push(new Array(W).fill(false)); fence.push(new Array(W).fill(false)); }
@@ -3713,11 +3713,11 @@ function bHeld() { return Object.values(btnHeld).includes('b') || !!keys.x || !!
 function crouching() { return bHeld() && (DG.on || BHOLD > .25); }
 function dgGain(base, kind) { if (!DG.on || DG.caughtT > 0) return; const v0 = DG.v; DG.v = Math.min(100, DG.v + base * gearMul(kind)); if (base > 0) DG.flash = .25; if (v0 < 60 && DG.v >= 60) { emote(null, 'sweat', 1.4); sfx('gulp'); } if (DG.v >= 100 && DG.onCaught) { DG.caughtT = 1.2; const f = DG.onCaught; f(); } }
 function dgPeep(win = 1.1) { DG.peep = { t: win * peepMul(), t0: win * peepMul() }; sfx('blip'); }
-function dgPeepPress() { if (!DG.peep) return false; DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.1, text: '삐약!', col: '#fff3b0' }); sfx('peep'); emote(null, 'note', 1); EP_FX.peepOk = (EP_FX.peepOk || 0) + 1; return true; }
+function dgPeepPress() { if (!DG.peep) return false; DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.1, text: (window.__peepWord || '삐약') + '!', col: '#fff3b0' }); sfx('peep'); emote(null, 'note', 1); EP_FX.peepOk = (EP_FX.peepOk || 0) + 1; return true; }
 function dgTick(dt) {
   BHOLD = bHeld() && state === 'play' && !menu && !dlg ? BHOLD + dt : 0; if (tut.step === 6 && !tut.done && crouching()) tut.crouchT = (tut.crouchT || 0) + dt;
   if (DG.flash > 0) DG.flash -= dt; if (DG.caughtT > 0) DG.caughtT -= dt;
-  if (DG.peep) { DG.peep.t -= dt; if (DG.peep.t <= 0) { DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.4, text: '어흥! …아, 아니 삐약!', col: '#ff8fa3' }); shake(2, .25); sfx('roar'); emote(null, 'shock', 1.2); EP_FX.peepMiss = (EP_FX.peepMiss || 0) + 1; dgGain(30, 'all'); } }
+  if (DG.peep) { DG.peep.t -= dt; if (DG.peep.t <= 0) { DG.peep = null; floaters.push({ x: P.x, y: P.y - 40, t: 1.4, text: `어흥! …아, 아니 ${window.__peepWord || '삐약'}!`, col: '#ff8fa3' }); shake(2, .25); sfx('roar'); emote(null, 'shock', 1.2); EP_FX.peepMiss = (EP_FX.peepMiss || 0) + 1; dgGain(30, 'all'); } }
   window.__spdMul = DG.on ? (crouching() ? .45 : 1) * (EP && EP.freeze ? 0 : 1) : (EP && EP.freeze ? 0 : 1);
 }
 const EP_FX = {};
@@ -4886,6 +4886,427 @@ townSave = (orig => () => Object.assign(orig(), { ck: { d: CDISH, x: CDEX, fg: F
 townLoad = (orig => d => { if (d && d.ck) { for (const id in d.ck.d || {}) regDish(id, d.ck.d[id]); Object.assign(CDEX, d.ck.x || {}); if (d.ck.fg) FGOT = d.ck.fg; } orig(d); })(townLoad);
 // 3D 준비가 늦게 끝나면 요리 아이콘 다시 그리기
 { let done = false; updateTown = (o => dt => { o(dt); if (!done && R3 && typeof snap3D === 'function') { done = true; for (const id in CDISH) { try { ITEMS[id].icon = snap3D(dishModel(CDISH[id]), 96, { elev: .55, rotY: -.5, pad: 1.25 }); } catch (e) { } } } })(updateTown); }
+
+// ---------- wv.js: 두 번째 마을 「꽥꽥 물가마을」 + 갈대 습지 + 심술 메기 대장 ----------
+// 지도 아래쪽(행 60~85)에 새 지역을 만들어요. 왼쪽 = 물가마을(wv), 오른쪽 = 갈대 습지(wm)
+const WVO = { x: 4, y: 60, w: 64, h: 26 };
+const G_WVOID = 20, G_DECK = 21, G_ISLE = 22, G_MARSH = 23, G_SHAL = 24;
+const wvg = (lx, ly) => [lx + WVO.x, ly + WVO.y];
+// 1) 빈 줄(58~85)은 모두 막고, 지역 안은 물로 채워요
+for (let y = 58; y < HT; y++) for (let x = 0; x < W; x++) { ground[y][x] = G_WVOID; solid[y][x] = true; }
+for (let ly = 0; ly < WVO.h; ly++) for (let lx = 0; lx < WVO.w; lx++) { const [x, y] = wvg(lx, ly); ground[y][x] = G_WATER; solid[y][x] = true; }
+function wvSet(code, lx, ly) { if (lx < 0 || ly < 0 || lx >= WVO.w || ly >= WVO.h) return; const [x, y] = wvg(lx, ly); ground[y][x] = code; solid[y][x] = false; }
+function wvRect(code, x0, y0, x1, y1) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) wvSet(code, x, y); }
+function wvEll(code, cx, cy, rx, ry) { for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) { const dx = (x + .5 - cx) / rx, dy = (y + .5 - cy) / ry; if (dx * dx + dy * dy < 1) wvSet(code, x, y); } }
+// --- 꽥꽥 물가마을 (로컬 x 0~31) ---
+wvEll(G_ISLE, 15, 13, 7.2, 4.6);            // 가운데 섬 (광장)
+wvRect(G_DECK, 14, 17, 17, 23);             // 섬 → 나루터 다리
+wvRect(G_DECK, 9, 22, 22, 24);              // 나루터
+wvRect(G_DECK, 2, 3, 7, 7); wvRect(G_DECK, 7, 6, 9, 7);          // 북서 오리집
+wvRect(G_DECK, 22, 3, 27, 7); wvRect(G_DECK, 20, 6, 22, 7); wvRect(G_DECK, 20, 7, 21, 9); // 북동 오리집
+wvRect(G_DECK, 23, 10, 29, 16); wvRect(G_DECK, 21, 12, 23, 13);  // 수달 상점
+wvEll(G_ISLE, 4.5, 18.5, 3.4, 2.6); wvRect(G_DECK, 7, 15, 9, 16); // 거북 할배 섬
+wvRect(G_DECK, 8, 0, 22, 5); wvRect(G_SHAL, 9, 1, 21, 4); wvRect(G_DECK, 14, 5, 16, 9); // 수영장
+wvRect(G_DECK, 29, 12, 35, 13);             // 습지로 가는 다리
+// --- 갈대 습지 (로컬 x 32~63) ---
+wvEll(G_MARSH, 39.5, 12.5, 5.2, 6.2); wvEll(G_MARSH, 46, 5.6, 4.2, 4); wvEll(G_MARSH, 46, 19, 5, 4.6);
+wvRect(G_DECK, 42, 8, 44, 10); wvRect(G_DECK, 42, 15, 44, 17);
+wvEll(G_MARSH, 54.5, 12.5, 9.4, 8.6); wvEll(G_SHAL, 56, 12.5, 6.4, 5.4); // 메기 대장 얕은 물
+// 2) 집·가게 자리는 막아요 (로컬 좌표)
+const WVB = { houseNW: [3, 3, 6, 5], houseNE: [23, 3, 26, 5], shop: [25, 10, 28, 12], turtle: [3, 17, 4, 17] };
+for (const k in WVB) { const [a, b, c, d] = WVB[k]; for (let y = b; y <= d; y++) for (let x = a; x <= c; x++) { const [gx, gy] = wvg(x, y); solid[gy][gx] = true; } }
+const WVP = { // 주요 위치 (픽셀)
+  dock: { x: (WVO.x + 15.5) * T, y: (WVO.y + 23.4) * T }, boat: { x: (WVO.x + 11.5) * T, y: (WVO.y + 24.6) * T },
+  shopDoor: { x: (WVO.x + 26.5) * T, y: (WVO.y + 13.4) * T }, arena: { x: (WVO.x + 56) * T, y: (WVO.y + 12.5) * T }, pool: { x: (WVO.x + 15) * T, y: (WVO.y + 3) * T },
+  home: { x: 27.6 * T, y: 22.2 * T }, // 삐약마을 연못가 나루터
+};
+ROOMS.push({ id: 'wv', name: '꽥꽥 물가마을', x0: WVO.x, y0: WVO.y - 3, x1: WVO.x + 32, y1: WVO.y + WVO.h }, { id: 'wm', name: '갈대 습지', x0: WVO.x + 32, y0: WVO.y - 3, x1: WVO.x + WVO.w, y1: WVO.y + WVO.h });
+const inWV = () => curRoom && (curRoom.id === 'wv' || curRoom.id === 'wm');
+enterRoom = (o => r => { if ((r.id === 'wv' || r.id === 'wm') && r.name !== lastArea) { lastArea = r.name; if (r.id === 'wv') banner('꽥꽥 물가마을', '이번엔… 오리인 척! 꽥꽥', '#7fcaf2'); else banner('갈대 습지', '장난꾸러기 개구리·모기·가재 주의!', '#9be37a'); } o(r); if (r.id === 'wm') wmSpawn(); })(enterRoom);
+
+// ===== 3) 나룻배: 삐약마을 연못 ↔ 물가마을 =====
+const BOAT_FARE = 3;
+function wvUnlocked() { return bossDead || window.__wvOpen; }
+function boatNear() { if (curRoom.id === 'v1' && Math.hypot(P.x - WVP.home.x, P.y - WVP.home.y) < 22) return 'go'; if (curRoom.id === 'wv' && Math.hypot(P.x - WVP.boat.x, P.y - (WVP.boat.y - 12)) < 26) return 'back'; return null; }
+function boatGo() { const cap = byId('captain');
+  if (!wvUnlocked()) { say([L('꽥선장', '꽥! 강 건너 꽥꽥 물가마을까지 태워 주는 나룻배야.'), L('꽥선장', '그런데 요즘 버섯 동굴 대왕이 심술을 부려서 물길이 흐려… 동굴 일부터 해결해 줄래?'), L('안노랑', '(버섯 대왕이랑 화해하고 오자!)')]); return; }
+  if (hearts < BOAT_FARE) { say([L('꽥선장', `뱃삯은 별사탕 ✦${BOAT_FARE}개야. 꽥!`), L('안노랑', '(지갑이 텅…)')]); return; }
+  say([L('꽥선장', `꽥꽥 물가마을로 출발! 뱃삯 ✦${BOAT_FARE}이야.`), L('꽥선장', '거긴 오리들 마을이니까… 너도 오리인 척 해 봐. 꽥!'), L('안노랑', '(이번엔 오리인 척…!)')], () => { hearts -= BOAT_FARE; sfx('water'); startWipe(() => { warpTo(WVP.dock.x, WVP.dock.y - 8, 'up'); boatToast(); }); }); }
+function boatBack() { say([L('안노랑', '(나룻배를 타고 삐약마을로 돌아갈까?)')], () => { sfx('water'); startWipe(() => { warpTo(WVP.home.x - 10, WVP.home.y - 10, 'up'); }); }); }
+function boatToast() { setTimeout(() => toast('🛶 물결 따라 출렁출렁… 도착!'), 500); }
+townInteract = (orig => () => { const k = boatNear(); if (k === 'go') { boatGo(); return true; } if (k === 'back') { boatBack(); return true; } if (wvNear()) return wvInteract(); return orig(); })(townInteract);
+townHint = (orig => () => { const k = boatNear(); if (k === 'go') return { x: WVP.home.x, y: WVP.home.y - 34, t: `${KA()} 나룻배 (✦${BOAT_FARE})` }; if (k === 'back') return { x: WVP.boat.x, y: WVP.boat.y - 40, t: `${KA()} 삐약마을로` }; const h = wvHint(); if (h) return h; return orig(); })(townHint);
+
+// ===== 4) 주민 =====
+NPCS.push(
+  npc({ id: 'captain', name: '꽥선장', spr: 'captain', x: WVP.home.x - 16, y: WVP.home.y - 10, wander: 0 }),
+  npc({ id: 'wv_chief', name: '꽥꽥 이장', spr: 'wvchief', x: (WVO.x + 15) * T, y: (WVO.y + 12.5) * T, wander: 14 }),
+  npc({ id: 'wv_kid', name: '꽥순이', spr: 'duckling', x: (WVO.x + 12) * T, y: (WVO.y + 14.5) * T, wander: 22 }),
+  npc({ id: 'otter', name: '수달 아저씨', spr: 'otter', x: (WVO.x + 26.5) * T, y: (WVO.y + 14.8) * T, wander: 6 }),
+  npc({ id: 'wv_turtle', name: '느릿 할배', spr: 'turtle', x: (WVO.x + 4.5) * T, y: (WVO.y + 19.6) * T, wander: 4 }),
+);
+const WV_IDS = ['wv_chief', 'wv_kid', 'otter', 'wv_turtle'];
+const WVT = { // 대사: [기본], 퀘스트 진행은 아래 wvTalk 에서
+  wv_chief: ['꽥! 꽥꽥 물가마을에 온 걸 환영하오. …그런데 자네 오리 맞소? 부리가 좀… 이빨이 있는데?', '우리 마을 자랑은 수영 대회! 오리라면 당연히 둥둥 떠야지. 꽥!', '습지 끝 얕은 물에 사는 메기 대장이 요즘 심술이 났다오. 물을 휘저어서 연잎이 다 흔들려.'],
+  wv_kid: ['꽥순이야! 너 새로 온 오리야? 꽥 해 봐 꽥!', '오리는 꼬리를 살랑살랑~ 너는 왜 꼬리가 그렇게 길고 굵어?', '같이 수영 대회 나가자! 이장님이 포스터 붙여 놨어!'],
+  otter: ['어서 와, 수달 상점이야! 조개 방울이랑 물풍선 꼬리 들여놨지.', '연근, 우렁이, 민물새우… 물가마을 특산 재료는 여기서!', '오리인 척하려면 부리 마스크 하나쯤은 있어야지? 히히.'],
+  wv_turtle: ['느으으릿… 어서 오게나… 연잎밥은… 쌀이랑 연잎이랑 연근을… 냄비에…', '메기 대장은… 원래 순한 녀석이었지… 물이 흐려서 앞이 안 보이니 심술이 난 게야…', '서두르지 말게… 거북이는… 백 년을 산다네…'],
+};
+const WVQ = { st: 0 }; // 이장 퀘스트: 0 시작 전 · 1 습지 장난꾸러기 5마리 · 2 완료 · 3 메기 대장
+function wvTalk(n) {
+  if (n.id === 'captain') { boatGo(); return true; }
+  if (!WV_IDS.includes(n.id)) return false;
+  if (n.id === 'otter') { say([L('수달 아저씨', WVT.otter[Math.floor(Math.random() * 3)])], () => openWvShop()); return true; }
+  if (n.id === 'wv_chief') {
+    if (WVQ.st === 0) { WVQ.st = 1; WVQ.n = 0; say([L('꽥꽥 이장', '꽥! 새 오리 친구구먼. 마침 잘 왔소.'), L('꽥꽥 이장', '동쪽 갈대 습지에 장난꾸러기 개구리랑 모기가 들끓어서 아이들이 못 놀아.'), L('꽥꽥 이장', '다섯 마리만 놀래서 쫓아 주겠소? 오리라면… 할 수 있겠지?'), L('안노랑', '(꽥…! 오리답게 해 보자.)')]); return true; }
+    if (WVQ.st === 1) { if (WVQ.n >= 5) { WVQ.st = 2; hearts += 20; accAdd && accAdd('wv_chief', 2, 'quest'); say([L('꽥꽥 이장', '오오, 습지가 조용해졌소! 진짜 오리보다 더 오리 같구먼!'), L('꽥꽥 이장', '고맙소. 별사탕 ✦20이오. 그리고… 습지 끝 메기 대장도 좀 달래 주겠소?')]); itemGet(SP.heartc, '이장님의 부탁 완료!', '✦+20 · 오리 인정도 UP'); WVQ.st = 3; }
+      else say([L('꽥꽥 이장', `습지 장난꾸러기 ${WVQ.n}/5 마리… 조금만 더 부탁하오!`)]); return true; }
+    if (WVQ.st === 3 && !CATS.beaten) { say([L('꽥꽥 이장', '메기 대장은 습지 동쪽 얕은 물에 있소. 물속에서 불쑥 튀어나오니 조심하시오!'), L('꽥꽥 이장', '그림자가 다가오면… 굴러서 피하는 거요!')]); return true; }
+  }
+  if (n.id === 'wv_turtle' && !COOKED.lotusrice && !(inv.lotusrice > 0)) { say([L('느릿 할배', WVT.wv_turtle[0]), L('안노랑', '(연잎밥: 쌀 + 연잎 + 연근을 냄비에!)')]); return true; }
+  const pool = WVT[n.id]; say([L(n.name, pool[Math.floor(Math.random() * pool.length)])]); return true;
+}
+farmTalk = (orig => n => wvTalk(n) || orig(n))(farmTalk);
+
+// ===== 5) 수달 상점 · 특산품 =====
+Object.assign(ITEMS, {
+  lotus: { name: '연근', type: 'use', heal: 3, sell: 7, price: 4 },
+  lotusleaf: { name: '연잎', type: 'mat', sell: 4, price: 3 },
+  snail_w: { name: '우렁이', type: 'use', heal: 2, sell: 6, price: 4 },
+  shrimp: { name: '민물새우', type: 'use', heal: 2, sell: 6, price: 5 },
+  jelly: { name: '개굴 젤리', type: 'mat', sell: 5, desc: '개굴이가 떨어뜨린 말랑말랑 · 곤충이랑 냄비에 넣으면 묘약' },
+  lotusrice: { name: '연잎밥', type: 'use', heal: 14, dish: 1, sell: 26 },
+  shellbell: { name: '조개 방울', type: 'eq', slot: 'tail', spr: 'bell', atk: 3, price: 28, sell: 10 },
+  bubbletail: { name: '물풍선 꼬리', type: 'eq', slot: 'tail', spr: 'pot_blue', atk: 2, price: 22, sell: 8 },
+  pearl: { name: '진주 방울', type: 'eq', slot: 'tail', spr: 'starring', atk: 4, sell: 30 },
+  beak: { name: '노란 부리 마스크', type: 'eq', slot: 'body', spr: 'cape', def: 1, price: 15, sell: 6 },
+});
+Object.assign(ING, { lotus: ['veg', 3, 'calm'], lotusleaf: ['herb', 0, 'quiet'], snail_w: ['fish', 2, 'def'], shrimp: ['fish', 2, 'spd'], jelly: ['mon', 0] });
+for (const id of ['lotus', 'lotusleaf', 'snail_w', 'shrimp']) { const g = ING[id], F = g[2] && SNACK_FX[g[2]]; ITEMS[id].desc = `물가마을 특산 · ${CAT_NAME[g[0]]}${g[1] ? ` · 회복 ${g[1]}` : ''}${F ? ` · ${F.ico} ${F.name}` : ''}`; }
+COOK.push({ out: 'lotusrice', need: { rice: 1, lotusleaf: 1, lotus: 1 } });
+SNACK.lotusrice = ['calm', 900, .72]; ITEMS.lotusrice.desc = `${snackText('lotusrice')} · 용기 +14 · 느릿 할배의 비법`;
+FAVE.wv_chief = 'lotusrice'; FAVE.wv_kid = 'cake'; FAVE.otter = 'soup'; FAVE.wv_turtle = 'lotusrice';
+Object.assign(TWPN, {
+  shellbell: { atk: 3, fx: 'splash', txt: '꼬리 무기 · 꼬리 힘 +3 · 철썩! 맞은 녀석 주변까지 물이 튀어요' },
+  bubbletail: { atk: 2, fx: 'slip', txt: '꼬리 무기 · 꼬리 힘 +2 · 퐁! 맞으면 미끄덩 1초 멈칫' },
+  pearl: { atk: 4, fx: 'wave', txt: '꼬리 무기 · 꼬리 힘 +4 · 물결 펑! 주변 장난꾸러기를 밀어내요 (메기 대장의 선물)' },
+});
+for (const id of ['shellbell', 'bubbletail', 'pearl']) ITEMS[id].desc = TWPN[id].txt;
+ITEMS.beak.desc = '변장 · 튼튼함 +1 · 물가마을에서 오리 인정도가 더 빨리 올라요';
+hitEnemy = (orig => (e, dmg) => { const fx = tailFx(); orig(e, dmg);
+  if (fx === 'splash') { for (const o of enemies.slice()) if (o !== e && o.inv <= 0 && Math.hypot(o.x - e.x, o.y - e.y) < 30) { orig(o, 1); } burst(e.x, e.y - 6, '#7fcaf2', 10); }
+  if (fx === 'slip' && enemies.includes(e)) { e.stun = Math.max(e.stun || 0, 1); e.vx *= 1.4; e.vy *= 1.4; floaters.push({ x: e.x, y: e.y - 30, t: .7, text: '미끄덩!', col: '#7fcaf2' }); }
+  if (fx === 'wave') { for (const o of enemies) { const d = Math.hypot(o.x - P.x, o.y - P.y); if (d < 52 && d > 1) { o.vx = (o.x - P.x) / d * 170; o.vy = (o.y - P.y) / d * 170; o.kb = .2; } } burst(P.x, P.y - 6, '#bfe8ff', 16); } })(hitEnemy);
+tailWeaponModel = (o => id => { const G = (...a) => grp(...a), m = mesh;
+  if (id === 'shellbell') { const g = G(m('c', '#8a5a3c', .03, .14, .03, 0, .07, 0)); for (let i = 0; i < 7; i++) { const a = -.9 + i * .3, r = m('b', i % 2 ? '#ffd6e4' : '#ffb3c6', .06, .26, .02, Math.sin(a) * .1, .3, 0); r.rotation.z = -a; g.add(r); } g.add(m('s', '#fff3f6', .08, .06, .06, 0, .18, 0)); return g; }
+  if (id === 'bubbletail') return G(m('c', '#8a5a3c', .03, .14, .03, 0, .07, 0), m('s', M('#7fcaf2', { transparent: true, opacity: .75, roughness: .1 }), .2, .22, .2, 0, .32, 0), m('s', '#ffffff', .05, .05, .03, .07, .38, .14), m('c', '#4fa8e8', .05, .04, .05, 0, .12, 0));
+  if (id === 'pearl') { const g = G(m('c', '#8a5a3c', .03, .12, .03, 0, .06, 0), m('hemi', '#9fd3e8', .2, .12, .2, 0, .14, 0), m('s', M('#fff8f0', { metalness: .4, roughness: .15, emissive: '#fff3e0', emissiveIntensity: .3 }), .1, .1, .1, 0, .24, 0)); const lid = m('hemi', '#9fd3e8', .2, .12, .2, -.05, .3, 0); lid.rotation.z = Math.PI - .7; g.add(lid); return g; }
+  return o(id); })(tailWeaponModel);
+iconModel = (o => id => { if (id === 'lotus') { const g = grp(); for (let i = 0; i < 3; i++) g.add(mesh('s', '#f2e6d6', .14, .14, .16, 0, .2, (i - 1) * .22)); g.add(mesh('c', '#c9a98a', .05, .05, .05, 0, .2, .35)); g.rotation.y = .6; return g; }
+  if (id === 'lotusleaf') { const g = grp(mesh('c', '#5aa548', .4, .03, .4, 0, .2, 0), mesh('c', '#4e974c', .02, .2, .02, 0, .1, 0)); g.children[0].rotation.x = .3; return g; }
+  if (id === 'snail_w') return grp(mesh('s', '#7a5a3c', .2, .2, .16, 0, .25, 0), mesh('tor', '#5a3f2a', .12, .12, .2, 0, .25, .02), mesh('s', '#b0a080', .2, .08, .1, .08, .1, 0));
+  if (id === 'shrimp') { const g = grp(); for (let i = 0; i < 5; i++) g.add(mesh('s', '#ff9a7a', .09 - i * .01, .08, .09, Math.cos(i * .5) * .18, .2 + Math.sin(i * .5) * .1, 0)); return g; }
+  if (id === 'jelly') return grp(mesh('s', M('#9be37a', { transparent: true, opacity: .8, roughness: .1 }), .25, .2, .25, 0, .2, 0), mesh('s', '#ffffff', .05, .04, .03, .08, .28, .2));
+  if (id === 'lotusrice') return grp(mesh('c', '#5aa548', .42, .04, .42, 0, .05, 0), mesh('s', '#4e974c', .3, .18, .3, 0, .18, 0), mesh('s', '#f6efe2', .16, .08, .16, 0, .32, 0));
+  if (id === 'beak') return grp(mesh('co', '#ffab2e', .2, .3, .14, 0, .25, 0), mesh('c', '#f08a24', .22, .04, .16, 0, .1, 0));
+  if (TWPN[id] && ['shellbell', 'bubbletail', 'pearl'].includes(id)) return tailWeaponModel(id);
+  return o(id); })(iconModel);
+function openWvShop() { menu = { kind: 'wvshop', title: '수달 상점', tabs: ['꼬리 무기', '특산 재료', '변장', '팔기'], tab: 0, sel: 0, page: 0 }; sfx('blip'); }
+function wvBuy(id, n = 1) { const it = ITEMS[id], c = it.price * n; if (hearts < c) return pmsg(`별사탕이 모자라요 (✦${c})`, 1); hearts -= c; addItem(id, n); sfx('pick'); pmsg(`${it.name} ${n > 1 ? n + '개 ' : ''}샀어요!`); save(); }
+function wvEntries(m) { const E = [];
+  if (m.tab === 0) for (const id of ['shellbell', 'bubbletail']) { const it = ITEMS[id], own = inv[id] > 0 || equip.tail === id; E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (!own) wvBuy(id); } }); }
+  if (m.tab === 1) for (const id of ['lotus', 'lotusleaf', 'snail_w', 'shrimp']) { const it = ITEMS[id]; E.push({ img: itemImg(id), name: `${it.name} (보유 ${inv[id] || 0})`, desc: it.desc, tag: `✦ ${it.price}`, col: hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => wvBuy(id) }); }
+  if (m.tab === 2) { const id = 'beak', it = ITEMS[id], own = inv[id] > 0 || equip.body === id; E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (!own) wvBuy(id); } }); }
+  if (m.tab === 3) for (const id in inv) { const it = ITEMS[id]; if (!it || !(inv[id] > 0) || !it.sell || it.type === 'eq') continue; E.push({ img: itemImg(id), name: `${it.name} ×${inv[id]}`, desc: `하나에 ✦${it.sell}`, tag: `✦ ${it.sell}`, col: '#9be37a', act: () => { inv[id]--; if (!inv[id]) delete inv[id]; hearts += it.sell; sfx('pick'); pmsg(`${it.name} 팔았어요 +✦${it.sell}`); save(); } }); }
+  return E; }
+townEntries = (orig => m => m.kind === 'wvshop' ? wvEntries(m) : orig(m))(townEntries);
+panelEntries = (orig => () => menu && menu.kind === 'wvshop' ? wvEntries(menu) : orig())(panelEntries);
+// 부리 마스크: 물가마을에서 친해지기 보너스
+if (typeof accAdd === 'function') accAdd = (orig => (id, n, why) => orig(id, n + (equip.body === 'beak' && WV_IDS.includes(id) ? 1 : 0), why))(accAdd);
+
+// ===== 6) 마을 안 상호작용 (포스터 등은 수영 대회 소동에서) =====
+function wvNear() { return null; }
+function wvInteract() { return false; }
+function wvHint() { return null; }
+
+// ===== 7) 갈대 습지 장난꾸러기 =====
+Object.assign(ENEMY, {
+  frog: { name: '개굴이', hp: 5, atk: 2, spd: 34, exp: 4, drop: 'jelly', rare: [['bubbletail', .03]] },
+  mosq: { name: '앵앵이', hp: 3, atk: 2, spd: 42, exp: 4, drop: 'wing', fly: 1, rare: [['shellbell', .02]] },
+  cray: { name: '집게 가재', hp: 7, atk: 3, spd: 26, exp: 6, drop: 'shrimp', rare: [['pearl', .01]] },
+});
+let WMCLR = 0;
+function wmLand() { const out = []; for (let ly = 0; ly < WVO.h; ly++) for (let lx = 33; lx < WVO.w; lx++) { const [x, y] = wvg(lx, ly); if (!solid[y][x] && (ground[y][x] === G_MARSH)) out.push([x, y]); } return out; }
+function wmSpawn() { if (enemies.some(e => e.room === 'wm')) return; if (WMCLR && Date.now() - WMCLR < REGEN.caveMin * 60000) return;
+  const land = wmLand(), kinds = ['frog', 'frog', 'frog', 'mosq', 'mosq', 'cray', 'cray']; let n = 0;
+  for (let tries = 0; tries < 200 && n < kinds.length; tries++) { const [tx, ty] = land[Math.floor(Math.random() * land.length)], x = tx * T + 8, y = ty * T + 12; if (Math.hypot(x - P.x, y - P.y) < 110 || Math.hypot(x - WVP.arena.x, y - WVP.arena.y) < 90) continue;
+    const kind = kinds[n], D = ENEMY[kind]; enemies.push({ kind, room: 'wm', x, y, hx: x, hy: y, hp: D.hp, max: D.hp, vx: 0, vy: 0, t: Math.random() * 3, inv: .5, flash: 0, kb: 0, hopT: 1 + Math.random(), hop: 0, face: 1, slow: 0 }); n++; } }
+killEnemy = (orig => e => { const wm = e.room === 'wm'; orig(e); if (!wm) return; if (WVQ.st === 1) { WVQ.n = (WVQ.n || 0) + 1; if (WVQ.n === 5) toast('꽥꽥 이장님께 알려 주자!'); } if (!enemies.some(o => o.room === 'wm')) WMCLR = Date.now();
+  if (e.kind === 'frog' && Math.random() < .3) pickups.push({ kind: 'item', id: 'lotusleaf', x: e.x, y: e.y - 6, vx: 30, vy: -70, t: 0 });
+  if (e.kind === 'cray' && Math.random() < .35) pickups.push({ kind: 'item', id: 'fish_crayfish', x: e.x, y: e.y - 6, vx: -30, vy: -70, t: 0 }); })(killEnemy);
+buildMob = (o => kind => { const G = (...a) => grp(...a), m = mesh;
+  if (kind === 'frog') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); b.add(m('s', '#7cc95a', .3, .22, .28, 0, .18, 0), m('s', '#e8f6c8', .22, .12, .2, 0, .14, .1)); for (const s of [-1, 1]) { b.add(m('s', '#7cc95a', .1, .1, .1, s * .12, .34, .06), m('s', '#ffffff', .07, .07, .05, s * .12, .37, .12), m('s', '#1d1418', .035, .04, .02, s * .12, .37, .16)); const br = m('b', '#1d1418', .07, .015, .01, s * .12, .43, .14); br.rotation.z = s * .4; b.add(br); b.add(m('s', '#5aa548', .1, .05, .16, s * .2, .05, .05)); } b.add(m('b', '#c0392b', .1, .02, .02, 0, .17, .24)); g.userData = { b }; return g; }
+  if (kind === 'mosq') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); b.add(m('s', '#6a6478', .1, .1, .12, 0, 0, 0), m('s', '#8a8498', .07, .07, .14, 0, -.01, -.15)); const nose = m('c', '#3b2a2f', .012, .16, .012, 0, -.02, .16); nose.rotation.x = Math.PI / 2; b.add(nose); for (const s of [-1, 1]) b.add(m('s', '#ff6b6b', .04, .04, .03, s * .05, .04, .08)); const wm = M('#e8f6ff', { transparent: true, opacity: .6 }); const wl = m('s', wm, .14, .02, .06, -.11, .08, 0), wr = m('s', wm, .14, .02, .06, .11, .08, 0); b.add(wl, wr); g.userData = { b, wings: [wl, wr] }; return g; }
+  if (kind === 'cray') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); for (let i = 0; i < 4; i++) b.add(m('s', '#e2543b', .18 - i * .03, .12, .12, 0, .12, -i * .13)); for (const s of [-1, 1]) { b.add(m('c', '#c0392b', .03, .18, .03, s * .14, .14, .14)); b.add(m('s', '#e2543b', .1, .07, .12, s * .2, .16, .26), m('s', '#e2543b', .05, .04, .1, s * .26, .16, .32)); b.add(m('s', '#1d1418', .03, .03, .03, s * .05, .24, .12)); } g.userData = { b }; return g; }
+  return o(kind); })(buildMob);
+
+// ===== 8) 심술 메기 대장 (갈대 습지 동쪽 얕은 물) =====
+const CATS = { beaten: false, day: 0 }; let CATB = null; const CBUB = [];
+function catOK() { return wvUnlocked() && (!CATS.beaten || CATS.day !== dayKey()); }
+function catStart() { CATB = { x: WVP.arena.x, y: WVP.arena.y, hp: 34, max: 34, st: 'under', t: 1.4, inv: 0, flash: 0, z: 0, n: 0, p2: false, ring: 0 }; banner('심술 메기 대장', '그림자가 다가오면 굴러서 피해! 튀어나온 뒤가 기회', '#5a8a6a'); shake(3, .5); sfx('roar'); }
+function catArenaIn() { return curRoom.id === 'wm' && Math.hypot(P.x - WVP.arena.x, P.y - WVP.arena.y) < 6.6 * T; }
+function catTick(dt) {
+  if (state !== 'play' || dlg || menu) return;
+  if (!CATB) { if (catOK() && catArenaIn()) catStart(); return; }
+  const b = CATB; if (curRoom.id !== 'wm' || Math.hypot(P.x - WVP.arena.x, P.y - WVP.arena.y) > 12 * T) { CATB = null; CBUB.length = 0; toast('메기 대장이 물속으로 숨어 버렸어…'); return; }
+  b.t -= dt; if (b.inv > 0) b.inv -= dt; if (b.flash > 0) b.flash -= dt; const fast = b.p2;
+  const clampA = (x, y) => { const dx = x - WVP.arena.x, dy = y - WVP.arena.y, rx = 5.6 * T, ry = 4.6 * T, k = Math.hypot(dx / rx, dy / ry); return k > 1 ? [WVP.arena.x + dx / k, WVP.arena.y + dy / k] : [x, y]; };
+  if (b.st === 'rage') { if (b.t <= 0) { b.st = 'under'; b.t = 1; } }
+  else if (b.st === 'under') { const sp = fast ? 105 : 72, dx = P.x - b.x, dy = P.y - b.y, d = Math.hypot(dx, dy) || 1; [b.x, b.y] = clampA(b.x + dx / d * sp * dt, b.y + dy / d * sp * dt); if (b.t <= 0) { b.st = 'warn'; b.t = fast ? .4 : .55; sfx('blip'); } }
+  else if (b.st === 'warn') { if (b.t <= 0) { b.st = 'pop'; b.t = .55; sfx('water'); shake(3, .25); for (let i = 0; i < 18; i++) parts.push({ x: b.x + (Math.random() - .5) * 20, y: b.y, vx: (Math.random() - .5) * 140, vy: -60 - Math.random() * 60, t: .6, c: '#bfe8ff', g: 260 }); if (Math.hypot(P.x - b.x, P.y - b.y) < 24) hurtPlayer(2, b); } }
+  else if (b.st === 'pop') { b.z = Math.sin((1 - b.t / .55) * Math.PI) * 26; if (b.t <= 0) { b.z = 0; b.n++; if (fast && b.n % 2 === 1) { b.st = 'under'; b.t = .7; } else if (fast && b.n % 4 === 0) { b.st = 'whirl'; b.t = 3.2; floaters.push({ x: b.x, y: b.y - 50, t: 1, text: '빙글빙글 소용돌이!', col: '#7fcaf2' }); [b.x, b.y] = [WVP.arena.x, WVP.arena.y]; } else { b.st = 'tired'; b.t = fast ? 1.3 : 1.7; floaters.push({ x: b.x, y: b.y - 44, t: .9, text: '헥헥…', col: '#fff' }); } } }
+  else if (b.st === 'tired') { if (b.t <= 0) { if (b.n % 2 === 0) { b.st = 'spit'; b.t = .9; b.shot = 0; } else { b.st = 'under'; b.t = fast ? 1.0 : 1.5; } } }
+  else if (b.st === 'spit') { if (!b.shot && b.t < .5) { b.shot = 1; const a0 = Math.atan2(P.y - b.y, P.x - b.x), k = fast ? 5 : 3; for (let i = 0; i < k; i++) { const a = a0 + (i - (k - 1) / 2) * .32; CBUB.push({ x: b.x, y: b.y - 4, vx: Math.cos(a) * 95, vy: Math.sin(a) * 95, t: 2.4 }); } sfx('pop'); } if (b.t <= 0) { b.st = 'under'; b.t = fast ? 1.0 : 1.5; } }
+  else if (b.st === 'whirl') { const dx = b.x - P.x, dy = b.y - P.y, d = Math.hypot(dx, dy) || 1; if (P.roll <= 0 && d > 6) { const pull = 62 * dt; const nx = P.x + dx / d * pull, ny = P.y + dy / d * pull; if (boxFree(nx, P.y)) P.x = nx; if (boxFree(P.x, ny)) P.y = ny; } if (d < 18) hurtPlayer(2, b); if (Math.random() < dt * 6) { const a = Math.random() * 6.28; CBUB.push({ x: b.x + Math.cos(a) * 70, y: b.y + Math.sin(a) * 50, vx: -Math.sin(a) * 40, vy: Math.cos(a) * 30, t: 1.4 }); } if (b.t <= 0) { b.st = 'tired'; b.t = 2.2; floaters.push({ x: b.x, y: b.y - 44, t: 1, text: '어질어질… 기회!', col: '#ffd23f' }); } }
+  else if (b.st === 'dead') { if (b.t <= 0) catBeaten(); }
+  for (let i = CBUB.length - 1; i >= 0; i--) { const q = CBUB[i]; q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.t <= 0) { CBUB.splice(i, 1); continue; } if (Math.hypot(q.x - P.x, q.y - P.y) < 10) { CBUB.splice(i, 1); burst(q.x, q.y - 6, '#bfe8ff', 8); hurtPlayer(1, q); } }
+}
+function catHittable() { return CATB && ['tired', 'spit', 'whirl', 'rage'].includes(CATB.st) && CATB.st !== 'rage'; }
+function hitCat(dmg) { const b = CATB; if (!b || b.inv > 0 || !catHittable()) return; if (b.st === 'tired' && b.t > 1.9) dmg = Math.round(dmg * 1.5);
+  const before = b.hp; b.hp -= dmg; b.inv = .3; b.flash = .18; sfx('bonk'); stopT = Math.max(stopT, .05); shake(1.6, .12); floaters.push({ x: b.x, y: b.y - 48, t: .8, text: ['꾸엑!', '수염 건드리지 마!', '앗 차가워!'][Math.floor(Math.random() * 3)], col: '#fff' });
+  if (!b.p2 && b.hp <= b.max / 2 && before > b.max / 2) { b.p2 = true; b.st = 'rage'; b.t = 1.8; b.inv = 1.8; CBUB.length = 0; shake(5, .9); sfx('roar'); banner('메기 대장 2페이즈!', '두 번 연속 튀어나오기 + 소용돌이! 구르면 안 빨려 가요', '#3a7a8a'); }
+  if (b.hp <= 0) { b.st = 'dead'; b.t = 1.4; b.inv = 9; CBUB.length = 0; sfx('star'); shake(4, .8); for (let i = 0; i < 4; i++) setTimeout(() => burst(WVP.arena.x + (Math.random() - .5) * 40, WVP.arena.y - 10, ['#7fcaf2', '#fff', '#ffd23f'][i % 3], 24), i * 250); } }
+smack = (orig => (x, y, R, heartP, dmg) => { orig(x, y, R, heartP, dmg); if (CATB && catHittable() && Math.hypot(CATB.x - x, CATB.y - 10 - y) < R + 20) hitCat(dmg === undefined ? atkOf() : dmg); })(smack);
+function catBeaten() { const first = !CATS.beaten; CATB = null; CATS.beaten = true; CATS.day = dayKey(); hp = maxHp();
+  if (first) { stars++; hearts += 30; say([L('메기 대장', '꾸엑… 미안하구먼. 물이 흐려서 앞이 하나도 안 보였어. 그래서 괜히 심술이…'), L('느릿 할배', '느으릿… 그럴 줄 알았지… 연잎이 물을 맑게 해 줄 게야…'), L('메기 대장', '오리 친구… 아니, 너 오리 맞아? 아무튼 고마워. 이거 받아!'), L('안노랑', '(꽥…! 오리인 척 성공…인가?)')], () => { addItem('pearl', 1); itemGet(SP.heartc, '메기 대장과 화해!', '★+1 · ✦+30 · 진주 방울'); save(); }); }
+  else { hearts += 15; addItem('lotus', 2); itemGet(SP.heartc, '오늘도 메기 대장과 화해!', '✦+15 · 연근 ×2 · 내일 또 심술?'); save(); } }
+updateTown = (o => dt => { o(dt); try { catTick(dt); } catch (e) { console.warn('cat', e); } })(updateTown);
+hurtPlayer = (o => (dmg, src) => o(dmg, src))(hurtPlayer);
+// 세이브
+townSave = (orig => () => Object.assign(orig(), { wv: { q: WVQ, c: CATS, mc: WMCLR } }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.wv) { Object.assign(WVQ, d.wv.q || {}); Object.assign(CATS, d.wv.c || {}); WMCLR = d.wv.mc || 0; } })(townLoad);
+// 기절하면 메기 대장도 초기화
+faint = (orig => () => { CATB = null; CBUB.length = 0; return orig(); })(faint);
+
+// ===== 9) 3D: 주민 모델 =====
+for (const k of ['captain', 'wvchief', 'duckling', 'otter']) if (!SP[k]) SP[k] = SP.duck || SP.hen;
+animal = (o => kind => {
+  if (kind === 'captain' || kind === 'wvchief' || kind === 'duckling') { const g = o('duck'), b = g.userData.b;
+    if (kind === 'duckling') { b.traverse(q => { if (q.isMesh && q.material && q.material.color && q.material.color.getHexString() === 'ffffff') q.material = M('#ffd23f'); }); g.scale.setScalar(.75); b.add(mesh('s', '#ff8fb5', .06, .04, .04, 0, .58, .18)); }
+    if (kind === 'captain') { b.add(mesh('c', '#2b3a6a', .15, .07, .15, 0, .57, .19), mesh('c', '#2b3a6a', .2, .02, .2, 0, .53, .22), mesh('b', '#ffd23f', .06, .03, .01, 0, .58, .34), mesh('c', '#ffffff', .155, .02, .155, 0, .6, .19)); }
+    if (kind === 'wvchief') { for (const s of [-1, 1]) b.add(mesh('tor', '#3b2a2f', .045, .045, .02, s * .055, .48, .32)); b.add(mesh('b', '#3b2a2f', .03, .01, .01, 0, .48, .33)); b.add(mesh('c', '#e8c46a', .2, .04, .2, 0, .55, .18), mesh('c', '#e8c46a', .11, .08, .11, 0, .6, .18), mesh('c', '#e2543b', .115, .02, .115, 0, .58, .18)); const st = mesh('c', '#8a5a3c', .02, .5, .02, .2, .25, .1); b.add(st); }
+    return g; }
+  if (kind === 'otter') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b);
+    b.add(mesh('s', '#8a5a3c', .22, .3, .22, 0, .3, 0), mesh('s', '#f2dcbc', .15, .22, .1, 0, .28, .14), mesh('s', '#8a5a3c', .17, .15, .16, 0, .66, .04), mesh('s', '#f2dcbc', .11, .07, .08, 0, .62, .16), mesh('s', '#3b2a2f', .04, .03, .03, 0, .65, .23));
+    for (const s of [-1, 1]) { b.add(mesh('s', '#1d1418', .025, .03, .015, s * .07, .7, .18), mesh('s', '#6e4630', .05, .04, .03, s * .13, .78, .02), mesh('s', '#8a5a3c', .06, .14, .06, s * .2, .32, .08), mesh('c', '#ffffff', .004, .004, .12, s * .1, .62, .2)); }
+    const tl = mesh('s', '#6e4630', .07, .05, .26, 0, .1, -.26); b.add(tl); b.add(mesh('b', '#4fa8e8', .3, .05, .2, 0, .5, .05)); g.userData = { b }; return g; }
+  return o(kind); })(animal);
+
+// ===== 10) 3D: 물가마을 지형·건물 (처음 들어갈 때 한 번 만들어요) =====
+const wz = ly => zt(WVO.y + ly), wx = lx => WVO.x + lx;
+function txtTex(s, w, h, bg, fg) { return farmText(s, w, h, bg, fg); }
+function buildWV3D() {
+  const S = R3.scene, g = new THREE.Group(); S.add(g); R3.wvRoot = g;
+  const cx = WVO.x + WVO.w / 2, cz = wz(WVO.h / 2);
+  // 물: 넓게 깔아서 수평선까지
+  const wmat = new THREE.MeshStandardMaterial({ color: '#2f9ad8', transparent: true, opacity: .82, roughness: .08, metalness: .1 });
+  const water = new THREE.Mesh(new THREE.PlaneBufferGeometry(WVO.w + 60, WVO.h + 40), wmat); water.rotation.x = -Math.PI / 2; water.position.set(cx, -.13, cz); water.receiveShadow = true; g.add(water); R3.wvWater = water;
+  const bed = new THREE.Mesh(new THREE.PlaneBufferGeometry(WVO.w + 60, WVO.h + 40), new THREE.MeshStandardMaterial({ color: '#1f6f9a', roughness: 1 })); bed.rotation.x = -Math.PI / 2; bed.position.set(cx, -.7, cz); g.add(bed);
+  // 타일 블록: 섬(풀+흙), 습지(진흙풀), 나무 데크, 얕은 물 바닥
+  const lists = { isle: [], marsh: [], deck: [], shal: [] };
+  for (let ly = 0; ly < WVO.h; ly++) for (let lx = 0; lx < WVO.w; lx++) { const [x, y] = wvg(lx, ly), c = ground[y][x]; if (c === G_ISLE) lists.isle.push([x, y]); else if (c === G_MARSH) lists.marsh.push([x, y]); else if (c === G_DECK) lists.deck.push([x, y]); else if (c === G_SHAL) lists.shal.push([x, y]); }
+  const box = new THREE.BoxBufferGeometry(1, 1, 1), d = new THREE.Object3D();
+  const inst = (arr, hex, h, top, jit) => { const im = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ color: jit ? '#ffffff' : hex, roughness: .95 }), arr.length); im.receiveShadow = true; im.castShadow = false; const col = new THREE.Color();
+    arr.forEach(([x, y], i) => { d.position.set(x + .5, top - h / 2, zt(y) + .5); d.scale.set(1.001, h, 1.001); d.updateMatrix(); im.setMatrixAt(i, d.matrix); if (jit) { col.set(hex).offsetHSL(0, 0, (((x * 7 + y * 13) % 5) - 2) * .012); im.setColorAt(i, col); } }); g.add(im); return im; };
+  inst(lists.isle, '#8a6a4a', .6, -.1); inst(lists.isle, '#8fd16f', .12, .02, 1);
+  inst(lists.marsh, '#6e5a3a', .6, -.1); inst(lists.marsh, '#9db758', .12, .02, 1);
+  inst(lists.shal, '#d8c48a', .1, -.2);
+  { const sw = new THREE.Mesh(new THREE.PlaneBufferGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#8fd8f0', transparent: true, opacity: .55, roughness: .05 })); }
+  // 얕은 물 표면 (발목까지 찰랑)
+  for (const area of [[9, 1, 21, 4], null]) { if (!area) break; const [a, b0, c, d0] = area, pl = new THREE.Mesh(new THREE.PlaneBufferGeometry(c - a + 1, d0 - b0 + 1), new THREE.MeshStandardMaterial({ color: '#4cb8e6', transparent: true, opacity: .5, roughness: .05 })); pl.rotation.x = -Math.PI / 2; pl.position.set(wx(a) + (c - a + 1) / 2, -.03, wz(b0) + (d0 - b0 + 1) / 2); g.add(pl); }
+  { const pl = new THREE.Mesh(new THREE.CircleBufferGeometry(1, 40), new THREE.MeshStandardMaterial({ color: '#4cb8e6', transparent: true, opacity: .5, roughness: .05 })); pl.rotation.x = -Math.PI / 2; pl.scale.set(6.4, 5.4, 1); pl.position.set(wx(56), -.03, wz(12.5)); g.add(pl); R3.wvShal = pl; }
+  // 나무 데크: 판자 무늬 + 기둥
+  { const ptex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const q = c.getContext('2d'); q.fillStyle = '#d9a26a'; q.fillRect(0, 0, 64, 64); for (let i = 0; i < 4; i++) { q.fillStyle = i % 2 ? '#c98f58' : '#e0ad78'; q.fillRect(0, i * 16 + 1, 64, 14); q.fillStyle = 'rgba(90,50,30,.35)'; q.fillRect(0, i * 16 + 15, 64, 2); q.fillRect((i * 23) % 60, i * 16, 2, 16); } return new THREE.CanvasTexture(c); })();
+    const im = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ map: ptex, roughness: .9 }), lists.deck.length); im.receiveShadow = true;
+    lists.deck.forEach(([x, y], i) => { d.position.set(x + .5, -.04, zt(y) + .5); d.scale.set(1.001, .12, 1.001); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); g.add(im);
+    const posts = lists.deck.filter(([x, y]) => (x + y) % 3 === 0 && ground[y + 1] && ground[y + 1][x] !== G_DECK || (x % 3 === 0 && y % 3 === 0));
+    const pm = new THREE.InstancedMesh(new THREE.CylinderBufferGeometry(.07, .08, 1, 6), new THREE.MeshStandardMaterial({ color: '#8a5a3c', roughness: .8 }), posts.length); posts.forEach(([x, y], i) => { d.position.set(x + .5, -.5, zt(y) + .8); d.scale.set(1, 1, 1); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); }); g.add(pm); }
+  // 연잎·연꽃
+  { let s0 = 11; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; const pads = [];
+    for (let i = 0; i < 90; i++) { const lx = r() * WVO.w, ly = r() * WVO.h, [x, y] = wvg(Math.floor(lx), Math.floor(ly)); if (ground[y] && ground[y][x] === G_WATER) pads.push([WVO.x + lx, wz(ly), .25 + r() * .25, r() * 6]); }
+    const pm = new THREE.InstancedMesh(new THREE.CylinderBufferGeometry(1, 1, .02, 14, 1, false, .3, 5.9), new THREE.MeshStandardMaterial({ color: '#5aa548', roughness: .7 }), pads.length); pads.forEach(([x, z, s, a], i) => { d.position.set(x, -.1, z); d.scale.set(s, 1, s); d.rotation.set(0, a, 0); d.updateMatrix(); pm.setMatrixAt(i, d.matrix); }); d.rotation.set(0, 0, 0); g.add(pm);
+    pads.forEach(([x, z, s], i) => { if (i % 4) return; const f = grp(); for (let k = 0; k < 6; k++) { const pt = mesh('s', k % 2 ? '#ffb3c6' : '#ff8fb5', .07, .12, .04, Math.cos(k) * .06, .08, Math.sin(k) * .06); pt.rotation.set(Math.sin(k) * .5, 0, Math.cos(k) * .5); f.add(pt); } f.add(mesh('s', '#ffe066', .04, .04, .04, 0, .1, 0)); f.position.set(x + .05, -.08, z); g.add(f); }); }
+  // 갈대 (습지 가장자리)
+  { let s0 = 5; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; const reeds = [];
+    for (const [x, y] of lists.marsh) { const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ground[y + dy] && ground[y + dy][x + dx] === G_WATER); if (edge || r() < .12) for (let k = 0; k < (edge ? 3 : 2); k++) reeds.push([x + r(), zt(y) + r(), .5 + r() * .5]); }
+    for (let i = 0; i < 40; i++) { const lx = r() * 30, ly = r() * WVO.h, [x, y] = wvg(Math.floor(lx), Math.floor(ly)); if (ground[y][x] === G_WATER && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ground[y + dy] && [G_ISLE].includes(ground[y + dy][x + dx]))) reeds.push([WVO.x + lx, wz(ly), .45 + r() * .4]); }
+    const rm = new THREE.InstancedMesh(new THREE.CylinderBufferGeometry(.015, .025, 1, 4), new THREE.MeshStandardMaterial({ color: '#6f9a3c', roughness: .8 }), reeds.length), cm = new THREE.InstancedMesh(new THREE.CylinderBufferGeometry(.04, .04, .16, 6), new THREE.MeshStandardMaterial({ color: '#7a4a2a', roughness: .8 }), reeds.length);
+    reeds.forEach(([x, z, h], i) => { d.position.set(x, h / 2 - .1, z); d.scale.set(1, h, 1); d.rotation.set((r() - .5) * .2, 0, (r() - .5) * .2); d.updateMatrix(); rm.setMatrixAt(i, d.matrix); d.position.set(x, h - .05, z); d.scale.set(1, 1, 1); d.updateMatrix(); cm.setMatrixAt(i, d.matrix); }); d.rotation.set(0, 0, 0); rm.castShadow = true; g.add(rm, cm); R3.wvReeds = rm; }
+  // 오리 집 (기둥 위 오두막)
+  const house = (lx0, ly0, w, dd, wall, roof) => { const h = grp(), X = wx(lx0) + w / 2, Z = wz(ly0) + dd / 2; h.add(mesh('b', wall, w - .3, 1.3, dd - .4, X, .65, Z)); const rf = mesh('co', roof, w * .78, 1.0, dd * .78, X, 1.75, Z); rf.rotation.y = Math.PI / 4; h.add(rf);
+    h.add(mesh('b', '#8a5a3c', .5, .8, .06, X, .4, Z + dd / 2 - .18), mesh('s', '#ffd23f', .05, .05, .03, X + .15, .42, Z + dd / 2 - .14)); const win = mesh('c', '#bfe8ff', .22, .05, .22, X - w / 4, .85, Z + dd / 2 - .19); win.rotation.x = Math.PI / 2; h.add(win, mesh('tor', '#fff8e7', .22, .22, .2, X - w / 4, .85, Z + dd / 2 - .18)); return h; };
+  g.add(house(3, 3, 4, 3, '#fff8e7', '#ff8a5a'), house(23, 3, 4, 3, '#fff3d6', '#4fa8e8'));
+  // 수달 상점: 줄무늬 차양 + 간판
+  { const X = wx(25) + 2, Z = wz(10) + 1.5, s = grp(mesh('b', '#c9a98a', 3.6, 1.4, 2.6, X, .7, Z), mesh('b', '#8a5a3c', 3.8, .12, 2.8, X, 1.45, Z));
+    for (let i = 0; i < 6; i++) { const a = mesh('b', i % 2 ? '#ffffff' : '#4fa8e8', .62, .06, 1.0, X - 1.55 + i * .62, 1.25, Z + 1.55); a.rotation.x = .35; s.add(a); }
+    const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.2, .5), new THREE.MeshBasicMaterial({ map: txtTex('수달 상점', 256, 58, '#fff8e7', '#3b2a2f') })); sg.position.set(X, 1.8, Z + 1.32); s.add(sg); s.add(mesh('b', '#a0705a', 2.6, .5, .5, X, .25, Z + 1.55)); for (let i = 0; i < 4; i++) s.add(mesh('s', ['#7fcaf2', '#ff9a7a', '#f2e6d6', '#5aa548'][i], .12, .1, .12, X - .9 + i * .6, .56, Z + 1.55)); g.add(s); }
+  // 거북 할배 오두막 (작은 초가)
+  { const X = wx(3) + 1, Z = wz(17) + .5; g.add(mesh('c', '#e8d8b0', .8, .9, .8, X, .45, Z), mesh('co', '#c9a24a', 1.2, .8, 1.2, X, 1.25, Z)); }
+  // 수영장: 레인 줄 + 출발대 + 깃발
+  { for (let k = 0; k < 3; k++) { const z = wz(1) + 1 + k; for (let i = 0; i < 13; i++) g.add(mesh('s', i % 2 ? '#ff6b6b' : '#ffffff', .07, .07, .07, wx(9) + .5 + i, -.0, z)); }
+    for (let k = 0; k < 4; k++) g.add(mesh('b', '#fff8e7', .5, .3, .5, wx(8) + .5, .15, wz(1) + .5 + k)); for (let i = 0; i < 8; i++) { const f = mesh('co', ['#ff6b6b', '#ffd23f', '#7fcaf2', '#9be37a'][i % 4], .14, .22, .02, wx(9) + i * 1.6, 1.1, wz(0) + .3); f.rotation.z = Math.PI; g.add(f); } g.add(mesh('c', '#8a5a3c', .03, 1.3, .03, wx(8.3), .6, wz(0) + .3), mesh('c', '#8a5a3c', .03, 1.3, .03, wx(21.7), .6, wz(0) + .3), mesh('c', '#fff8e7', .01, 12.5, .01, wx(15), 1.18, wz(0) + .3)).children; g.children[g.children.length - 1].rotation.z = Math.PI / 2; }
+  // 섬 꾸미기: 작은 나무·꽃·돌
+  { let s0 = 21; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; const fl = [];
+    for (const [x, y] of lists.isle.concat(lists.marsh.filter((q, i) => i % 3 === 0))) { const v = r(); if (v < .06 && !solid[y][x] && Math.hypot(x - WVP.dock.x / T, y - WVP.dock.y / T) > 3) { const t = grp(mesh('c', '#8a5a3c', .09, .7, .09, x + .5, .3, zt(y) + .5), mesh('s', ['#8fd16f', '#9bd16f', '#ffb3c6'][Math.floor(r() * 3)], .45, .5, .45, x + .5, .85, zt(y) + .5)); g.add(t); } else if (v < .3) fl.push([x + r(), zt(y) + r()]); }
+    const fm = new THREE.InstancedMesh(new THREE.SphereBufferGeometry(.05, 6, 4), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .8 }), fl.length), col = new THREE.Color(); fl.forEach(([x, z], i) => { d.position.set(x, .06, z); d.scale.set(1, 1, 1); d.updateMatrix(); fm.setMatrixAt(i, d.matrix); fm.setColorAt(i, col.set(['#ffe066', '#ffffff', '#ff8fb5', '#c9b6ff'][i % 4])); }); g.add(fm); }
+  // 마을 간판 · 나룻배
+  { const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.6, .6), new THREE.MeshBasicMaterial({ map: txtTex('꽥꽥 물가마을', 300, 70, '#7fcaf2', '#fff') })); sg.position.set(wx(19.5), 1.2, wz(21) + .3); g.add(sg, mesh('c', '#8a5a3c', .05, 1.2, .05, wx(18.4), .55, wz(21)), mesh('c', '#8a5a3c', .05, 1.2, .05, wx(20.6), .55, wz(21))); }
+  g.add(boatModel(WVP.boat.x / T, ZU(WVP.boat.y) + .3));
+  // 둘레: 멀리 버드나무·언덕
+  { let s0 = 3; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; for (let i = 0; i < 46; i++) { const side = i % 3, x = side === 0 ? WVO.x - 3 - r() * 6 : side === 1 ? WVO.x + WVO.w + 2 + r() * 6 : WVO.x + r() * WVO.w, z = side === 2 ? wz(0) - 3 - r() * 5 : wz(0) + r() * WVO.h; const t = grp(mesh('c', '#8a5a3c', .12, 1.4, .12, x, .5, z), mesh('s', ['#7cc95a', '#9bd16f', '#6fae58'][i % 3], .9 + r() * .5, 1.1, .9 + r() * .5, x, 1.6, z)); g.add(t); }
+    const hill = mesh('s', '#86b85a', 30, 4, 6, cx, -2.2, wz(0) - 6); g.add(hill); }
+}
+function boatModel(x, z) { const b = grp(mesh('b', '#a0663a', 1.5, .22, .62, 0, .0, 0), mesh('b', '#c98a5a', 1.6, .08, .7, 0, .14, 0), mesh('b', '#8a5230', .12, .14, .55, .3, .16, 0), mesh('co', '#a0663a', .32, .5, .62, .9, .02, 0));
+  b.children[3].rotation.z = -Math.PI / 2; b.add(mesh('c', '#8a5a3c', .03, 1.2, .03, -.4, .5, 0)); const sail = mesh('b', '#fff8e7', .03, .6, .5, -.4, .7, .2); b.add(sail); b.position.set(x, -.08, z); b.userData.bob = 1; return b; }
+function syncWV3D() { if (!R3) return; wrapDuckChick(); const near = inWV();
+  if (!R3.wvSkirtFix) { R3.wvSkirtFix = 1; R3.scene.children.forEach(o => { if (o.isMesh && o.geometry && o.geometry.parameters && o.geometry.parameters.width === 400 && o.position.z > H + 50) o.position.y = -1.6; }); }
+  if (near && !R3.wvRoot) { try { buildWV3D(); } catch (e) { console.warn('wv3d', e); } }
+  if (R3.wvRoot) { R3.wvRoot.visible = near; if (R3.wvWater) R3.wvWater.position.y = -.13 + Math.sin(time * .8) * .01; }
+  if (curRoom.id === 'v1' && !R3.pondBoat) { R3.pondBoat = boatModel(WVP.home.x / T + .2, ZU(WVP.home.y) + 1.4); R3.scene.add(R3.pondBoat); const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(1.4, .4), new THREE.MeshBasicMaterial({ map: txtTex('나룻배', 200, 58, '#7fcaf2', '#fff') })); sg.position.set(WVP.home.x / T - .9, .9, ZU(WVP.home.y) + .4); R3.scene.add(sg, mesh('c', '#8a5a3c', .04, .9, .04, WVP.home.x / T - .9, .4, ZU(WVP.home.y) + .35)); }
+  if (R3.pondBoat) R3.pondBoat.position.y = -.08 + Math.sin(time * 1.6) * .03;
+  // 메기 대장
+  const b = CATB; let m = R3.ents.get('catb');
+  if (b) { m = ent('catb', catModel); const up = b.st !== 'under' && b.st !== 'warn'; m.visible = up && !(b.flash > 0 && Math.floor(b.flash * 40) % 2) && !(b.st === 'dead' && Math.floor(b.t * 10) % 2);
+    m.position.set(U(b.x), (b.st === 'pop' ? U(b.z) * 1.2 : 0) - (b.st === 'whirl' ? .1 : 0), ZU(b.y) - .2); m.rotation.y = b.st === 'whirl' ? time * 6 : lerpAng(m.rotation.y, faceAngle(P.x - b.x, P.y - b.y), .15);
+    const cap = m.userData.cap; if (b.p2 && !cap.userData.p2) { cap.material = cap.material.clone(); cap.material.color.set('#3a7a8a'); cap.userData.p2 = 1; } m.userData.b.rotation.z = b.st === 'tired' ? Math.sin(time * 6) * .12 : 0; }
+  else if (m) m.visible = false; }
+function catModel() { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); g.scale.setScalar(1.9);
+  b.add(mesh('s', '#5f6f4a', .5, .3, .62, 0, .28, 0), mesh('s', '#d8d0b0', .36, .14, .5, 0, .16, .06), mesh('s', '#5f6f4a', .46, .26, .3, 0, .32, .42));
+  for (const s of [-1, 1]) { b.add(mesh('s', '#ffffff', .07, .07, .05, s * .2, .44, .6), mesh('s', '#1d1418', .035, .04, .03, s * .2, .44, .64)); const br = mesh('b', '#1d1418', .14, .025, .02, s * .2, .53, .62); br.rotation.z = s * .5; b.add(br);
+    for (const k of [0, 1]) { const w = mesh('c', '#3b3a2a', .012, .5, .012, s * (.3 + k * .05), .26 - k * .06, .66); w.rotation.z = s * (1.1 + k * .3); b.add(w); } }
+  b.add(mesh('b', '#7a2a2a', .3, .04, .04, 0, .22, .7)); const tail = mesh('co', '#5f6f4a', .2, .4, .08, 0, .28, -.7); tail.rotation.x = -Math.PI / 2; b.add(tail);
+  const cap = mesh('c', M('#e2543b').clone(), .2, .12, .2, 0, .6, .34); b.add(cap); b.add(mesh('s', '#ffd23f', .05, .05, .05, 0, .7, .34)); g.userData = { b, cap }; return g; }
+// 2D 표시: 물속 그림자·경고 원·물방울·소용돌이·체력바
+function drawWVFx() { if (!R3 || !inWV() || typeof project3D !== 'function') return; const b = CATB;
+  for (const q of CBUB) { const [x, y] = project3D(q.x, q.y, .25), [x2] = project3D(q.x + 6, q.y, .25), r = Math.abs(x2 - x) * 1.2; ctx.fillStyle = 'rgba(191,232,255,.75)'; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill(); ctx.strokeStyle = '#4fa8e8'; ctx.lineWidth = 1.5 * DPR; ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - r * .3, y - r * .3, r * .25, 0, 6.29); ctx.fill(); }
+  if (!b) return; const [cx, cy] = project3D(b.x, b.y, .02), [ex] = project3D(b.x + 24, b.y, .02), R = Math.abs(ex - cx);
+  if (b.st === 'under' || b.st === 'warn') { ctx.save(); ctx.fillStyle = 'rgba(30,50,40,.35)'; ctx.beginPath(); ctx.ellipse(cx, cy, R * .9, R * .45, 0, 0, 6.29); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2 * DPR; for (let i = 0; i < 2; i++) { const k = (time * 1.5 + i * .5) % 1; ctx.globalAlpha = 1 - k; ctx.beginPath(); ctx.ellipse(cx, cy, R * (.5 + k * .8), R * (.25 + k * .4), 0, 0, 6.29); ctx.stroke(); } ctx.restore();
+    if (b.st === 'warn') { ctx.save(); ctx.globalAlpha = .5 + Math.sin(time * 30) * .3; ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 4 * DPR; ctx.beginPath(); ctx.ellipse(cx, cy, R, R * .55, 0, 0, 6.29); ctx.stroke(); ctx.fillStyle = 'rgba(255,107,107,.22)'; ctx.fill(); ctx.restore(); } }
+  if (b.st === 'whirl') { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 3 * DPR; for (let i = 0; i < 4; i++) { const r0 = R * (.6 + i * .7); ctx.beginPath(); ctx.ellipse(cx, cy, r0, r0 * .5, 0, time * 4 + i, time * 4 + i + 4.2); ctx.stroke(); } ctx.restore(); }
+  if (b.st === 'tired') { const [sx, sy] = project3D(b.x, b.y, 1.5); for (let i = 0; i < 3; i++) { const a = time * 4 + i * 2.09; star5(sx + Math.cos(a) * 16 * DPR, sy + Math.sin(a) * 5 * DPR, 7 * DPR, '#ffd23f'); } }
+  if (b.st !== 'dead') { const w = Math.min(CW * .7, 340 * DPR), h = 12 * DPR, x = CW / 2 - w / 2, y = CH * .16; ctx.fillStyle = 'rgba(51,34,42,.75)'; rr(x - 4 * DPR, y - 4 * DPR, w + 8 * DPR, h + 8 * DPR, 8 * DPR); ctx.fill(); ctx.fillStyle = '#5a4a50'; rr(x, y, w, h, 6 * DPR); ctx.fill(); ctx.fillStyle = b.p2 ? '#3a7a8a' : '#5f8a5a'; rr(x, y, w * Math.max(0, b.hp / b.max), h, 6 * DPR); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(x + w / 2 - DPR, y - 2 * DPR, 2 * DPR, h + 4 * DPR); text(`심술 메기 대장${b.p2 ? ' · 2페이즈' : ''}`, CW / 2, y - 12 * DPR, 13 * DPR * TXS(), '#fff', 'center', true); } }
+drawOverlay4 = (o => () => { try { syncWV3D(); } catch (e) { console.warn('wvsync', e); } drawWVFx(); o(); })(drawOverlay4);
+// 물가마을에선 큰 지도 대신 안내, 미니맵은 숨겨요 (세계 지도는 노랑폰에서)
+drawMinimap = (o => () => { if (inWV()) return; return o(); })(drawMinimap);
+updateTown = (o => dt => { o(dt); if (mapOpen && inWV()) { mapOpen = false; toast('물가마을 지도는 노랑폰 > 지도의 세계 지도에서 볼 수 있어요'); } })(updateTown);
+// 음악: 물가마을 전용 분위기 (기존 낮 음악을 조금 느긋하게)
+
+// ===== 11) 소동 3화 「꽥꽥 수영 대회」 =====
+// 수영장: 로컬 x 9~21, y 1~4 (얕은 물) · 레인은 y 2.5 · 왼쪽 출발, 오른쪽 결승
+const SWIM = { y: (WVO.y + 2.6) * T, x0: (WVO.x + 9.4) * T, fin: (WVO.x + 21) * T, poster: { x: (WVO.x + 16.5) * T, y: (WVO.y + 6.4) * T } };
+function wrapDuckChick() { if (window.__bcw) return; window.__bcw = 1; buildChick = (o => k => k === 'duckling' ? animal('duckling') : o(k))(buildChick); }
+const EPW = { id: 'epw', no: 3, title: '꽥꽥 수영 대회', cast: ['wv_chief', 'wv_kid', 'otter', 'wv_turtle'], ends: {
+  perfect: { name: '완벽한 오리', hint: '한 번도 안 가라앉고, 꼬리를 참으면' },
+  caught: { name: '꼬르륵… 그래도 완주', hint: '가라앉거나 들킨 적이 있으면' },
+  hero: { name: '꼬리 프로펠러 구조대', hint: '물에 빠진 꽥순이를 꼬리로 구하면' } }, steps: [] };
+EPW.steps = [
+  { // 0. 개막
+    enter(E) { if (!wvUnlocked()) { toast('물가마을에 가야 열리는 소동이에요 (나룻배)'); setTimeout(() => epAbort(), 10); return; }
+      window.__cutscene = true; window.__peepWord = '꽥'; startWipe(() => { warpTo(SWIM.x0 - 10, SWIM.y + 22, 'right');
+        epMakeChicks(3); EPC.forEach((c, i) => { c.k = 'duckling'; c.x = SWIM.x0 - 4; c.y = SWIM.y - 16 + i * 14 + (i > 0 ? 16 : 0); c.look = Math.PI / 2; c.band = ['#ff6b6b', '#7fcaf2', '#9be37a'][i]; c.sp = 0; });
+        epHold('wv_chief', SWIM.fin + 14, SWIM.y - 6, -1); epHold('wv_kid', SWIM.x0 - 4, SWIM.y + 2, 1); epHold('otter', (WVO.x + 12) * T, (WVO.y + 5.6) * T, 1); epHold('wv_turtle', (WVO.x + 18) * T, (WVO.y + 5.6) * T, -1);
+        setTimeout(() => say([L('꽥꽥 이장', '꽥꽥 수영 대회를 시작하겠소! 오리라면 둥둥 떠서 끝까지 헤엄치면 되오.'), L('안노랑', '(공룡은… 뜨나?)'), L('꽥순이', '노랑아 같이 하자! 물장구 첨벙첨벙~'), L('계획이', `${KA()}를 계속 눌러서 물장구! 멈추면 가라앉아. 꼬리(${KB()})는… 엄청 빠르지만 들킬걸?`)], () => { epPanel(0, P.x, P.y, [{ who: '꽥꽥 이장', text: '오리만 참가할 수 있소~!' }, { who: '안노랑', text: '(공룡은… 뜨나?)' }], '두근'); window.__cutscene = false; }), 700); }); },
+    tick(E) { return E.t > 1.5 && !window.__cutscene; } },
+  { // 1. 출발선 · 대답 "꽥!"
+    enter(E) { DG.on = true; DG.onCaught = () => swimCaught(E); E.d.calls = 2; E.d.cd = 1.2; banner('준비~ 대답은 꽥!', `이장님이 부르면 ${KA()} 로 꽥!`, '#7fcaf2'); warpTo(SWIM.x0, SWIM.y + 2, 'right'); },
+    lockA: false, onA(E) { return false; },
+    tick(E, dt) { if (dlg) return false; E.d.cd -= dt; if (E.d.cd <= 0 && E.d.calls > 0 && !DG.peep) { E.d.calls--; E.d.cd = 2.2; floaters.push({ x: SWIM.fin + 14, y: SWIM.y - 50, t: 1.4, text: '다들 대답~ 꽥!', col: '#fff' }); dgPeep(1.1); EPC.forEach(c => { c.jump = .15; setTimeout(() => c.jump = 0, 300); }); }
+      return E.d.calls <= 0 && !DG.peep && E.d.cd < 1.2; } },
+  { // 2. 레이스
+    enter(E) { E.d.v = 0; E.d.f = 100; E.d.sunk = 0; E.d.tail = 0; E.d.rescue = 0; E.d.drift = 0; E.d.done = 0; E.d.rank = 0; E.d.cd = 3; E.freeze = true; sfx('whistle'); banner('출발! 첨벙첨벙~', `${KA()} 연타로 물장구 · 멈추면 꼬르륵`, '#7fcaf2');
+      EPC.forEach((c, i) => { c.x = SWIM.x0 - 6; c.y = SWIM.y - 18 + i * 13 + (i > 0 ? 18 : 0); c.sp = 24 + i * 4 + Math.random() * 6; c.tx = null; c.fin = 0; }); },
+    onA(E) { if (E.d.cd > 0) return true; E.d.v = Math.min(78, E.d.v + 16); E.d.f = Math.min(100, E.d.f + 9); for (let i = 0; i < 3; i++) parts.push({ x: P.x - 6, y: P.y, vx: -30 - Math.random() * 30, vy: -30 - Math.random() * 30, t: .4, c: '#bfe8ff', g: 220 }); sfx('water'); return true; },
+    onB(E) { if (E.d.cd > 0) return true; const kid = EPC[0]; if (E.d.drift > 0 && Math.hypot(P.x - kid.x, P.y - kid.y) < 34) { E.d.rescue = 1; E.d.drift = 0; kid.y = SWIM.y - 18; kid.sp = 30; floaters.push({ x: kid.x, y: kid.y - 30, t: 1.2, text: '노랑아 고마워!', col: '#fff3b0' }); epPanel(2, P.x, P.y, [{ who: '꽥순이', text: '살려줘 꽥!' }, { who: '안노랑', text: '(꼬리 프로펠러… 가동!)' }], '부르릉!', { sfxCol: '#ffd23f' }); sfx('tada'); dgGain(45, 'all'); return true; }
+      E.d.tail++; E.d.v = Math.min(150, E.d.v + 70); dgGain(28, 'all'); floaters.push({ x: P.x, y: P.y - 34, t: .8, text: '부르르릉!', col: '#ffd23f' }); for (let i = 0; i < 8; i++) parts.push({ x: P.x - 10, y: P.y, vx: -80 - Math.random() * 60, vy: -20 - Math.random() * 40, t: .5, c: '#ffffff', g: 200 }); sfx('swipe'); return true; },
+    tick(E, dt) {
+      if (E.d.cd > 0) { E.d.cd -= dt; if (E.d.cd <= 0) { E.freeze = false; sfx('done'); floaters.push({ x: P.x, y: P.y - 40, t: 1, text: '출발!', col: '#ffd23f' }); } return false; }
+      window.__spdMul = 0; E.d.v = Math.max(0, E.d.v - 34 * dt); E.d.f = Math.max(0, E.d.f - (E.d.v < 20 ? 22 : 9) * dt);
+      if (E.d.f <= 0) { if (!E.d.sinkT) { E.d.sunk++; E.d.sinkT = 1.4; floaters.push({ x: P.x, y: P.y - 30, t: 1.2, text: '꼬르르륵…', col: '#7fcaf2' }); emote(null, 'sweat', 1.2); dgGain(40, 'all'); if (!E.panels[1]) epPanel(1, P.x, P.y, [{ who: '꽥꽥 이장', text: '어라? 오리가… 가라앉네?' }, { who: '안노랑', text: '(꼬르륵… 공룡은 안 뜨는구나)' }], '꼬르륵', { sfxCol: '#7fcaf2' }); } }
+      if (E.d.sinkT > 0) { E.d.sinkT -= dt; E.d.v = 0; if (E.d.sinkT <= 0) { E.d.sinkT = 0; E.d.f = 45; } }
+      const nx = Math.min(SWIM.fin + 6, P.x + E.d.v * dt); if (!E.d.pfin) P.x = nx; P.y = SWIM.y + 2;
+      // 꽥순이 쥐났어요: 중간쯤에서 둥둥 떠내려가요 (꼬리로 구하면 영웅)
+      const kid = EPC[0]; if (!E.d.rescue && !E.d.drift && kid.x > SWIM.x0 + (SWIM.fin - SWIM.x0) * .45) { E.d.drift = 6; kid.sp = 0; floaters.push({ x: kid.x, y: kid.y - 30, t: 1.6, text: '다리에 쥐났어! 살려줘 꽥!', col: '#ff8fa3' }); sfx('caught'); emote(null, 'shock', 1.2); toast(`꽥순이 근처에서 ${KB()} = 꼬리로 구하기!`); }
+      if (E.d.drift > 0) { E.d.drift -= dt; kid.x -= 10 * dt; kid.y += Math.sin(time * 3) * .3; if (E.d.drift <= 0) { kid.sp = 18; floaters.push({ x: kid.x, y: kid.y - 30, t: 1.2, text: '이장님이 구해 줬어… 휴', col: '#fff' }); } }
+      for (const c of EPC) { if (c.fin || (c === kid && E.d.drift > 0)) continue; c.x += c.sp * dt; c.moving = true; c.hop += dt * 8; c.face = 1; if (c.x >= SWIM.fin) { c.fin = ++E.d.done; c.moving = false; } }
+      if (!E.d.pfin && P.x >= SWIM.fin) { E.d.pfin = true; E.d.rank = E.d.done + 1; banner(`${E.d.rank}등으로 도착!`, E.d.rank === 1 ? '오리보다 빠른 오리?!' : '완주 성공!', '#9be37a'); E.d.after = 1.2; }
+      if (E.d.pfin) { E.d.after -= dt; if (E.d.after <= 0) { E.d.end = E.d.rescue ? 'hero' : (E.d.sunk || E.d.tail || E.d.caught) ? 'caught' : 'perfect'; return true; } }
+      if (E.t > 80 && !E.d.pfin) { E.d.pfin = true; E.d.rank = 4; E.d.after = .5; } } },
+  { // 3. 결말
+    enter(E) { DG.on = false; E.freeze = true; const end = E.d.end; window.__spdMul = 1;
+      const L3 = { hero: [[L('꽥순이', '노랑이 꼬리 덕분에 살았어! 꼬리가 프로펠러야!'), L('꽥꽥 이장', '꽥… 사실 다들 알았소. 자네가 오리가 아니란 걸. 그래도 오늘부터 우리 마을 오리요!'), L('안노랑', '(…오리 인정받았다!)')], [{ who: '꽥순이', text: '노랑이 꼬리는 프로펠러야!' }, { who: '꽥꽥 이장', text: '오늘부터 우리 마을 오리요!' }], '꽥꽥!'],
+        perfect: [[L('꽥꽥 이장', '훌륭한 물장구였소! 진짜 오리 같았어!'), L('안노랑', '(한 번도 안 가라앉았어. 완벽한 오리였어!)'), L('수달 아저씨', '근데 노랑이… 발이 바닥에 닿지 않았어? 히히')], [{ who: '꽥꽥 이장', text: '진짜 오리 같았소!' }, { who: '안노랑', text: '(완벽한 오리…!)' }], '뿌듯'],
+        caught: [[L('꽥꽥 이장', '꽥… 오리가 가라앉는 건 처음 보오.'), L('느릿 할배', '느으릿… 거북이도… 가끔은 가라앉는다네…'), L('안노랑', '(그래도 끝까지 헤엄쳤어…!)')], [{ who: '꽥꽥 이장', text: '오리가 가라앉는 건 처음 보오…' }, { who: '안노랑', text: '(그래도 완주!)' }], '꼬르륵'] }[end];
+      sfx(end === 'caught' ? 'wahwah' : 'tada'); if (end === 'hero') { burst(P.x, P.y - 30, '#ffd23f', 30); burst(P.x, P.y - 30, '#7fcaf2', 24); }
+      setTimeout(() => { epPanel(3, P.x, P.y, L3[1], L3[2], { sfxCol: '#ffd23f' }); say(L3[0], () => epNext()); }, 500); },
+    tick() { return false; } },
+];
+function swimCaught(E) { E.d.caught = (E.d.caught || 0) + 1; shake(4, .4); sfx('caught'); emote(null, 'shock', 1.6);
+  say([L('꽥꽥 이장', '꽥?! 저, 저건 꼬리 프로펠러?! 오리가 아니잖소!'), L('꽥순이', '아니야 이장님, 노랑이는 그냥 힘센 오리야!'), L('꽥꽥 이장', '…그, 그런가? 계속하시오!')], () => { DG.v = 40; }); }
+EPW.finish = E => {
+  window.__peepWord = null; const end = E.d.end || 'caught', first = !EPS.album.epw || !EPS.album.epw[end], today = EPS.clear.epw !== dayKey();
+  EPS.album.epw = EPS.album.epw || {}; EPS.album.epw[end] = dayKey(); let rew = [];
+  if (today) { EPS.clear.epw = dayKey(); const c = end === 'hero' ? 2 : 1; for (const id of EPW.cast) accAdd(id, c); const cand = 12 + (E.d.rank && E.d.rank <= 3 ? (4 - E.d.rank) * 4 : 0); hearts += cand; rew.push(`✦+${cand}`, `오리 인정 ♥+${c}`); }
+  if (!(inv.lotusleaf > 0)) { addItem('lotusleaf', 2); rew.push('연잎 ×2'); }
+  stat('ep'); save(); const panels = E.panels; for (let i = 0; i < 4; i++) if (!panels[i]) panels[i] = { img: epCapture(P.x, P.y), lines: [], sfx: '' };
+  const C = composeComic({ kicker: '안노랑 시즌 1 · 3화', title: EPW.title, ending: EPW.ends[end].name }, panels); toBlob(C).then(b => { if (b) albPut(`epw_${end}`, b); });
+  setTimeout(() => { banner(`결말: ${EPW.ends[end].name}`, first ? '만화책에 새 칸이 생겼어요!' : '만화책 그림이 새로 바뀌었어요', '#7fcaf2'); if (rew.length) toast(rew.join(' · ')); }, 300);
+  setTimeout(() => showComic(C, { title: `3화 「${EPW.title}」 완성!`, desc: `결말 <b>${EPW.ends[end].name}</b> · 만화책 ${Object.keys(EPS.album.epw).length}/3칸` }), 1300); };
+epAbort = (o => () => { window.__peepWord = null; return o(); })(epAbort);
+{ const i = BIG.findIndex(b => b.id === 'ep3'); if (i >= 0) BIG[i] = EPW; else BIG.push(EPW); }
+// 포스터 (수영장 앞)
+function swimPosterNear() { return !EP && curRoom.id === 'wv' && Math.hypot(P.x - SWIM.poster.x, P.y - SWIM.poster.y) < 22; }
+wvNear = () => swimPosterNear() ? 'poster' : null;
+wvInteract = () => { if (swimPosterNear()) { epStart(EPW); return true; } return false; };
+wvHint = () => swimPosterNear() ? { x: SWIM.poster.x, y: SWIM.poster.y - 30, t: `${KA()} 3화 꽥꽥 수영 대회` } : null;
+// 소동 일기: 물가마을 오리 인정도 + 3화 안내 문구
+epbookEntries = (o => m => { const E = o(m); if (m.tab === 0) for (const e of E) if (e.name && e.name.includes('꽥꽥 수영 대회')) e.desc = e.desc.replace('광장 포스터에서 시작', '물가마을 수영장 포스터에서 시작');
+  if (m.tab === 1) { E.push({ name: '🦆 꽥꽥 물가마을 · 오리 인정', desc: '물가마을 친구들이 노랑이를 오리로 인정해 주는 정도', tag: '', col: '#bfe8ff', act: () => { } });
+    for (const id of WV_IDS) { const n = npcById(id); if (!n) continue; const lv = accLv(id); E.push({ img: window.NPC_IMG && NPC_IMG[n.name], name: n.name, desc: `${['수상해요', '긴가민가', '오리 친구', '진짜 오리!'][lv]} · ${lv < 3 ? `다음 단계까지 ${ACC_LV[lv + 1] - (EPS.acc[id] || 0)}` : '최고 단계!'}`, tag: '♥'.repeat(lv) + '♡'.repeat(3 - lv), col: lv >= 3 ? '#bfe8ff' : '#efe2c8', act: () => { } }); } }
+  return E; })(epbookEntries);
+// 포스터 3D
+function syncSwimPoster() { if (!R3 || !R3.wvRoot || R3.wvPoster) return; const p = grp(mesh('c', '#8a5a3c', .05, 1.1, .05, -.42, .55, 0), mesh('c', '#8a5a3c', .05, 1.1, .05, .42, .55, 0)); const pl = new THREE.Mesh(new THREE.PlaneBufferGeometry(1.0, .7), new THREE.MeshBasicMaterial({ map: farmText('꽥꽥 수영 대회', 256, 180, '#7fcaf2', '#fff') })); pl.position.set(0, 1.0, .03); p.add(pl); p.position.set(U(SWIM.poster.x), 0, ZU(SWIM.poster.y) - .5); R3.wvRoot.add(p); R3.wvPoster = p; }
+drawOverlay4 = (o => () => { try { syncSwimPoster(); } catch (e) { } o(); })(drawOverlay4);
+// 레이스 중: 물에 떠 있는 정도 게이지
+drawOverlay4 = (o => () => { o(); if (!EP || EP.def !== EPW || EP.step !== 2) return; const u = Math.max(11 * DPR, Math.min(CW, CH) / 30) * TXS(), w = Math.min(CW * .6, 280 * DPR), x = CW / 2 - w / 2, y = CH * .76, f = EP.d.f / 100;
+  ctx.fillStyle = 'rgba(51,34,42,.7)'; rr(x - 4 * DPR, y - 4 * DPR, w + 8 * DPR, u * 1.2 + 8 * DPR, 10 * DPR); ctx.fill(); ctx.fillStyle = f < .3 ? '#ff6b6b' : '#7fcaf2'; rr(x, y, w * f, u * 1.2, 8 * DPR); ctx.fill(); text(`🦆 둥둥 ${Math.round(f * 100)}%  ·  ${KA()} 물장구 · ${KB()} 꼬리 프로펠러`, CW / 2, y + u * .62, u * .7, '#fff', 'center', true); })(drawOverlay4);
+
+// ===== 12) 세계 지도 (노랑폰 > 지도) =====
+const WORLD = [
+  { id: 'v1', name: '삐약마을', sub: '병아리인 척 · 농장', x: .3, y: .62, col: '#ffd23f', open: () => true },
+  { id: 'wv', name: '꽥꽥 물가마을', sub: '오리인 척 · 수상 마을', x: .62, y: .78, col: '#7fcaf2', open: () => wvUnlocked() },
+  { id: 'cloud', name: '몽글몽글 구름언덕', sub: '양인 척 · 준비 중', x: .2, y: .25, col: '#e8e0f8', open: () => false },
+  { id: 'acorn', name: '도토리 시티', sub: '다람쥐인 척 · 준비 중', x: .72, y: .3, col: '#c98a5a', open: () => false },
+  { id: 'snow', name: '반짝 눈꽃마을', sub: '펭귄인 척 · 준비 중', x: .48, y: .1, col: '#dff4ff', open: () => false },
+];
+let WMAP = false;
+function drawWorldMap() { if (!WMAP) return; const u = Math.max(11 * DPR, Math.min(CW, CH) / 28), w = Math.min(CW - 30 * DPR, u * 24), h = Math.min(CH - 60 * DPR, w * 1.15), x = CW / 2 - w / 2, y = CH / 2 - h / 2;
+  ctx.fillStyle = 'rgba(30,20,25,.55)'; ctx.fillRect(0, 0, CW, CH); ctx.fillStyle = '#33222a'; rr(x - 4 * DPR, y - 4 * DPR, w + 8 * DPR, h + 8 * DPR, u); ctx.fill();
+  const gr = ctx.createLinearGradient(0, y, 0, y + h); gr.addColorStop(0, '#bfe8ff'); gr.addColorStop(1, '#8fd8f0'); ctx.fillStyle = gr; rr(x, y, w, h, u * .8); ctx.fill();
+  // 땅 덩어리
+  ctx.fillStyle = '#9bd16f'; for (const [px, py, rx, ry] of [[.3, .6, .26, .2], [.2, .27, .2, .14], [.72, .3, .2, .16], [.48, .12, .22, .09]]) { ctx.beginPath(); ctx.ellipse(x + px * w, y + py * h, rx * w, ry * h, 0, 0, 6.29); ctx.fill(); }
+  ctx.fillStyle = '#e8f6ff'; ctx.beginPath(); ctx.ellipse(x + .48 * w, y + .1 * h, .14 * w, .06 * h, 0, 0, 6.29); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 3 * DPR; ctx.setLineDash([8 * DPR, 7 * DPR]); ctx.beginPath(); ctx.moveTo(x + .36 * w, y + .7 * h); ctx.quadraticCurveTo(x + .5 * w, y + .86 * h, x + .6 * w, y + .78 * h); ctx.stroke(); ctx.setLineDash([]);
+  text('🛶 나룻배 ✦3', x + .47 * w, y + .87 * h, u * .65, '#2f6e9e', 'center');
+  const here = inWV() ? 'wv' : 'v1';
+  for (const v of WORLD) { const px = x + v.x * w, py = y + v.y * h, on = v.open(); if (v.id === 'v1') window.__wmV1 = { x: px, y: py, r: u }; ctx.fillStyle = on ? v.col : '#c8c0c8'; ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2.5 * DPR; ctx.beginPath(); ctx.arc(px, py, u * .9, 0, 6.29); ctx.fill(); ctx.stroke();
+    text(on ? '🏠' : '🔒', px, py + 1, u * .8, '#33222a', 'center'); text(v.name, px, py + u * 1.6, u * .8, '#33222a', 'center', true); text(v.sub, px, py + u * 2.5, u * .6, '#5a4a50', 'center');
+    if (v.id === here) { const b = Math.sin(time * 5) * 3 * DPR; ctx.fillStyle = '#ff6b8a'; ctx.beginPath(); ctx.moveTo(px, py - u * 1.1 + b); ctx.lineTo(px - u * .4, py - u * 1.8 + b); ctx.lineTo(px + u * .4, py - u * 1.8 + b); ctx.fill(); text('지금 여기', px, py - u * 2.2 + b, u * .6, '#ff6b8a', 'center', true); } }
+  text('세계 지도', x + w / 2, y + u * 1.2, u * 1.1, '#33222a', 'center', true); text(inWV() ? '아무 곳이나 누르면 닫혀요' : '삐약마을을 누르면 마을 지도 · 다른 곳은 닫기', x + w / 2, y + h - u * .8, u * .6, '#2f6e9e', 'center'); }
+drawOverlay4 = (o => () => { o(); drawWorldMap(); })(drawOverlay4);
+{ const a = APPS.find(q => q.id === 'map'); if (a) { a.go = () => { phone = null; if (curRoom.dungeon) { toast('동굴 안에서는 지도가 안 보여!'); return; } WMAP = true; sfx('blip'); }; } }
+APPS.forEach(a => { if (a.id === 'map') a.name = '지도'; });
+addEventListener('pointerdown', e => { if (!WMAP) return; WMAP = false; e.stopImmediatePropagation(); const x = (e.clientX - cvOff.l) * DPR, y = (e.clientY - cvOff.t) * DPR, r = window.__wmV1; if (r && !inWV() && Math.hypot(x - r.x, y - r.y) < r.r * 1.6) mapOpen = true; }, true);
+addEventListener('keydown', e => { if (WMAP) { WMAP = false; } }, true);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
