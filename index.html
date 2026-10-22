@@ -4726,6 +4726,167 @@ function syncTailWeapon3D() {
 }
 drawOverlay4 = (o => () => { try { syncTailWeapon3D(); } catch (e) { } o(); })(drawOverlay4);
 
+// ---------- cook.js: 젤다식 냄비 요리 · 들판 채집 · 사냥 재료 ----------
+// 재료를 최대 5개 냄비에 넣으면, 조합에 따라 요리/묘약이 나와요.
+//  - 같은 효과 재료가 많을수록 효과 단계↑(최대 3), 재료가 많을수록 지속시간↑
+//  - 서로 다른 효과가 섞이면 효과가 사라져요 (회복만 남음)
+//  - 곤충 + 장난꾸러기 재료 = 묘약 / 장난꾸러기 재료 + 음식 = 수상한 죽
+//  - 정해진 레시피(당근 케이크 등)와 정확히 같으면 그 요리가 나와요
+
+// 효과 종류 (기존 SNACK_FX 에 전투 효과를 더해요)
+Object.assign(SNACK_FX, {
+  atk: { name: '불끈', ico: '💪', col: '#ff8a5a', txt: p => `꼬리 힘 +${p}` },
+  def: { name: '튼튼', ico: '🛡️', col: '#9fb8d6', txt: p => `튼튼함 +${p}` },
+  spd: { name: '날쌘', ico: '💨', col: '#9be3c9', txt: p => `발걸음 빠르게 ${p}단계` },
+});
+const FX_PREFIX = { atk: '불끈', def: '튼튼', spd: '날쌘', quiet: '사뿐사뿐', voice: '맑은', fluff: '보송보송', calm: '든든' };
+function fxPower(k, lv) { return k === 'atk' || k === 'def' || k === 'spd' ? lv : k === 'voice' ? +(1 + .2 * lv).toFixed(2) : k === 'calm' ? +(1 - .12 * lv).toFixed(2) : +(1 - .15 * lv).toFixed(2); }
+function applyFx(k, p, sec) { const cur = SNACKB[k]; SNACKB[k] = { t: Math.max(cur ? cur.t : 0, sec), p: cur ? (k === 'atk' || k === 'def' || k === 'spd' || k === 'voice' ? Math.max(cur.p, p) : Math.min(cur.p, p)) : p }; if (k === 'spd') buffs.spd = Math.max(buffs.spd || 0, .2); }
+atkOf = (o => () => o() + (SNACKB.atk ? SNACKB.atk.p : 0))(atkOf);
+defOf = (o => () => o() + (SNACKB.def ? SNACKB.def.p : 0))(defOf);
+updateTown = (o => dt => { o(dt); if (SNACKB.spd && state === 'play') buffs.spd = Math.max(buffs.spd || 0, .2); })(updateTown);
+
+// ===== 들판·동굴 채집 재료 =====
+Object.assign(ITEMS, {
+  f_power: { name: '불끈버섯', type: 'use', heal: 1, sell: 6 },
+  f_tough: { name: '단단버섯', type: 'use', heal: 1, sell: 7 },
+  f_swift: { name: '날쌘 들당근', type: 'use', heal: 1, sell: 6 },
+  f_sneak: { name: '살금풀', type: 'mat', sell: 5 },
+  f_voice: { name: '이슬꽃', type: 'mat', sell: 5 },
+  f_fluff: { name: '솜꽃', type: 'mat', sell: 5 },
+  f_berry: { name: '산딸기', type: 'use', heal: 2, sell: 4 },
+});
+// 재료표: [분류, 회복, 효과]  분류: veg 채소 · fruit 과일 · grain 곡물 · egg 달걀 · dairy 유제품 · sweet 단것 · fish 생선 · mush 버섯 · herb 풀 · mon 장난꾸러기 재료 · bug 곤충
+const ING = {
+  carrot: ['veg', 2], turnip: ['veg', 2], tomato: ['veg', 3], cabbage: ['veg', 3, 'calm'], corn: ['veg', 3], potato: ['veg', 2], sweetpotato: ['veg', 3, 'def'], spinach: ['veg', 2, 'calm'], pepper: ['veg', 1, 'atk'], radish: ['veg', 2],
+  strawberry: ['fruit', 2, 'voice'], watermelon: ['fruit', 4], apple: ['fruit', 2], persimmon: ['fruit', 2], f_berry: ['fruit', 2],
+  rice: ['grain', 2, 'calm'], bread: ['grain', 4],
+  egg: ['egg', 2, 'fluff'], egg_p: ['egg', 3, 'fluff'],
+  milk: ['dairy', 3, 'quiet'], milk_p: ['dairy', 4, 'quiet'], gmilk: ['dairy', 3, 'quiet'], gmilk_p: ['dairy', 4, 'quiet'], cheese: ['dairy', 3], mayo: ['dairy', 1],
+  honey: ['sweet', 4, 'voice'], honey_acacia: ['sweet', 4, 'voice'], honey_chestnut: ['sweet', 4, 'voice'], honey_buckwheat: ['sweet', 4, 'voice'], jam: ['sweet', 3],
+  fish_minnow: ['fish', 2], fish_crucian: ['fish', 3], fish_carp: ['fish', 4], fish_gold: ['fish', 2, 'voice'], fish_tadpole: ['fish', 1], fish_catfish: ['fish', 4], fish_smelt: ['fish', 2], fish_dace: ['fish', 2], fish_crayfish: ['fish', 3, 'def'], fish_eel: ['fish', 4, 'atk'], fish_trout: ['fish', 4, 'spd'],
+  f_power: ['mush', 1, 'atk'], f_tough: ['mush', 1, 'def'], f_swift: ['veg', 1, 'spd'], f_sneak: ['herb', 0, 'quiet'], f_voice: ['herb', 0, 'voice'], f_fluff: ['herb', 0, 'fluff'],
+  cap: ['mon', 0], wing: ['mon', 0], acorn: ['mon', 0],
+  bug_white: ['bug', 0, 'fluff'], bug_yellow: ['bug', 0, 'fluff'], bug_lady: ['bug', 0, 'calm'], bug_grass: ['bug', 0, 'spd'], bug_drag: ['bug', 0, 'spd'], bug_reddrag: ['bug', 0, 'atk'], bug_cicada: ['bug', 0, 'voice'], bug_firefly: ['bug', 0, 'quiet'], bug_cricket: ['bug', 0, 'quiet'], bug_beetle: ['bug', 0, 'atk'], bug_stag: ['bug', 0, 'def'], bug_snail: ['bug', 0, 'def'], bug_snowmoth: ['bug', 0, 'fluff'],
+};
+const CAT_NAME = { veg: '채소', fruit: '과일', grain: '곡물', egg: '달걀', dairy: '유제품', sweet: '단것', fish: '생선', mush: '버섯', herb: '풀', mon: '장난꾸러기 재료', bug: '곤충' };
+function ingInfo(id) { const g = ING[id]; if (!g) return ''; const F = g[2] && SNACK_FX[g[2]]; return `${CAT_NAME[g[0]]}${g[1] ? ` · 회복 ${g[1]}` : ''}${F ? ` · ${F.ico} ${F.name}` : ''}`; }
+// 채집 재료 설명
+for (const id of ['f_power', 'f_tough', 'f_swift', 'f_sneak', 'f_voice', 'f_fluff', 'f_berry']) { const g = ING[id], F = g[2] && SNACK_FX[g[2]]; ITEMS[id].desc = `들판 채집 · 냄비에 넣으면 ${F ? `${F.ico} ${F.name} 효과` : '회복 요리'}${g[1] ? ` · 그냥 먹으면 용기 +${g[1]}` : ''}`; }
+
+// ===== 냄비 요리 결과 계산 =====
+function cookResult(list) {
+  const cnt = {}; for (const id of list) cnt[id] = (cnt[id] || 0) + 1;
+  // 1) 정해진 레시피와 똑같으면 그 요리
+  for (const r of COOK) { const need = r.need, ks = Object.keys(need); if (ks.length === Object.keys(cnt).length && ks.every(k => cnt[k] === need[k])) return { item: r.out, named: true }; }
+  const cats = list.map(id => ING[id][0]), has = c => cats.includes(c), only = (...cs) => cats.every(c => cs.includes(c));
+  const heal0 = list.reduce((s, id) => s + ING[id][1], 0), fxs = list.map(id => ING[id][2]).filter(Boolean), kinds = [...new Set(fxs)];
+  // 2) 묘약: 곤충 + 장난꾸러기 재료 (음식 없이)
+  if (has('bug') && has('mon') && only('bug', 'mon')) { const k = kinds.length === 1 ? kinds[0] : null; const lv = k ? Math.min(3, fxs.length) : 0;
+    return { name: k ? `${FX_PREFIX[k]} 묘약` : '흐릿한 묘약', heal: 0, fx: k, lv, sec: 60 + 50 * list.length, kind: 'elixir', mixed: kinds.length > 1 }; }
+  // 3) 장난꾸러기 재료나 곤충이 음식에 섞이면: 수상한 죽
+  if (has('mon') || has('bug')) return { name: '수상한 죽', heal: 1, fx: null, lv: 0, sec: 0, kind: 'dubious' };
+  // 4) 일반 요리
+  const k = kinds.length === 1 ? kinds[0] : null, lv = k ? Math.min(3, fxs.length) : 0;
+  let base = '채소 볶음';
+  if (only('herb')) base = '풀잎 차';
+  else if (has('fish') && has('veg')) base = '생선 채소 찜'; else if (has('fish') && has('mush')) base = '생선 버섯 구이'; else if (has('fish')) base = '생선 꼬치구이';
+  else if (has('mush') && only('mush', 'herb')) base = '버섯 꼬치'; else if (has('mush')) base = '버섯 볶음';
+  else if (has('egg') && has('dairy') && has('sweet')) base = '달콤 푸딩'; else if (has('egg') && has('veg')) base = '달걀 채소 볶음'; else if (has('egg') && only('egg', 'herb')) base = '달걀 프라이'; else if (has('egg')) base = '폭신 달걀찜';
+  else if (has('grain') && has('dairy')) base = '우유 죽'; else if (has('grain')) base = '채소 주먹밥';
+  else if (only('fruit', 'sweet', 'herb') && has('sweet')) base = '꿀 과일 조림'; else if (only('fruit', 'herb')) base = '과일 꼬치'; else if (only('sweet', 'dairy', 'herb')) base = '달콤 우유';
+  else if (has('sweet')) base = '꿀 채소 조림';
+  return { name: (k ? FX_PREFIX[k] + ' ' : '') + base, heal: Math.max(1, Math.round(heal0 * 1.5)), fx: k, lv, sec: k ? 60 + 40 * list.length : 0, kind: 'dish', mixed: kinds.length > 1 };
+}
+// 만든 요리는 '종류'별로 가방에 쌓여요 (이름·회복·효과가 같으면 같은 칸)
+const CDISH = {}; // id -> {name,heal,fx,lv,sec,kind}
+const CDEX = {}; // 처음 만든 요리 이름
+function dishId(r) { return 'cd_' + [r.name, r.heal, r.fx || '', r.lv, r.sec].join('_').replace(/\s/g, ''); }
+function regDish(id, r) {
+  CDISH[id] = r; const F = r.fx && SNACK_FX[r.fx];
+  const desc = (r.kind === 'elixir' ? '묘약 · ' : r.kind === 'dubious' ? '이상한 냄새… · ' : '냄비 요리 · ') + (F ? `${F.ico} ${F.name} ${r.lv}단계 ${Math.round(r.sec / 60 * 10) / 10}분 · ${F.txt(fxPower(r.fx, r.lv))}` : '') + (r.heal ? `${F ? ' · ' : ''}용기 +${r.heal}` : '');
+  ITEMS[id] = Object.assign(ITEMS[id] || {}, { name: r.name, type: 'use', desc, heal: r.heal, dish: r.kind === 'dish' ? 1 : 0, sell: Math.max(2, r.heal * 2 + r.lv * 5), spr: r.kind === 'elixir' ? 'pot_purple' : 'soup' });
+  try { if (R3 && typeof snap3D === 'function') ITEMS[id].icon = snap3D(dishModel(r), 96, { elev: .55, rotY: -.5, pad: 1.25 }); } catch (e) { }
+}
+function dishModel(r) { const G = (...a) => grp(...a), m = mesh, F = r.fx && SNACK_FX[r.fx], col = F ? F.col : r.kind === 'dubious' ? '#8a7f6a' : '#f2c48a';
+  if (r.kind === 'elixir') return G(m('s', M(col, { roughness: .15, transparent: true, opacity: .9 }), .3, .3, .3, 0, .3, 0), m('c', M('#dff4ff', { transparent: true, opacity: .7 }), .1, .22, .1, 0, .64, 0), m('c', '#c98a5a', .11, .08, .11, 0, .78, 0));
+  const g = G(m('c', '#fff8e7', .42, .18, .42, 0, .12, 0), m('c', '#e8d8c0', .3, .04, .3, 0, .02, 0), m('s', col, .36, .12, .36, 0, .24, 0));
+  if (r.kind === 'dubious') { g.add(m('s', '#6f6450', .1, .08, .1, .1, .32, .05), m('s', '#9a8a6a', .08, .06, .08, -.12, .31, -.04)); return g; }
+  for (let i = 0; i < 4; i++) { const a = i * 1.6; g.add(m('s', ['#ff8a5a', '#9be37a', '#ffe066', '#ffffff'][i], .07, .06, .07, Math.cos(a) * .17, .32, Math.sin(a) * .17)); } return g; }
+useItem = (orig => id => { const r = CDISH[id]; if (!r || !(inv[id] > 0)) return orig(id);
+  inv[id]--; if (inv[id] <= 0) delete inv[id]; sfx('gulp');
+  if (r.heal && hp < maxHp()) healP(r.heal);
+  if (r.fx) { applyFx(r.fx, fxPower(r.fx, r.lv), r.sec); const F = SNACK_FX[r.fx]; floaters.push({ x: P.x, y: P.y - 40, t: 1.4, text: `${r.kind === 'elixir' ? '꿀꺽!' : '냠!'} ${F.ico} ${F.name} ${r.lv}단계`, col: '#fff3b0' }); }
+  else floaters.push({ x: P.x, y: P.y - 40, t: 1.2, text: r.kind === 'dubious' ? '우웩… 그래도 배는 불러' : '냠냠!', col: '#fff3b0' });
+  emote(null, r.kind === 'dubious' ? 'sweat' : 'heart', 1.2); save(); return true; })(useItem);
+
+// ===== 부엌: '냄비 요리' 탭 =====
+function potList(m) { return m.pot || (m.pot = []); }
+function potAvail(id, m) { return (inv[id] || 0) - potList(m).filter(x => x === id).length; }
+function potEntries(m) {
+  const pot = potList(m), E = [];
+  const names = pot.map(id => ITEMS[id].name), preview = pot.length ? (() => { const r = cookResult(pot); if (r.named) return `${ITEMS[r.item].name}${COOKED && COOKED[r.item] ? '' : ' (레시피!)'}`; return CDEX[r.name] ? r.name : '무엇이 나올까…?'; })() : '';
+  E.push({ name: pot.length ? `🍲 ${names.join(' · ')}` : '🍲 냄비가 비어 있어요', desc: pot.length ? `${pot.length}/5 · 예상: ${preview}` : '재료를 눌러 넣어요 (최대 5개) · 같은 효과끼리 모으면 효과 UP!', tag: pot.length ? '보글보글!' : '…', col: pot.length ? '#ffd23f' : '#d9cbb5', act: () => { if (pot.length) potCook(m); } });
+  if (pot.length) E.push({ name: '냄비 비우기', desc: '넣은 재료를 다시 가방으로', tag: '비우기', col: '#efe2c8', act: () => { pot.length = 0; sfx('blip'); } });
+  const ids = Object.keys(ING).filter(id => ITEMS[id] && potAvail(id, m) > 0);
+  ids.sort((a, b) => (ING[b][2] ? 1 : 0) - (ING[a][2] ? 1 : 0) || ING[b][1] - ING[a][1]);
+  for (const id of ids) E.push({ img: itemImg(id), name: `${ITEMS[id].name} ×${potAvail(id, m)}`, desc: ingInfo(id), tag: pot.length >= 5 ? '가득' : '넣기', col: pot.length >= 5 ? '#d9cbb5' : (ING[id][2] ? SNACK_FX[ING[id][2]].col : '#fff3d6'), act: () => { if (pot.length >= 5) return pmsg('냄비가 가득 찼어요 (5개)', 1); pot.push(id); sfx('pop'); } });
+  if (ids.length === 0 && !pot.length) E.push({ name: '넣을 재료가 없어요', desc: '밭 작물 · 달걀 · 우유 · 물고기 · 곤충 · 들판의 반짝이는 채집물을 모아 봐요', tag: '', col: '#efe2c8' });
+  return E;
+}
+function potCook(m) {
+  const pot = potList(m).slice(); for (const id of pot) { if (!(inv[id] > 0)) return pmsg('재료가 모자라요', 1); }
+  for (const id of pot) { inv[id]--; if (inv[id] <= 0) delete inv[id]; } potList(m).length = 0;
+  sfx('water'); burst(P.x, P.y - 20, '#ffffff', 10);
+  const r = cookResult(pot); let id, name, great = false;
+  if (r.named) { id = r.item; name = ITEMS[id].name; if (typeof COOKED !== 'undefined') COOKED[id] = 1; }
+  else { if (r.kind !== 'dubious' && Math.random() < .12) { great = true; if (r.fx) { r.lv = Math.min(3, r.lv + 1); r.sec = Math.round(r.sec * 1.3); } else r.heal += 3; } id = dishId(r); regDish(id, r); name = r.name; }
+  addItem(id, 1); stat('cook'); if (typeof chickBonus === 'function') try { chickBonus('cook', id); } catch (e) { }
+  const first = !CDEX[name]; CDEX[name] = 1;
+  pmsg(`${great ? '대성공! ' : ''}${name} 완성!${r.mixed ? ' (효과가 섞여서 사라졌어…)' : ''}`, r.kind === 'dubious');
+  if (first && r.kind !== 'dubious') setTimeout(() => toast(`📖 새 요리 발견: ${name}`), 600);
+  if (great) { sfx('tada'); burst(P.x, P.y - 24, '#ffd23f', 18); } else sfx(r.kind === 'dubious' ? 'wahwah' : 'done');
+  save();
+}
+panelEntries = (orig => () => { const m = menu; if (m && m.kind === 'cook') { if (!m.potV) { m.potV = 1; m.tabs = ['냄비 요리', '레시피 요리', '레시피 도감']; }
+    if (m.tab === 0) return potEntries(m); const t = m.tab; m.tab = t - 1; try { return orig(); } finally { m.tab = t; } } return orig(); })(panelEntries);
+
+// ===== 들판 채집물: 매일 새로 돋아나요 =====
+const FORAGE_T = { forest: ['f_power', 'f_swift', 'f_sneak', 'f_berry', 'f_voice', 'f_fluff', 'f_berry', 'f_power', 'f_sneak', 'f_swift', 'f_fluff', 'f_voice'], cave: ['f_power', 'f_tough', 'f_tough', 'f_power', 'f_tough', 'f_power'] };
+let FGOT = { d: 0, got: {} }, FORAGE = [], FORAGE_DAY = 0;
+function forageBuild() { const d = dayKey(); if (FORAGE_DAY === d) return; FORAGE_DAY = d; FORAGE = []; if (FGOT.d !== d) FGOT = { d, got: {} };
+  if (typeof SPAWNS !== 'undefined' && SPAWNS.length) FORAGE_T.forest.forEach((id, i) => { const [tx, ty] = SPAWNS[dayRoll(d * 31 + i * 7) * SPAWNS.length / 100 | 0 % SPAWNS.length] || SPAWNS[i % SPAWNS.length]; FORAGE.push({ i, id, x: tx * T + 8, y: ty * T + 10 }); });
+  const rs = ['R1', 'R2', 'R3']; FORAGE_T.cave.forEach((id, j) => { const r = ROOMS.find(q => q.id === rs[j % 3]); if (!r) return; const a = j * 2.1 + dayRoll(d + j) / 30; FORAGE.push({ i: 100 + j, id, room: r.id, x: ((r.x0 + r.x1) / 2 + Math.cos(a) * (r.x1 - r.x0) * .32) * T, y: ((r.y0 + r.y1) / 2 + Math.sin(a) * (r.y1 - r.y0) * .28) * T }); }); }
+function forageTick() { if (state !== 'play' || dlg || menu) return; forageBuild();
+  for (const f of FORAGE) { if (FGOT.got[f.i] || (f.room && curRoom.id !== f.room)) continue; if (Math.hypot(P.x - f.x, P.y - f.y) < 13) { FGOT.got[f.i] = 1; addItem(f.id, 1); sfx('pick'); burst(f.x, f.y - 6, '#fff3a0', 10); floaters.push({ x: f.x, y: f.y - 20, t: 1.1, text: `${ITEMS[f.id].name} +1`, col: '#fff3b0' }); stat('forage'); } } }
+updateTown = (o => dt => { o(dt); forageTick(); })(updateTown);
+function forageModel(id) { const G = (...a) => grp(...a), m = mesh;
+  if (id === 'f_power' || id === 'f_tough') { const cap = id === 'f_power' ? '#ff7a3d' : '#8fa6c9'; const g = G(m('c', '#f6e7d4', .07, .16, .07, 0, .08, 0), m('hemi', cap, .17, .13, .17, 0, .15, 0)); for (let i = 0; i < 4; i++) { const a = i * 1.57; g.add(m('s', '#ffffff', .03, .02, .03, Math.cos(a) * .09, .22, Math.sin(a) * .09)); } return g; }
+  if (id === 'f_swift') { const g = G(m('co', '#f08a24', .07, .26, .07, 0, .13, 0)); g.children[0].rotation.z = Math.PI; for (const s of [-1, 1]) { const w = m('s', '#bfe8ff', .1, .02, .05, s * .09, .26, 0); w.rotation.z = s * .4; g.add(w); } g.add(m('co', '#5aa548', .05, .14, .05, 0, .33, 0)); return g; }
+  if (id === 'f_sneak') { const g = G(); for (let i = 0; i < 5; i++) { const b = m('co', '#3f8a4c', .035, .3, .035, (i - 2) * .05, .15, 0); b.rotation.z = (i - 2) * .25; g.add(b); } return g; }
+  if (id === 'f_voice') return G(m('c', '#5aa548', .02, .22, .02, 0, .11, 0), m('co', '#7fcaf2', .1, .12, .1, 0, .24, 0), m('s', '#dff4ff', .04, .04, .04, 0, .19, 0));
+  if (id === 'f_fluff') return G(m('c', '#5aa548', .02, .2, .02, 0, .1, 0), m('s', '#ffffff', .13, .12, .13, 0, .25, 0), m('s', '#fff8e7', .09, .08, .09, .07, .28, .04));
+  if (id === 'f_berry') { const g = G(m('s', '#4e974c', .14, .06, .14, 0, .04, 0)); for (let i = 0; i < 5; i++) { const a = i * 1.25; g.add(m('s', '#e2443b', .05, .05, .05, Math.cos(a) * .06, .1 + (i % 2) * .04, Math.sin(a) * .06)); } return g; }
+  return null; }
+iconModel = (o => id => (ITEMS[id] && id.startsWith('f_') && forageModel(id)) || o(id))(iconModel);
+function syncForage3D() { if (!R3) return; for (const f of FORAGE) { const key = 'fg' + f.i, show = !FGOT.got[f.i] && (!f.room ? !curRoom.dungeon : curRoom.id === f.room);
+    let m = R3.ents.get(key); if (!show) { if (m) m.visible = false; continue; }
+    m = ent(key, () => { const g = new THREE.Group(), md = forageModel(f.id); md.scale.setScalar(1.3); g.add(md); const sp = mesh('oct', M('#fff8d0', { emissive: '#ffe066', emissiveIntensity: .9 }), .05, .05, .05, 0, .55, 0); g.add(sp); g.userData.sp = sp; return g; });
+    m.visible = true; m.position.set(U(f.x), Math.sin(time * 2 + f.i) * .03, ZU(f.y) - .2); m.userData.sp.position.y = .5 + Math.sin(time * 3 + f.i) * .08; m.userData.sp.rotation.y = time * 2; } }
+drawOverlay4 = (o => () => { try { syncForage3D(); } catch (e) { } o(); })(drawOverlay4);
+
+// ===== 사냥 재료: 장난꾸러기가 떨어뜨리는 음식 재료 (기습이면 꼭 하나 더!) =====
+hitEnemy = (orig => (e, dmg) => { if (e.aw === 0) e._sk = 1; orig(e, dmg); if (enemies.includes(e)) delete e._sk; })(hitEnemy);
+killEnemy = (orig => e => { const sneak = !!e._sk; orig(e); const drop = id => pickups.push({ kind: 'item', id, x: e.x, y: e.y - 6, vx: (Math.random() - .5) * 60, vy: -75, t: 0 });
+  if (e.kind === 'shroom') { if (Math.random() < .3) drop('f_power'); if (curRoom.dungeon && Math.random() < .2) drop('f_tough'); if (sneak) drop(Math.random() < .5 ? 'f_power' : 'cap'); }
+  if (e.kind === 'wasp') { if (Math.random() < .2) drop('honey'); if (sneak) drop(Math.random() < .5 ? 'honey' : 'wing'); }
+  if (sneak) floaters.push({ x: e.x, y: e.y - 40, t: 1, text: '기습 보너스 재료!', col: '#9be37a' }); })(killEnemy);
+
+townSave = (orig => () => Object.assign(orig(), { ck: { d: CDISH, x: CDEX, fg: FGOT } }))(townSave);
+townLoad = (orig => d => { if (d && d.ck) { for (const id in d.ck.d || {}) regDish(id, d.ck.d[id]); Object.assign(CDEX, d.ck.x || {}); if (d.ck.fg) FGOT = d.ck.fg; } orig(d); })(townLoad);
+// 3D 준비가 늦게 끝나면 요리 아이콘 다시 그리기
+{ let done = false; updateTown = (o => dt => { o(dt); if (!done && R3 && typeof snap3D === 'function') { done = true; for (const id in CDISH) { try { ITEMS[id].icon = snap3D(dishModel(CDISH[id]), 96, { elev: .55, rotY: -.5, pad: 1.25 }); } catch (e) { } } } })(updateTown); }
+
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
 let USE3D = false, R3 = null;
