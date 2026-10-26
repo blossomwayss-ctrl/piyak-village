@@ -1732,6 +1732,8 @@ function drawHUD() {
   if (hatOwned.length > 1) { const sz = u * 1.9;
     hatOwned.forEach((h, i) => { const sx = px + i * (sz + u * .3), sy = y; uiPanel(sx, sy, sz, sz, u * .5, h === hat ? 'rgba(255,210,63,.96)' : UIC.panel); const img = hatImg(h), k = sz * .8 / img.width; ctx.imageSmoothingEnabled = img.width > 40; ctx.drawImage(img, sx + (sz - img.width * k) / 2, sy + (sz - img.height * k) / 2, img.width * k, img.height * k); hatSlots.push({ x: sx, y: sy, w: sz, h: sz, hat: h }); });
     if (!TOUCH()) text('C', px + hatOwned.length * (sz + u * .3) + u * .3, y + sz / 2, u * .85, UIC.ink, 'left', false); y += sz + u * .5; }
+  if (typeof MQ !== 'undefined' && MQ.step >= 1 && MQ.step <= 5) { const ready = MQ.step === 5, s = `📜 ${mqGoal()}`; ctx.font = `${Math.round(u * .88)}px ${FONT}`; const w = Math.min(CW - px - SA.r - u, ctx.measureText(s).width + u * 1.4);
+    uiPanel(px, y, w, u * 1.55, u * .7, ready ? 'rgba(201,182,255,.97)' : 'rgba(240,233,255,.95)'); fitText(s, px + u * .7, y + u * .8, u * .88, UIC.ink, w - u * 1.2); y += u * 1.8; }
   // quests (max 3 + more)
   const act = Object.entries(Q).filter(([k, q]) => q.st === 1 || q.st === 2).sort((a, b) => b[1].st - a[1].st);
   act.slice(0, 3).forEach(([k, q]) => { const ready = q.st === 2, s = ready ? `★ ${q.title} → ${NPCNAME(k)}` : q.goal(); ctx.font = `${Math.round(u * .88)}px ${FONT}`; const w = ctx.measureText(s).width + u * 1.4; uiPanel(px, y, w, u * 1.55, u * .7, ready ? 'rgba(255,210,63,.96)' : UIC.panel); text(s, px + u * .7, y + u * .8, u * .88, ready ? UIC.ink : UIC.ink2); y += u * 1.8; });
@@ -5978,7 +5980,7 @@ const FD_LIST = [
 { let t = 0; updateTown = (o => dt => { o(dt); if (state !== 'play' || FD.done) return; if (P.x > (FX - 1) * T || curRoom.dungeon) FD.hunt = 1; if ((t -= dt) > 0) return; t = .5;
     if (FD_LIST.every(g => g.ok()) && !dlg) { FD.done = 1; hearts += 5; sfx('tada'); banner('첫날 목표 완료!', '별사탕 ✦5 · 이제 마을을 마음껏 돌아다녀요', '#9be37a'); save(); } })(updateTown); }
 function drawFirstDay() { if (FD.done || state !== 'play' || menu || phone || dlg || mapOpen || (typeof WMAP !== 'undefined' && WMAP) || (typeof EP !== 'undefined' && EP) || !tut.done || curRoom.dungeon) return;
-  const u = Math.max(12 * DPR, Math.min(CW, CH) / 30), nH = Math.ceil(maxHp() / 2), rowsH = Math.ceil(nH / 8), hs = u * 1.05, ch = u * 2.1 + rowsH * hs * 1.02 + u * .55;
+  const u = Math.max(12 * DPR, Math.min(CW, CH) / 30), nH = Math.ceil(maxHp() / 2), rowsH = Math.ceil(nH / 8), hs = u * 1.05, ch = u * 2.1 + rowsH * hs * 1.02 + u * .55 + u * 1.15;
   const x = 10 * DPR + SA.l, y = 10 * DPR + SA.t + ch + u * 2.9, w = u * 10.5, lh = u * 1.2, h = u * 1.6 + lh * 3 + u * .3;
   uiPanel(x, y, w, h, u * .6); const n = FD_LIST.filter(g => g.ok()).length; text(`🌱 첫날 목표 ${n}/3 · 보상 ✦5`, x + u * .55, y + u * .85, u * .72, UIC.ink, 'left', false);
   FD_LIST.forEach((g, i) => { const ok = g.ok(), yy = y + u * 1.75 + i * lh; text(ok ? '☑' : '☐', x + u * .55, yy, u * .75, ok ? '#5a8a3a' : UIC.sub); fitText(ok ? g.t : `${g.t} · ${g.how}`, x + u * 1.5, yy, u * .62, ok ? '#9aa38a' : UIC.ink2, w - u * 2); }); }
@@ -7865,6 +7867,52 @@ epEnd = (orig => () => { const E0 = EP; orig(); if (!E0) return; const id = E0.d
 townSave = (orig => () => Object.assign(orig(), { lv: [LVL.lv, LVL.xp], lve: [LVL.epd, LVL.epb] }))(townSave);
 townLoad = (orig => d => { orig(d); if (d && d.lv) { LVL.lv = Math.min(LV_CFG.cap, Math.max(1, d.lv[0] | 0)); LVL.xp = Math.max(0, d.lv[1] | 0); if (d.lve) { Object.assign(LVL.epd, d.lve[0] || {}); Object.assign(LVL.epb, d.lve[1] || {}); } }
   else gainXp((STAT.mob || 0) * LV_CFG.retroPerMob, 0, 0, true); })(townLoad); // 레벨 생기기 전 세이브: 잡은 몬스터만큼 소급
+
+// ===== 메인 퀘스트 1장 (RPG 2단계) =====
+// 이야기: 숲 버섯돌이들이 난폭해졌다 → 원인은 버섯 대왕 → 대왕도 '까만 비' 피해자 → 2장 떡밥(먹구름·메기)
+const MQ = { step: 0, n: 0 }; // 0 시작 전 · 1~5 진행 · 6 완료
+const MQ1 = { title: '1장 · 버섯 동굴의 수상한 포자', need: 5, reward: { xp: 80, candy: 20 }, steps: [null,
+  { t: '부엉 박사 찾아가기', how: '도토리 숲 동쪽 끝' },
+  { t: '난동 부리는 버섯돌이 진정시키기', how: '도토리 숲' },
+  { t: '버섯 동굴 들어가기', how: '개울 건너 북쪽 바위 언덕' },
+  { t: '버섯 대왕과 담판 짓기', how: '동굴 가장 안쪽 방' },
+  { t: '부엉 박사에게 알리기', how: '도토리 숲 동쪽 끝' }] };
+function mqGoal() { const g = MQ1.steps[MQ.step]; if (!g) return ''; return MQ.step === 2 ? `${g.t} ${MQ.n}/${MQ1.need}` : `${g.t} · ${g.how}`; }
+function mqSet(step) { MQ.step = step; MQ.n = 0; save(); }
+function mqBusy() { return state !== 'play' || !!dlg || !!menu || !!phone || mapOpen || cardOpen || (typeof EP !== 'undefined' && !!EP); }
+function mqIntro() {
+  MQ.step = 1; MQ.n = 0;
+  say([L('계획이', '노랑아, 큰일이야! 요즘 숲 버섯돌이들이 이상하게 난폭해졌대.'), L('먹보', '내 간식 바구니도 뺏겼어… 아, 아니다. 그건 내가 먹은 거구나.'),
+    L('승부욕', '부엉 박사님이라면 원인을 알지도 몰라! 도토리 숲 동쪽 끝이야!'), L('안노랑', '(마을을 지키는 것도… 병아리의 일이니까!)')],
+    () => { banner('메인 퀘스트', MQ1.title, '#c9b6ff'); sfx('star'); save(); });
+}
+function mqOwl(n) {
+  tut.talked = true; n.face = P.x < n.x ? -1 : 1; n.react = .4;
+  if (MQ.step === 1) say([L(n.name, '오오, 노랑이 왔구먼. 요즘 버섯돌이들 눈빛이 까맣게 변했어.'), L(n.name, '먼저 숲에서 날뛰는 녀석들을 진정시켜 주게. 다섯 마리면 되겠지.'),
+    L(n.name, '…그런데 병아리가 꼬리로 싸운다고? 허허, 요즘 병아리는 튼튼하구먼.'), L('안노랑', '(뜨끔) 병, 병아리 체조를 열심히 해서 그래요!')], () => mqSet(2));
+  else say([L('안노랑', '박사님! 버섯 대왕이 그러는데, 하늘에서 까만 비가 내린 뒤로 머리가 아팠대요.'), L(n.name, '까만 비라… 구름언덕 하늘에 먹구름이 수상하게 뭉쳐 있다더군.'),
+    L(n.name, '물가마을 메기 대장도 요즘 부쩍 심술이 늘었다지. 이건 시작에 불과할지도 몰라.'), L(n.name, '고맙네, 노랑이. 자네는… 아주 특별한 병아리야.'), L('안노랑', '(…들킨 건 아니겠지?)')], mqFinish);
+}
+function mqBoss() {
+  MQ.step = 5; save();
+  say([L('버섯 대왕', '으으… 졌다. 미안하다, 꼬마 병아리. 머리가 지끈지끈해서 그만…'), L('버섯 대왕', '며칠 전 하늘에서 까만 비가 내린 뒤로, 내 포자가 까맣게 물들었어.'),
+    L('버섯 대왕', '아이들이 그 포자를 맡고 다 날뛰기 시작한 거야.'), L('안노랑', '(까만 비…? 부엉 박사님께 알려야겠어!)')], () => toast('부엉 박사에게 알리러 가자!'));
+}
+function mqFinish() {
+  MQ.step = 6; hearts += MQ1.reward.candy; banner('1장 완료!', `경험치 +${MQ1.reward.xp} · 별사탕 ✦${MQ1.reward.candy}`, '#c9b6ff'); sfx('tada'); burst(P.x, P.y - 20, '#c9b6ff', 28);
+  gainXp(MQ1.reward.xp); save();
+  say([L('계획이', '까만 비… 먹구름… 메기 대장… 다음 계획은 내가 세워 둘게!'), L('승부욕', '누가 먼저 범인 잡나 시합이다!')], () => toast('2장은 다음 업데이트에서 열려요!'));
+}
+{ let t = 0; updateTown = (o => dt => { o(dt); if ((t -= dt) > 0) return; t = .5; if (mqBusy()) return;
+    if (MQ.step === 0 && tut.done && FD.done && !curRoom.dungeon) mqIntro();
+    else if (MQ.step === 3 && curRoom.dungeon) { mqSet(4); toast('버섯 대왕을 만나러 가자! 동굴 가장 안쪽 방'); }
+    else if (MQ.step === 4 && BOSSDAY === dayKey()) mqBoss(); })(updateTown); }
+killEnemy = (orig => e => { orig(e); if (MQ.step !== 2 || e.kind !== 'shroom') return; MQ.n++;
+  floaters.push({ x: e.x, y: e.y - 40, t: 1, text: `진정! ${MQ.n}/${MQ1.need}`, col: '#c9b6ff' });
+  if (MQ.n >= MQ1.need) { mqSet(3); say([L('계획이', '다섯 마리 다 진정! 그런데 다들 "대왕님이…" 하고 중얼거렸어.'), L('승부욕', '버섯 동굴로 가자! 개울 건너 북쪽 바위 언덕!')]); } })(killEnemy);
+talk = (orig => n => { if (n.id === 'owl' && (MQ.step === 1 || MQ.step === 5) && !(Q.owl.st === 1 && byId('hedgehog').follow)) { mqOwl(n); return; } orig(n); })(talk);
+townSave = (orig => () => Object.assign(orig(), { mq: [MQ.step, MQ.n] }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.mq) { MQ.step = d.mq[0] | 0; MQ.n = d.mq[1] | 0; } })(townLoad);
 
 // ===== 매 프레임 =====
 let GFX_INIT = false, FIXT = 0;
