@@ -1712,12 +1712,15 @@ function drawHUD() {
   const u = Math.max(12 * DPR, Math.min(CW, CH) / 30);
   const px = 10 * DPR + SA.l, py = 10 * DPR + SA.t;
   // status card: 별사탕 · 별 · 하트
-  const nH = Math.ceil(maxHp() / 2), per = 8, rowsH = Math.ceil(nH / per), hs = u * 1.05, cw = Math.max(u * 10.5, per * hs * 1.1 + u * 1.2), ch = u * 2.1 + rowsH * hs * 1.02 + u * .55;
+  const nH = Math.ceil(maxHp() / 2), per = 8, rowsH = Math.ceil(nH / per), hs = u * 1.05, cw = Math.max(u * 10.5, per * hs * 1.1 + u * 1.2), ch = u * 2.1 + rowsH * hs * 1.02 + u * .55 + u * 1.15;
   uiPanel(px, py, cw, ch, u * .8);
   vCandy(px + u * .55, py + u * .35, u * 1.3);
   text('' + hearts, px + u * 2.3, py + u * 1.0, u * 1.25, UIC.ink);
   vStar(cw + px - u * 3.0, py + u * 1.0, u * .62, '#ffd23f', '#3b2a2f'); text(`${stars}/7`, cw + px - u * 2.2, py + u * 1.0, u * .85, UIC.sub);
   for (let i = 0; i < nH; i++) { const hx = px + u * .6 + (i % per) * hs * 1.1, hy = py + u * 2.0 + Math.floor(i / per) * hs * 1.02, v = Math.max(0, Math.min(2, hp - i * 2)); vHeart(hx, hy, hs, '#f3e3d3', '#3b2a2f'); if (v === 2) vHeart(hx, hy, hs, '#ff5f7e', '#3b2a2f'); else if (v === 1) { ctx.save(); ctx.beginPath(); ctx.rect(hx, hy - 2, hs / 2, hs + 4); ctx.clip(); vHeart(hx, hy, hs, '#ff5f7e', '#3b2a2f'); ctx.restore(); } if (v) { ctx.fillStyle = 'rgba(255,255,255,.65)'; ctx.beginPath(); ctx.arc(hx + hs * .3, hy + hs * .3, hs * .09, 0, 6.29); ctx.fill(); } }
+  { const ly = py + ch - u * .85, bx = px + u * 3.3, bw = cw - u * 3.9, bh = u * .5; // Lv · 경험치 바
+    text(`Lv.${LVL.lv}`, px + u * .6, ly, u * .85, UIC.ink); ctx.fillStyle = 'rgba(51,34,42,.18)'; rr(bx, ly - bh / 2, bw, bh, bh / 2); ctx.fill();
+    const f = LVL.lv >= LV_CFG.cap ? 1 : Math.min(1, LVL.xp / lvNeed()); if (f > 0) { ctx.fillStyle = '#7fcaf2'; rr(bx, ly - bh / 2, Math.max(bh, bw * f), bh, bh / 2); ctx.fill(); } }
   if (hp > 0 && hp <= 2 && Math.sin(time * 10) > 0) { ctx.strokeStyle = '#ff6b8a'; ctx.lineWidth = 2.5 * DPR; rr(px, py, cw, ch, u * .8); ctx.stroke(); }
   // chips to the right: dungeon keys, buffs
   { let kx = px + cw + u * .4; const chip = (w) => { uiPanel(kx, py, w, u * 2.1, u * .7); const x0 = kx; kx += w + u * .3; return x0; };
@@ -1819,7 +1822,7 @@ function drawPanel() {
   let cy = y + u * 2.2;
   m.tabRects = [];
   if (m.tabs.length > 1) { const perRow = Math.ceil(m.tabs.length / tabRows), tw = (w - u * 1.2) / perRow; m.tabs.forEach((t, i) => { const tx = x + u * .6 + (i % perRow) * tw, r = { x: tx + 2, y: cy + Math.floor(i / perRow) * u * 1.9, w: tw - 4, h: u * 1.5 }; m.tabRects.push(r); ctx.fillStyle = i === m.tab ? '#ffd23f' : '#efe2c8'; rr(r.x, r.y, r.w, r.h, u * .6); ctx.fill(); text(t, r.x + r.w / 2, r.y + r.h / 2 + 1, u * .85, i === m.tab ? '#33222a' : '#8a6a5a', 'center'); }); cy += u * 1.9 * tabRows; }
-  if (m.kind === 'bag') { text(`용기 ${hp}/${maxHp()}  ·  꼬리 힘 ${atkOf()}  ·  튼튼함 ${defOf()}  ·  우정 하트 ♥${frTotal()}`, x + u * .8, cy + u * .6, u * .78, '#5a3a26'); text(`장착 ▸ 꼬리: ${equip.tail ? ITEMS[equip.tail].name : '없음'}   몸: ${equip.body ? ITEMS[equip.body].name : '없음'}   모자: ${HATS[hat].name}`, x + u * .8, cy + u * 1.6, u * .68, '#8a6a5a'); cy += u * 2.3; }
+  if (m.kind === 'bag') { text(`Lv.${LVL.lv} · 용기 ${hp}/${maxHp()}  ·  꼬리 힘 ${atkOf()}  ·  튼튼함 ${defOf()}  ·  우정 하트 ♥${frTotal()}`, x + u * .8, cy + u * .6, u * .78, '#5a3a26'); text(`장착 ▸ 꼬리: ${equip.tail ? ITEMS[equip.tail].name : '없음'}   몸: ${equip.body ? ITEMS[equip.body].name : '없음'}   모자: ${HATS[hat].name}`, x + u * .8, cy + u * 1.6, u * .68, '#8a6a5a'); cy += u * 2.3; }
   m.vis = [];
   rows.forEach((r, i) => {
     const rx = x + u * .6, ry = cy + i * (rh + gap), rw = w - u * 1.2; const box = { x: rx, y: ry, w: rw, h: rh, act: r.act }; m.vis.push(box);
@@ -4405,7 +4408,7 @@ function drawBagGrid() {
   text(m.title, x + u * .8, y + u * 1.15, u * 1.15, '#33222a'); text(`✦ ${hearts}`, x + w - u * .8, y + u * 1.15, u * 1.05, '#e8a92a', 'right');
   let cy = y + u * 2.2; m.tabRects = []; m.vis = [];
   { const perRow = Math.ceil(m.tabs.length / tabRows), tw = (w - u * 1.2) / perRow; m.tabs.forEach((t, i) => { const r = { x: x + u * .6 + (i % perRow) * tw + 2, y: cy + Math.floor(i / perRow) * u * 1.9, w: tw - 4, h: u * 1.5 }; m.tabRects.push(r); ctx.fillStyle = i === m.tab ? '#ffd23f' : '#efe2c8'; rr(r.x, r.y, r.w, r.h, u * .6); ctx.fill(); const nw = bagIds(i).some(id => ITNEW[id]); fitText(t, r.x + r.w / 2, r.y + r.h / 2 + 1, u * .8, '#33222a', r.w - u * .4, 'center'); if (nw) { ctx.fillStyle = '#ff5a6e'; ctx.beginPath(); ctx.arc(r.x + r.w - u * .35, r.y + u * .3, u * .22, 0, 6.29); ctx.fill(); } }); cy += u * 1.9 * tabRows; }
-  fitText(`용기 ${hp}/${maxHp()} · 꼬리 힘 ${atkOf()} · 튼튼함 ${defOf()} · 우정 ♥${frTotal()}`, x + u * .8, cy + u * .55, u * .7, '#8a6a5a', w - u * 1.6); cy += u * 1.4;
+  fitText(`Lv.${LVL.lv} · 용기 ${hp}/${maxHp()} · 꼬리 힘 ${atkOf()} · 튼튼함 ${defOf()} · 우정 ♥${frTotal()}`, x + u * .8, cy + u * .55, u * .7, '#8a6a5a', w - u * 1.6); cy += u * 1.4;
   if (stripH) { const st = drawEqStrip(x, cy, w, u); for (const r of st.rects) m.vis.push({ x: r.x, y: r.y, w: r.w, h: r.h, act: () => { const id = eqOn(r.s); if (!id) return pmsg(`${SLOT_NAME[r.s]} 칸이 비어 있어요`); equipItem(id); pmsg(`${ITEMS[id].name} 벗음`); } }); cy += stripH; }
   if (m.bsel === undefined || !list[m.bsel]) m.bsel = list.length ? m.page * per : -1;
   if (!list.length) { text(['장비가 없어요', '먹을 게 없어요', '재료가 없어요', '씨앗이 없어요', '채집한 게 없어요'][m.tab], x + w / 2, cy + cs / 2, u * .85, '#8a6a5a', 'center'); }
@@ -7835,6 +7838,33 @@ function waterFx() {
 let ANISO = 0;
 function fixTextures() { if (!ANISO) ANISO = Math.min(8, R3.renderer.capabilities.getMaxAnisotropy ? R3.renderer.capabilities.getMaxAnisotropy() : 4);
   R3.scene.traverse(o => { const m = o.material; if (!m || !m.map || m.map.userData.fx) return; const t = m.map; t.userData.fx = 1; if (t.isCanvasTexture || t.image instanceof HTMLCanvasElement) { t.anisotropy = ANISO; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true; } }); }
+
+// ===== 레벨 · 경험치 (RPG 1단계) =====
+// 값 조정은 LV_CFG 한 곳에서. 근거: design/game-brief.md §1
+const LV_CFG = { cap: 30, need: lv => 10 + (lv - 1) * 8, hpEvery: 2, atkEvery: 5, retroPerMob: 3,
+  boss: { shroom: 30, cat: 45, cloud: 60 }, ep: { small: 15, big: 40 } };
+const LVL = { lv: 1, xp: 0, epd: {}, epb: {} }; // epd: 작은 소동 하루 1회, epb: 큰 소동 첫 클리어
+function lvNeed() { return LV_CFG.need(LVL.lv); }
+function gainXp(n, x, y, silent) {
+  if (!(n > 0) || LVL.lv >= LV_CFG.cap) return;
+  LVL.xp += n; let up = 0;
+  while (LVL.lv < LV_CFG.cap && LVL.xp >= lvNeed()) { LVL.xp -= lvNeed(); LVL.lv++; up++; }
+  if (LVL.lv >= LV_CFG.cap) LVL.xp = 0;
+  if (silent) return;
+  floaters.push({ x: x === undefined ? P.x : x, y: (y === undefined ? P.y : y) - 34, t: .9, text: `+${n} EXP`, col: '#bfe8ff' });
+  if (up) { hp = maxHp(); banner(`레벨 업! Lv.${LVL.lv}`, '체력이 가득 찼어요' + (LVL.lv % LV_CFG.atkEvery === 0 ? ' · 꼬리 힘 +1' : LVL.lv % LV_CFG.hpEvery === 0 ? ' · 체력 +1' : ''), '#ffd23f'); sfx('tada'); burst(P.x, P.y - 20, '#ffd23f', 26); save(); }
+}
+maxHp = (o => () => o() + Math.floor(LVL.lv / LV_CFG.hpEvery))(maxHp);
+atkOf = (o => () => o() + Math.floor(LVL.lv / LV_CFG.atkEvery))(atkOf);
+killEnemy = (orig => e => { orig(e); const D = ENEMY[e.kind]; if (D) gainXp(D.exp || 3, e.x, e.y); })(killEnemy);
+bossBeaten = (orig => first => { orig(first); gainXp(LV_CFG.boss.shroom); })(bossBeaten);
+hitCat = (orig => dmg => { const live = CATB && CATB.st !== 'dead'; orig(dmg); if (live && CATB && CATB.st === 'dead') gainXp(LV_CFG.boss.cat); })(hitCat);
+hitCloud = (orig => dmg => { const live = CLB && CLB.st !== 'dead'; orig(dmg); if (live && CLB && CLB.st === 'dead') gainXp(LV_CFG.boss.cloud); })(hitCloud);
+epEnd = (orig => () => { const E0 = EP; orig(); if (!E0) return; const id = E0.def.id || '?', k = dayKey();
+  if (E0.def.small) { if (LVL.epd[id] !== k) { LVL.epd[id] = k; gainXp(LV_CFG.ep.small); } } else if (!LVL.epb[id]) { LVL.epb[id] = 1; gainXp(LV_CFG.ep.big); } })(epEnd);
+townSave = (orig => () => Object.assign(orig(), { lv: [LVL.lv, LVL.xp], lve: [LVL.epd, LVL.epb] }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.lv) { LVL.lv = Math.min(LV_CFG.cap, Math.max(1, d.lv[0] | 0)); LVL.xp = Math.max(0, d.lv[1] | 0); if (d.lve) { Object.assign(LVL.epd, d.lve[0] || {}); Object.assign(LVL.epb, d.lve[1] || {}); } }
+  else gainXp((STAT.mob || 0) * LV_CFG.retroPerMob, 0, 0, true); })(townLoad); // 레벨 생기기 전 세이브: 잡은 몬스터만큼 소급
 
 // ===== 매 프레임 =====
 let GFX_INIT = false, FIXT = 0;
