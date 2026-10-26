@@ -772,7 +772,8 @@ function nearDChest() { for (const c of DCHESTS) if (c.shown && !c.opened && Mat
 
 // ---------- dialog ----------
 let dlg = null; // {lines:[{who,spr,text}], i, shown, cb}
-function say(lines, cb) { dlg = { lines, i: 0, shown: 0, cb }; }
+const sayQ = []; // queued dialogs while another is open
+function say(lines, cb) { if (dlg) { sayQ.push([lines, cb]); return; } dlg = { lines, i: 0, shown: 0, cb }; }
 function portraitOf(who) {
   if (who === '안노랑') return { img: (window.ANNO_IMG && window.ANNO_IMG.front) || dinoSpr('dino0') };
   if (window.NPC_IMG && window.NPC_IMG[who]) return { img: window.NPC_IMG[who] };
@@ -785,7 +786,7 @@ function advanceDlg() {
   const L = dlg.lines[dlg.i];
   if (dlg.shown < L.text.length) { dlg.shown = L.text.length; return; }
   dlg.i++; dlg.shown = 0;
-  if (dlg.i >= dlg.lines.length) { const cb = dlg.cb; dlg = null; cb && cb(); }
+  if (dlg.i >= dlg.lines.length) { const cb = dlg.cb; dlg = null; cb && cb(); if (!dlg && sayQ.length) say(...sayQ.shift()); }
   else sfx('blip');
 }
 const L = (who, text) => ({ who, text });
@@ -913,8 +914,9 @@ const keys = {}; const pressed = {};
 const CODEMAP = { KeyV: 'v', KeyZ: 'z', KeyX: 'x', KeyC: 'c', KeyM: 'm', KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyI: 'i', KeyQ: 'q', KeyP: 'p', Space: ' ', Enter: 'enter', NumpadEnter: 'enter', Tab: 'tab', Escape: 'escape', ShiftLeft: 'shift', ShiftRight: 'shift', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright' };
 function keyOf(e) { return CODEMAP[e.code] || (e.key || '').toLowerCase(); }
 addEventListener('blur', () => { for (const k in keys) keys[k] = 0; });
+let topClose = null, topCloseZ = false; // how to close the open overlay from the keyboard
 addEventListener('keydown', e => {
-  if (cardOpen) return;
+  if (cardOpen) { const k = keyOf(e); if (!e.repeat && topClose && (k === 'escape' || (topCloseZ && ['z', 'enter'].includes(k)))) { e.preventDefault(); topClose(); } return; }
   if (e.isComposing) e.preventDefault();
   const k = keyOf(e); if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
   if (mini && !keys[k]) { keys[k] = 1; miniKey(k); return; }
@@ -984,7 +986,8 @@ document.addEventListener('fullscreenchange', () => setTimeout(resize, 100));
 // ---------- save ----------
 const SAVE_KEY = 'annorang_rpg_v2';
 function saveData() { const hh = byId('hedgehog'); return { v: 4, stars, hearts, hatOwned, hat, partyDone, partyReady, playT, q: Object.fromEntries(Object.entries(Q).map(([k, v]) => [k, [v.st, v.n]])), eggs: eggs.map(e => e.got), bucket: bucket.state === 'carried' ? 'ground' : bucket.state, trough: trough.filled, carrots: plots.filter(p => p.y === 19).map(p => p.crop), tutDone: tut.done, acorns, acornT: ACORN_TREES.map(a => a.acorn ? 1 : 0), bush: statics.filter(s => s.breakable).map(s => s.gone ? 1 : 0), hhFollow: !!hh.follow, hp, inv, equip, chestOpen, dg: { dkeys, bossKey, bossDead, hpBonus, doors: DOORS.map(d => d.open ? 1 : 0), sw: SWITCHES.map(s => s.on ? 1 : 0), ch: DCHESTS.map(c => [c.shown ? 1 : 0, c.opened ? 1 : 0]), rs: Object.fromEntries(Object.entries(roomState).map(([k, v]) => [k, v.cleared ? 1 : 0])) }, life: lifeSave() }; }
-function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData())); } catch (e) { } }
+let saveBlocked = false; // set when load() failed, so autosave can't overwrite the real save
+function save() { if (saveBlocked) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData())); } catch (e) { } }
 function encodeSave() { return 'ANR-' + btoa(unescape(encodeURIComponent(JSON.stringify(saveData())))); }
 function decodeSave(code) { try { code = (code || '').trim().replace(/\s+/g, ''); if (code.startsWith('ANR-')) code = code.slice(4); const d = JSON.parse(decodeURIComponent(escape(atob(code)))); return d && typeof d === 'object' && d.q ? d : null; } catch (e) { return null; } }
 function load() {
@@ -1006,7 +1009,7 @@ function load() {
     if (Q.owl.st >= 2) { hh.x = hh.hx = ow.x + 20; hh.y = hh.hy = ow.y + 6; hh.tx = hh.x; hh.ty = hh.y; hh.wander = 6; }
     else if (d.hhFollow) { hh.follow = true; hh.x = P.x - 20; hh.y = P.y; }
     return true;
-  } catch (e) { return false; }
+  } catch (e) { saveBlocked = true; try { localStorage.setItem(SAVE_KEY + '_bak', localStorage.getItem(SAVE_KEY)); } catch (_) { } console.warn('save load failed, autosave off', e); return false; }
 }
 
 // ---------- helpers ----------
@@ -1043,7 +1046,7 @@ function startGame() {
   state = 'play'; audio(); musicOn = true;
   initLivestock();
   if (loaded && !STARTER) { STARTER = 1; for (let i = 0; i < 3; i++) addItem('seed_carrot'); setTimeout(() => banner('농장 선물 도착!', '당근 씨앗 3개 · 밭에 심고 밭 앞에서 A로 물을 줘요', '#9be37a'), 1500); }
-  if (loaded) { toast(partyDone ? '다시 왔구나! 마을에서 마음껏 놀자' : '이어하기! 반가워 노랑아'); if (!tut.done) { tut.done = true; } return; }
+  if (loaded) { toast(partyDone ? '다시 왔구나! 마을에서 마음껏 놀자' : '이어하기! 반가워 노랑아'); if (!tut.done) startTut(); return; }
   say([L('계획이', '노랑아! 드디어 삐약마을에 이사 왔어!'), L('먹보', '여긴 병아리들만 사는 마을이래… 노랑이는 좀… 많이 크지만.'), L('안노랑', '(괜찮아. 달걀 모자도 썼고… 나는 병아리야!)'), L('승부욕', '마을 친구들 부탁을 들어주면 다들 진짜 병아리로 인정해 줄걸? 축제 날까지 시합이다!'), L('안노랑', `좋아, ! 뜬 친구들한테 가보자! (${KA()} 대화 · ${KB()} 꼬리) 풀숲을 치면 별사탕도 나와!`)], () => startTut());
 }
 
@@ -1634,7 +1637,7 @@ function drawGuide(toS) {
   ctx.restore();
 }
 function drawTutorial() {
-  if (tut.step < 0 || tut.done || dlg || state !== 'play') return;
+  if (tut.step < 0 || tut.done || dlg || state !== 'play' || curRoom.dungeon) return;
   const port = CW < CH, u = Math.max(12 * DPR, Math.min(CW, CH) / (port ? 24 : 28)) * TXS(), s = tutText();
   // 좁은 화면에서는 두 줄로 나눠서 잘리지 않게
   const maxW = CW - SA.l - SA.r - 24 * DPR, tw = maxW - u * 5.2; ctx.font = `${Math.round(u * 1.05)}px ${FONT}`;
@@ -1873,7 +1876,7 @@ function showCard(url) {
   const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px';
   const a = document.createElement('a'); a.href = url; a.download = 'annorang_clear_card.png'; a.textContent = '저장하기'; a.style.cssText = 'background:#ffd23f;color:#33222a;padding:10px 22px;border-radius:999px;text-decoration:none;font-size:17px';
   const x = document.createElement('button'); x.textContent = '닫기'; x.style.cssText = 'background:#fff8e7;color:#33222a;border:0;padding:10px 22px;border-radius:999px;font-size:17px;font-family:inherit';
-  x.onclick = () => { ov.remove(); cardOpen = false; };
+  x.onclick = () => { ov.remove(); cardOpen = false; }; topClose = x.onclick; topCloseZ = true;
   let framed = false; try { framed = window.top !== window.self; } catch (_) { framed = true; }
   if (framed) { tip.textContent = '이미지를 길게 눌러 저장하세요 (PC는 우클릭 → 이미지 저장)'; row.append(x); } else row.append(a, x);
   ov.append(img, tip, row); document.body.append(ov);
@@ -1896,7 +1899,7 @@ function openSaveUI() {
   const msg = document.createElement('div'); msg.style.cssText = 'font-size:14px;color:#e2543b;min-height:18px';
   const loadB = btn('불러오기', '#9be37a');
   loadB.onclick = () => { const d = decodeSave(ta2.value); if (!d) { msg.textContent = '코드가 올바르지 않아요. 전체를 빠짐없이 붙여넣었는지 확인해 주세요.'; return; } try { localStorage.setItem(SAVE_KEY, JSON.stringify(d)); location.reload(); } catch (e) { msg.textContent = '이 브라우저에서는 저장이 막혀 있어요.'; } };
-  const close = btn('닫기', '#f3e6cf'); close.onclick = () => { ov.remove(); cardOpen = false; };
+  const close = btn('닫기', '#f3e6cf'); close.onclick = () => { ov.remove(); cardOpen = false; }; topClose = close.onclick; topCloseZ = false;
   [h, p, ta, copy, h2, ta2, msg, loadB, close].forEach(el => el.style.flexShrink = '0');
   box.append(h, p, ta, copy, h2, ta2, msg, loadB, close); ov.append(box); document.body.append(ov);
   ['pointerdown', 'keydown'].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation()));
@@ -3428,7 +3431,7 @@ function sheet4(title, desc) {
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(30,20,25,.88);display:flex;align-items:center;justify-content:center;z-index:12;padding:12px;box-sizing:border-box;overflow:auto;font-family:' + FONT;
   const box = document.createElement('div');
   box.style.cssText = 'background:#fff8e7;border:3px solid #33222a;border-radius:18px;padding:18px;max-width:440px;width:100%;color:#33222a;display:flex;flex-direction:column;gap:10px;max-height:92vh;overflow:auto;box-sizing:border-box;box-shadow:0 7px 0 rgba(51,34,42,.28)';
-  ov.className = 'sheet4'; ov.append(box); document.body.append(ov);
+  ov.className = 'sheet4'; ov.append(box); document.body.append(ov); topClose = () => { ov.remove(); cardOpen = false; }; topCloseZ = false;
   ['pointerdown', 'pointerup', 'keydown', 'touchstart'].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation()));
   const add = el => { el.style.flexShrink = '0'; box.append(el); return el; };
   const S = {
