@@ -7957,7 +7957,7 @@ Object.assign(ITEMS, {
 });
 // 꼬리 무기 설명에 직업 붙이기: "꼬리 무기(궁수) · …"
 eqDesc = (o => id => { o(id); const it = ITEMS[id]; if (!it || it.slot !== 'tail' || !it.desc) return; const J = JOBS[it.job] || JOBS.warrior;
-  it.desc = it.desc.replace(/^꼬리 무기/, `꼬리 무기(${J.name})`); if (it.job && it.job !== 'warrior' && !it.desc.includes(J.tip)) it.desc += ' · ' + J.tip; })(eqDesc);
+  it.desc = it.desc.replace(/^꼬리 무기/, `꼬리 무기(${J.name})`); })(eqDesc);
 for (const id in ITEMS) if (ITEMS[id].slot === 'tail') eqDesc(id);
 panelEntries = (orig => () => { const E = orig(), m = menu; if (m && m.kind === 'shop' && m.tab === 1) for (const id of ['slingtail', 'starwand', 'ladle']) { const it = ITEMS[id]; if (E.some(e => e.name === it.name)) continue; const own = inv[id] > 0 || equip.tail === id;
   E.push({ img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (own) return; if (hearts < it.price) return pmsg('별사탕이 모자라요', 1); hearts -= it.price; addItem(id); sfx('pick'); pmsg(`${it.name} 샀어요! 가방 > 장비에서 꼬리에 달면 ${JOBS[it.job].name}`); save(); } }); } return E; })(panelEntries);
@@ -7976,10 +7976,11 @@ function shotTargets() { const c = [];
   return c; }
 function nearestShot(range) { let best = null, bd = range; for (const t of shotTargets()) { const d = Math.hypot(t.x - P.x, t.y - P.y); if (d < bd) { bd = d; best = t; } } return best; }
 function fire(o) { const t = nearestShot(o.range), d = dirVec(); let a = Math.atan2(d.y, d.x); if (t) a = Math.atan2(t.y - (P.y - 8), t.x - P.x);
-  SHOTS.push(Object.assign({ x: P.x, y: P.y - 8, vx: Math.cos(a) * o.spd, vy: Math.sin(a) * o.spd, left: o.range }, o)); }
+  for (const da of o.spread ? [-.28, 0, .28] : o.n > 1 ? [-.5, 0, .5] : [0]) SHOTS.push(Object.assign({ x: P.x, y: P.y - 8, vx: Math.cos(a + da) * o.spd, vy: Math.sin(a + da) * o.spd, left: o.range }, o)); }
 function shotEnd(s) { if (s.boom) { smack(s.x, s.y, s.boom, 0, s.dmg); burst(s.x, s.y, s.col, 14); burst(s.x, s.y, '#fff', 6); } else { smack(s.x, s.y, 8, 0, s.dmg); burst(s.x, s.y, s.col, 6); } }
 function shotTick(dt) {
-  for (let i = SHOTS.length - 1; i >= 0; i--) { const s = SHOTS[i], st = Math.hypot(s.vx, s.vy) * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.left -= st;
+  for (let i = SHOTS.length - 1; i >= 0; i--) { const s = SHOTS[i], st = Math.hypot(s.vx, s.vy) * dt;
+    if (s.home) { let tg = null, bd = 130; for (const t of shotTargets()) { const d = Math.hypot(t.x - s.x, t.y - s.y); if (d < bd) { bd = d; tg = t; } } if (tg) { const k = Math.min(1, 6 * dt); s.vx += ((tg.x - s.x) / bd * s.spd - s.vx) * k; s.vy += ((tg.y - s.y) / bd * s.spd - s.vy) * k; } } s.x += s.vx * dt; s.y += s.vy * dt; s.left -= st;
     parts.push({ x: s.x, y: s.y, vx: 0, vy: 0, t: .22, c: s.col, g: 0, sz: s.big ? 7 : 5 }); if (s.big) parts.push({ x: s.x + (Math.random() - .5) * 4, y: s.y + (Math.random() - .5) * 4, vx: 0, vy: 0, t: .2, c: '#fff3b0', g: 0 });
     if (s.pierce) smack(s.x, s.y, 10, 0, s.dmg);   // 꿰뚫기: 지나가며 다 맞혀요 (맞은 녀석은 잠깐 무적이라 한 번씩만)
     else if (shotTargets().some(t => Math.hypot(t.x - s.x, t.y - s.y) < 14)) { shotEnd(s); SHOTS.splice(i, 1); continue; }
@@ -7987,8 +7988,9 @@ function shotTick(dt) {
 updateTown = (o => dt => { o(dt); if (state === 'play') shotTick(dt); })(updateTown);
 // 기본 공격: 근처에 싸울 상대가 있을 때만 쏴요. 없으면 평소처럼 꼬리로 툭 (풀 베기·나무 흔들기·스위치 그대로)
 swipe = (o => () => { const j = jobOf(); if ((j === 'archer' || j === 'mage') && P.cool <= 0 && nearestShot(170)) {
-  if (j === 'archer') { P.cool = .38; fire({ spd: 300, range: 170, dmg: atkOf(), col: '#c98a5a' }); sfx('blip'); }
-  else { P.cool = .55; fire({ spd: 170, range: 150, dmg: atkOf(), col: '#ffe066', boom: 24 }); sfx('pick'); }
+  const W = ITEMS[equip.tail].shot || {};
+  if (j === 'archer') { P.cool = .38; fire(Object.assign({ spd: 300, range: 170, dmg: atkOf(), col: '#c98a5a' }, W)); sfx('blip'); }
+  else { P.cool = .55; fire(Object.assign({ spd: 170, range: 150, dmg: atkOf(), col: '#ffe066', boom: 24 }, W, W.n > 1 ? { dmg: Math.max(1, Math.round(atkOf() * .5)) } : {})); sfx('pick'); }
   P.spin = .2; return; } return o(); })(swipe);
 
 // ---- 직업 기술 (꾹 눌렀다 떼기) ----
@@ -8003,9 +8005,68 @@ function jobSkill() { const j = jobOf();
     for (let i = 0; i < 4; i++) burst(P.x + (Math.random() - .5) * 120, P.y - 10 + (Math.random() - .5) * 80, ['#ffe066', '#fff', '#c9b6ff'][i % 3], 14);
     for (const e of enemies) if (Math.hypot(e.x - P.x, e.y - P.y) < 92) { e.stun = Math.max(e.stun || 0, 1.2); }
     floaters.push({ x: P.x, y: P.y - 44, t: 1.3, text: '반짝반짝 별비!', col: '#ffe066' }); loudInTown('꼬꼬 아줌마: 방금 하늘에서 뭐가 번쩍했니?'); }
-  else if (j === 'cook') { HUNT.roarCD = 10; healP(3); buffs.atk = Math.max(buffs.atk || 0, 8); sfx('heal'); burst(P.x, P.y - 12, '#ffab2e', 14);
+  else if (j === 'cook') { HUNT.roarCD = ITEMS[equip.tail].skillCd || 10; healP(3); buffs.atk = Math.max(buffs.atk || 0, 8); sfx('heal'); burst(P.x, P.y - 12, '#ffab2e', 14);
     floaters.push({ x: P.x, y: P.y - 40, t: 1.3, text: '냠냠! 꼬리 힘 UP', col: '#ffab2e' }); }
   stat('skill_' + j); }
+// ===== 직업 무기 다양화: 궁수·마법사·요리사 무기를 마을별 4개씩 =====
+// TWPN에 넣으면 맞을 때 효과(fx)·꼬리 끝 3D 모양·가방 3D 아이콘이 기존 무기와 똑같이 붙어요. shot = 탄 설정(퍼짐·유도·폭발 크기·색)
+Object.assign(ITEMS, {
+  sporesling: { name: '포자 새총', type: 'eq', slot: 'tail', job: 'archer', spr: 'cap', sell: 12, vil: 'cave', shot: { col: '#c9b6ff' } },
+  watergun: { name: '물총 꼬리', type: 'eq', slot: 'tail', job: 'archer', spr: 'pot_blue', price: 28, sell: 10, vil: 'water', shot: { col: '#7fcaf2', spread: true, range: 140 } },
+  thunderbow: { name: '번개 활', type: 'eq', slot: 'tail', job: 'archer', spr: 'starring', sell: 40, vil: 'cloud', shot: { col: '#ffe066', spd: 380, range: 200 } },
+  shroomwand: { name: '버섯 지팡이', type: 'eq', slot: 'tail', job: 'mage', spr: 'cap', sell: 14, vil: 'cave', shot: { col: '#d9b8ff', boom: 32 } },
+  bubblewand: { name: '거품 지팡이', type: 'eq', slot: 'tail', job: 'mage', spr: 'pot_blue', sell: 30, vil: 'water', shot: { col: '#bfe8ff', boom: 26 } },
+  rainbowwand: { name: '무지개 지팡이', type: 'eq', slot: 'tail', job: 'mage', spr: 'starring', price: 40, sell: 15, vil: 'cloud', shot: { col: '#ff8fb5', n: 3, home: true, boom: 14, spd: 190, range: 190 } },
+  potlid: { name: '냄비 뚜껑', type: 'eq', slot: 'tail', job: 'cook', spr: 'pot_red', def: 2, sell: 12, vil: 'cave' },
+  scoopnet: { name: '뜰채', type: 'eq', slot: 'tail', job: 'cook', spr: 'feather', price: 26, sell: 9, vil: 'water' },
+  cottontail: { name: '솜사탕 꼬리', type: 'eq', slot: 'tail', job: 'cook', spr: 'wool', price: 30, sell: 11, vil: 'cloud', skillCd: 6 },
+});
+for (const id of ['slingtail', 'starwand', 'ladle']) ITEMS[id].vil = 'farm';
+const T3 = (atk, fx, t) => ({ atk, fx, txt: `꼬리 무기 · 꼬리 힘 +${atk}${t ? ' · ' + t : ''}` });
+Object.assign(TWPN, {
+  slingtail: T3(2, null, '멀리서 씨앗 쏘기'), starwand: T3(2, null, '맞으면 퐁 터지는 별가루'), ladle: T3(1, null, ''),
+  sporesling: T3(3, 'spore', '포자 씨앗! 맞으면 느릿느릿 (동굴 장난꾸러기가 떨어뜨려요)'),
+  watergun: T3(2, 'splash', '물줄기 3갈래 · 맞은 녀석 주변까지 철썩'),
+  thunderbow: T3(4, 'zap', '빠른 번개 화살 · 옆 녀석에게 찌릿 (먹구름 대장의 선물)'),
+  shroomwand: T3(3, 'spore', '크게 터지는 포자 구름 · 맞으면 느릿느릿 (버섯 대왕의 선물)'),
+  bubblewand: T3(3, 'slip', '거품 펑! 맞으면 거품에 갇혀 멈칫 (메기 대장의 선물)'),
+  rainbowwand: T3(3, null, '장난꾸러기를 따라가는 무지개 별 3발'),
+  potlid: T3(2, 'stun', '쾅! 맞으면 멈칫 (동굴 말벌이 떨어뜨려요)'),
+  scoopnet: T3(2, 'net', '넓게 휘둘러 장난꾸러기를 끌어와요'),
+  cottontail: T3(2, null, '간식 던지기 준비가 빨라요 (10초 → 6초)'),
+});
+for (const id of ['slingtail', 'starwand', 'ladle', 'sporesling', 'watergun', 'thunderbow', 'shroomwand', 'bubblewand', 'rainbowwand', 'potlid', 'scoopnet', 'cottontail']) { ITEMS[id].atk = TWPN[id].atk; eqDesc(id); }
+Object.assign(TW_LINE, { slingtail: '새총', starwand: '지팡이', ladle: '국자', sporesling: '포자 새총', watergun: '물총', thunderbow: '번개 활', shroomwand: '버섯 지팡이', bubblewand: '거품 지팡이', rainbowwand: '무지개 지팡이', potlid: '냄비 뚜껑', scoopnet: '뜰채', cottontail: '솜사탕' });
+// 뜰채: 넓게 휘두르고 맞은 녀석을 끌어와요
+tailRange = (o => () => tailFx() === 'net' ? 9 : o())(tailRange);
+hitEnemy = (o => (e, dmg) => { o(e, dmg); if (tailFx() === 'net' && enemies.includes(e)) { const d = Math.hypot(P.x - e.x, P.y - e.y) || 1; e.vx = (P.x - e.x) / d * 140; e.vy = (P.y - e.y) / d * 140; e.kb = .2; floaters.push({ x: e.x, y: e.y - 28, t: .7, text: '쏙!', col: '#7fcaf2' }); } })(hitEnemy);
+// 얻는 곳: 드롭 · 보스 · 마을 상점
+ENEMY.shroom.rare.push(['sporesling', .04], ['shroomwand', .02]); ENEMY.wasp.rare.push(['potlid', .04]);
+function giveWeapon(id) { if (inv[id] > 0 || equip.tail === id) return; addItem(id, 1); setTimeout(() => banner('새 꼬리 무기!', `${ITEMS[id].name} · 가방 > 장비에서 꼬리에 달아 봐`, '#ffd23f'), 2200); }
+hitBoss = (o => dmg => { o(dmg); if (boss && boss.st === 'dead' && !boss._gift2) { boss._gift2 = 1; giveWeapon('shroomwand'); } })(hitBoss);
+catBeaten = (o => (...a) => { const r = o(...a); giveWeapon('bubblewand'); return r; })(catBeaten);
+clBeaten = (o => (...a) => { const r = o(...a); giveWeapon('thunderbow'); return r; })(clBeaten);
+function shopRow(id, buy) { const it = ITEMS[id], own = inv[id] > 0 || equip.tail === id; return { img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (!own) buy(id); } }; }
+function buyWeapon(id) { const it = ITEMS[id]; if (hearts < it.price) return pmsg(`별사탕이 모자라요 (✦${it.price})`, 1); hearts -= it.price; addItem(id); sfx('pick'); pmsg(`${it.name} 샀어요! 꼬리에 달면 ${JOBS[it.job].name}`); save(); }
+wvEntries = (o => m => { const E = o(m); if (m.tab === 0) for (const id of ['watergun', 'scoopnet']) E.push(shopRow(id, buyWeapon)); return E; })(wvEntries);
+cvEntries = (o => m => { const E = o(m); if (m.tab === 0) for (const id of ['rainbowwand', 'cottontail']) E.push(shopRow(id, buyWeapon)); return E; })(cvEntries);
+// 꼬리 끝 3D 모양 (가방 3D 아이콘도 이걸로)
+tailWeaponModel = (o => id => { const G = (...a) => grp(...a), m = mesh, glow = (c, k = .3) => M(c, { emissive: c, emissiveIntensity: k }), shine = c => M(c, { roughness: .15, emissive: c, emissiveIntensity: .25 });
+  const stick = (h = .3, c = '#8a5a3c') => m('c', c, .03, h, .03, 0, h / 2, 0);
+  const fork = (c, band) => { const g = G(m('c', c, .035, .16, .035, 0, .08, 0)); for (const sd of [-1, 1]) { const a = m('c', c, .03, .2, .03, sd * .06, .24, 0); a.rotation.z = -sd * .45; g.add(a); } g.add(m('b', band, .16, .025, .02, 0, .32, 0)); return g; };
+  if (id === 'slingtail') return fork('#8a5a3c', '#ff8fa3');
+  if (id === 'sporesling') { const g = fork('#7a5a8a', '#c9b6ff'); for (let i = 0; i < 4; i++) g.add(m('s', '#e2c4ff', .03, .03, .03, Math.cos(i * 1.6) * .1, .38 + i * .03, Math.sin(i * 1.6) * .05)); return g; }
+  if (id === 'watergun') return G(m('b', '#4fa8e8', .1, .22, .1, 0, .16, 0), m('c', '#ffd23f', .03, .1, .03, 0, .32, 0), m('s', shine('#9fd8f6'), .09, .09, .09, .08, .14, 0));
+  if (id === 'thunderbow') { const g = G(stick(.12)), bow = m('tor', glow('#ffcf3f', .2), .2, .2, .12, 0, .26, 0); bow.scale.set(.18, .2, .12); g.add(bow, m('c', '#fff8e0', .006, .38, .006, 0, .26, 0)); const b = m('b', glow('#ffd23f', .9), .04, .12, .02, .14, .3, .03); b.rotation.z = .5; g.add(b); return g; }
+  if (id === 'starwand') { const st = m('oct', glow('#ffd23f', .25), .1, .12, .05, 0, .38, 0); return G(stick(.3), st, m('s', '#fff', .03, .03, .03, .07, .44, .03)); }
+  if (id === 'shroomwand') { const g = G(stick(.28, '#f6e7d4'), m('hemi', '#e2543b', .16, .13, .16, 0, .28, 0)); for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28; g.add(m('s', '#fff', .03, .015, .03, Math.cos(a) * .09, .36, Math.sin(a) * .09)); } return g; }
+  if (id === 'bubblewand') return G(stick(.28), m('s', shine('#a8dcf8'), .13, .13, .13, 0, .4, 0), m('s', shine('#c8ecff'), .06, .06, .06, .12, .5, 0), m('s', '#ffffff', .03, .03, .02, .05, .45, .1));
+  if (id === 'rainbowwand') { const g = G(stick(.26)); ['#ff6b6b', '#ffd23f', '#9be37a', '#7fcaf2'].forEach((c, i) => { const r = m('tor', c, .16 - i * .03, .16 - i * .03, .1, 0, .3, 0); r.scale.set(.16 - i * .03, .16 - i * .03, .1); g.add(r); }); g.add(m('s', '#fff', .05, .03, .05, -.14, .3, 0), m('s', '#fff', .05, .03, .05, .14, .3, 0)); return g; }
+  if (id === 'ladle') return G(stick(.28, '#9aa3ad'), m('s', '#c8d0d8', .15, .1, .15, 0, .34, 0), m('c', '#8a929c', .12, .02, .12, 0, .4, 0));
+  if (id === 'potlid') { const g = G(stick(.12, '#9aa3ad')), lid = m('c', '#c0c8d0', .2, .03, .2, 0, .26, 0); lid.rotation.x = Math.PI / 2; g.add(lid, m('s', '#5a3f2a', .04, .04, .04, 0, .26, .04)); return g; }
+  if (id === 'scoopnet') { const rim = m('tor', '#ffd23f', .13, .13, .1, 0, .36, 0); rim.scale.set(.13, .13, .1); const net = m('c', '#e8f4fa', .115, .01, .115, 0, .36, 0); net.rotation.x = Math.PI / 2; return G(stick(.24), rim, net); }
+  if (id === 'cottontail') { const g = G(stick(.2, '#f6e7d4')); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; g.add(m('s', i % 2 ? '#ffb3d1' : '#ffd6e8', .09, .08, .09, Math.cos(a) * .07, .3 + Math.sin(a * 2) * .03, Math.sin(a) * .07)); } g.add(m('s', '#ffc4dc', .1, .09, .1, 0, .36, 0)); return g; }
+  return o(id); })(tailWeaponModel);
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
 </script>
