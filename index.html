@@ -9365,6 +9365,208 @@ function syncFields3D() { if (!R3) return; const F = curField(); if (F && !F.roo
 if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncFields3D());
 if (typeof applyEnv3D === 'function') { let saved = null; applyEnv3D = (o => dt => { o(dt); const sc = R3 && R3.scene; if (!sc || !sc.fog) return; const F = curField(); if (F && state === 'play') { if (!saved) saved = sc.fog.color.getHex(); sc.fog.color.set(F.pal.vy < -1 ? '#dfe8fb' : F.vil === 'sv' ? '#cfe4f5' : F.vil === 'v1' ? '#b8d8a8' : '#bfe0f0'); } else if (saved !== null) { sc.fog.color.setHex(saved); saved = null; } })(applyEnv3D); }
 
+// ===== life2.js : 출하 상자 · 우편함 편지 · 화석 파기 + 화석관 · 가구 자유 배치 · 둥지집 확장 =====
+// 하루 = 실제 날짜(dayKey). 날짜가 바뀐 뒤 처음 놀 때 "아침"이 와요: 출하 정산 · 새 편지 · 새 화석 자리
+const LF = { d: 0, ship: {}, rcpt: null, mail: [], mid: 0, dig: [], dug: {}, fdon: {}, fpos: {}, homeLv: 0, morning: 0, sets: {} };
+const LF_CFG = {
+  mailPerDay: [1, 2],            // 하루 편지 수 (최소, 최대)
+  mailKeep: 30,                  // 편지함 최대
+  digVillage: 4, digForest: 2,   // 하루 화석 자리 (삐약마을, 도토리 숲)
+  dig: { fossil: .62, treasure: .16, mat: .16, rare: .06 },  // 파면 나오는 것 확률
+  setReward: 30, setXp: 20,      // 화석 세트 완성 보상
+  home: [null, { add: [3, 0], cost: 150, need: { wood: 20 } }, { add: [3, 2], cost: 400, need: { wood: 40, elite_core: 3 } }],  // 집 확장: 가로·세로 늘리기
+};
+
+// ---------- 아이템 ----------
+function lfIcon(draw) { let cv = null; return () => { if (cv) return cv; cv = document.createElement('canvas'); cv.width = cv.height = 16; const g = cv.getContext('2d'); draw((x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); }); return cv; }; }
+const BONE = (c = '#f3ead8', s = '#c9b89a') => lfIcon(px => { px(3, 6, 10, 4, c); px(2, 4, 3, 3, c); px(2, 9, 3, 3, c); px(11, 4, 3, 3, c); px(11, 9, 3, 3, c); px(4, 9, 8, 1, s); });
+const AMMO = lfIcon(px => { px(4, 3, 8, 10, '#c9a27a'); px(3, 5, 10, 6, '#c9a27a'); px(6, 5, 5, 6, '#e8c9a0'); px(7, 7, 3, 2, '#a07a5a'); px(5, 4, 1, 8, '#a07a5a'); });
+const ROCK = lfIcon(px => { px(3, 5, 10, 8, '#9a8a7a'); px(4, 4, 8, 10, '#9a8a7a'); px(6, 7, 4, 3, '#c9b89a'); px(5, 6, 2, 1, '#f3ead8'); });
+ITEMS.shovel = { name: '삽', type: 'tool', desc: '✕ 표시 앞에서 A로 파요 · 화석이 나올지도!', get icon() { return this._ic || SHOVEL(); }, set icon(v) { this._ic = v; } };
+const SHOVEL = lfIcon(px => { px(7, 1, 2, 9, '#a0705a'); px(5, 1, 6, 2, '#a0705a'); px(4, 9, 8, 5, '#b8c4cc'); px(5, 14, 6, 1, '#b8c4cc'); px(5, 10, 2, 2, '#e8f0f4'); });
+ITEMS.fossil_q = { name: '수상한 화석', type: 'mat', fossil: 1, desc: '부엉 박사에게 가져가면 감정해 줘요 (박물관 > 화석관)', sell: 10, get icon() { return this._ic || ROCK(); }, set icon(v) { this._ic = v; } };
+const FOS = [
+  ['trex_head', '티라노 머리', 'trex'], ['trex_body', '티라노 몸통', 'trex'], ['trex_tail', '티라노 꼬리', 'trex'],
+  ['tri_head', '트리케라 머리', 'tri'], ['tri_body', '트리케라 몸통', 'tri'], ['tri_tail', '트리케라 꼬리', 'tri'],
+  ['bra_neck', '브라키오 목', 'bra'], ['bra_body', '브라키오 몸통', 'bra'], ['bra_tail', '브라키오 꼬리', 'bra'],
+  ['ste_plate', '스테고 등판', 'ste'], ['ste_tail', '스테고 꼬리', 'ste'],
+  ['pte_wl', '프테라 왼날개', 'pte'], ['pte_wr', '프테라 오른날개', 'pte'],
+  ['ammo', '암모나이트', ''], ['trilo', '삼엽충', ''], ['amber', '호박 속 모기', ''], ['dino_egg', '공룡알 화석', ''], ['footprint', '공룡 발자국', ''],
+];
+const FSET = { trex: '🦖 티라노사우루스', tri: '🦕 트리케라톱스', bra: '🦕 브라키오사우루스', ste: '🦕 스테고사우루스', pte: '🪽 프테라노돈' };
+for (const [id, nm, set] of FOS) { const ic = id === 'ammo' ? AMMO : id === 'amber' ? lfIcon(px => { px(4, 4, 8, 8, '#f0a830'); px(3, 6, 10, 4, '#f0a830'); px(6, 6, 4, 3, '#5a3a20'); px(5, 5, 2, 1, '#ffe0a0'); }) : id === 'dino_egg' ? lfIcon(px => { px(5, 3, 6, 10, '#d8c8a8'); px(4, 5, 8, 6, '#d8c8a8'); px(6, 6, 2, 3, '#a89878'); px(9, 9, 1, 2, '#a89878'); }) : set ? BONE() : ROCK;
+  ITEMS['fos_' + id] = { name: nm + ' 화석', type: 'mat', fossil: 1, desc: set ? `${FSET[set]} 화석 조각 · 박물관 화석관에 기증해요` : '오래된 화석 · 박물관 화석관에 기증해요', sell: set ? 25 : 15, get icon() { return this._ic || ic(); }, set icon(v) { this._ic = v; } }; }
+
+// ---------- 하루가 바뀌면 ----------
+function lfNewDay() { const first = !LF.d;
+  if (!first) { const items = Object.entries(LF.ship).filter(([, s]) => s.n > 0); if (items.length) { const total = items.reduce((a, [, s]) => a + s.v, 0); hearts += total; LF.rcpt = { items: items.map(([id, s]) => [id, s.n, s.v]), total }; stat('market', items.reduce((a, [, s]) => a + s.n, 0)); } else LF.rcpt = null; LF.ship = {}; }
+  lfMakeMail(first); lfMakeDig(); LF.d = dayKey(); LF.morning = 1; save(); }
+function lfMorning() { if (!LF.morning || state !== 'play' || dlg || menu || wipe || (typeof mini !== 'undefined' && mini)) return; LF.morning = 0;
+  const lines = [], un = LF.mail.filter(m => !m.read).length;
+  if (LF.rcpt) { const top = LF.rcpt.items.slice().sort((a, b) => b[2] - a[2]).slice(0, 3).map(([id, n]) => `${ITEMS[id] ? ITEMS[id].name : id} ×${n}`).join(', '); lines.push(L('너구리 사장', `어제 출하 정산 왔어! ${top}${LF.rcpt.items.length > 3 ? ' 외' : ''} → ✦${LF.rcpt.total}`)); }
+  if (un) lines.push(L('계획이', `좋은 아침! 📮 우편함에 편지가 ${un}통 와 있어.`));
+  const dn = LF.dig.filter(s => !LF.dug[s.k]).length; if (dn && inv.shovel) lines.push(L('계획이', `오늘 마을에 ✕ 표시가 ${dn}곳 생겼어. 삽으로 파 보자!`));
+  if (lines.length) say(lines); }
+
+// ---------- ① 출하 상자 ----------
+const SHIPB = { x: 0, y: 0, ok: 0 }; const SHIPX = { mode: 'one', confirm: 0 };
+function lfPlace() { if (SHIPB.ok) return; let x, y; for (const [ax, ay] of [[5, 13], [13, 14], [10, 15], [4, 11]]) { [x, y] = fFreeNear(ax, ay); if (Math.hypot(x - 11, y - 11) > 3 && Math.hypot(x - 8.5, y - 12.5) > 2) break; } SHIPB.x = (x + .5) * T; SHIPB.y = (y + .6) * T; SHIPB.tx = x; SHIPB.ty = y; solid[y][x] = true; SHIPB.ok = 1; }
+function shipTotal() { return Object.values(LF.ship).reduce((a, s) => a + s.v, 0); }
+function shipPut(id, q) { q = Math.min(q, sellN(id)); if (q <= 0) return 0; const p = sellPrice(id); inv[id] -= q; const s = LF.ship[id] || (LF.ship[id] = { n: 0, v: 0 }); s.n += q; s.v += p * q; return q; }
+function shipTake(id, q) { const s = LF.ship[id]; if (!s) return; q = Math.min(q, s.n); const v = Math.round(s.v * q / s.n); s.n -= q; s.v -= v; addItem(id, q); if (s.n <= 0) delete LF.ship[id]; }
+function openShip() { menu = { kind: 'ship', title: '📦 출하 상자', tabs: ['넣기', '상자 안'], tab: 0, sel: 0, page: 0 }; sfx('blip'); }
+function shipEntries(m) { const E = [], tot = shipTotal();
+  E.push({ name: `내일 아침 정산 예정: ✦${tot}`, desc: '넣어 두면 날짜가 바뀐 다음 날 아침에 별사탕이 들어와요 · 값은 넣을 때 값 그대로', tag: '', col: '#ffd23f', act: () => { } });
+  if (m.tab === 0) {
+    E.push({ name: `누르면 넣기: ${SHIPX.mode === 'one' ? '1개씩' : '몽땅'}`, desc: '눌러서 바꾸기', tag: SHIPX.mode === 'one' ? '1개' : '전부', col: '#f3e6cf', act: () => { SHIPX.mode = SHIPX.mode === 'one' ? 'all' : 'one'; sfx('blip'); } });
+    const all = sellAllList(), cnt = all.reduce((a, id) => a + sellN(id), 0), sum = all.reduce((a, id) => a + sellPrice(id) * sellN(id), 0), arm = SHIPX.confirm > time;
+    E.push({ name: arm ? '정말 넣을까요? 한 번 더 누르면 넣어요' : `작물·물고기·재료 몽땅 넣기 (${cnt}개)`, desc: '장비·소모품·인형·아직 기증 안 한 생물은 빼요', tag: cnt ? `✦ ${sum}` : '없음', col: cnt ? (arm ? '#ff8fa3' : '#9be37a') : '#d9cbb5',
+      act: () => { if (!cnt) return pmsg('넣을 물건이 없어요', 1); if (!arm) { SHIPX.confirm = time + 3; sfx('blip'); return; } SHIPX.confirm = 0; let n = 0; for (const id of all) n += shipPut(id, sellN(id)); sfx('star'); pmsg(`${n}개 쏙! 내일 아침 정산 ✦${shipTotal()}`); save(); } });
+    const list = Object.keys(inv).filter(sellable).sort((a, b) => SELL_CATS.indexOf(sellCat(a)) - SELL_CATS.indexOf(sellCat(b)) || sellPrice(b) - sellPrice(a)); let last = null;
+    for (const id of list) { const it = ITEMS[id], c = sellCat(id), p = sellPrice(id), n = sellN(id);
+      E.push({ img: itemImg(id), name: `${c !== last ? `[${c}] ` : ''}${it.name} ×${n}`, desc: `하나 ✦${p}`, tag: SHIPX.mode === 'one' ? `✦ ${p}` : `✦ ${p * n}`, col: '#9be37a', act: () => { const q = shipPut(id, SHIPX.mode === 'one' ? 1 : sellN(id)); if (!q) return pmsg('다 넣었어!'); sfx('pop'); pmsg(`${it.name}${q > 1 ? ` ${q}개` : ''} 쏙!`); save(); } }); last = c; }
+    if (!list.length) E.push({ name: '넣을 물건이 없어요', desc: '작물, 물고기, 재료를 가져와 봐', tag: '', act: () => { } });
+  } else { const ids = Object.keys(LF.ship); for (const id of ids) { const s = LF.ship[id], it = ITEMS[id]; E.push({ img: itemImg(id), name: `${it.name} ×${s.n}`, desc: '누르면 1개 꺼내요', tag: `✦ ${s.v}`, col: '#ffd23f', act: () => { shipTake(id, 1); sfx('blip'); save(); } }); }
+    if (!ids.length) E.push({ name: '상자가 비어 있어요', desc: '넣기 탭에서 넣어 보자', tag: '', act: () => { } }); }
+  return E; }
+
+// ---------- ② 우편함 편지 ----------
+const MAILBOX = { x: 11.5 * 16, y: 11.9 * 16 };
+const MAIL_BODY = ['오늘 아침에 {item}이(가) 생겼는데, 노랑이 생각이 나서 보내!', '어제 같이 얘기해서 정말 즐거웠어. 또 놀러 와~', '마을 광장 꽃이 활짝 폈어! 같이 산책 가자!', '노랑이 덕분에 마을이 북적북적해졌어. 고마워!', '혹시 화석 파 봤어? 부엉 박사님이 엄청 좋아하시더라.', '오늘은 날씨가 좋아서 빨래를 잔뜩 널었어!', '몰래 연습한 노래가 있는데… 다음에 꼭 들려줄게!', '사냥터에 반짝이는 엘리트가 나왔대. 조심해!', '출하 상자 써 봤어? 아침에 별사탕이 짠~ 하고 들어온대!', '어젯밤 별이 진짜 많았어. 노랑이도 봤어?'];
+const MAIL_NEWS = [['깍깍 기자', '📰 삐약 신문 호외', '마을마다 사냥터 안내판이 생겼다! 2~4단계 사냥터는 체력도 경험치도 쑥쑥!'], ['깍깍 기자', '📰 삐약 신문 호외', '부엉 박사, "공룡 화석을 다 모으면 대단한 걸 보여 주겠다" 발언!'], ['깍깍 기자', '📰 삐약 신문 호외', '연금술 무지개 물약, 마시면 힘·속도·방어·행운이 한꺼번에!'], ['너구리 사장', '🛒 너구리 상점 소식', '오늘의 특가는 상점 첫 탭 맨 위! 하루 3개까지야, 서둘러~'], ['부엉 박사', '🦉 박물관 소식', '화석관이 문을 열었어요. 수상한 화석을 가져오면 감정해 줄게요, 부엉!']];
+const MAIL_SMALL = ['bread', 'tomato', 'apple', 'acorn', 'f_berry', 'honey', 'egg', 'pot_red', 'carrot', 'persimmon'];
+function lfAddMail(m) { m.id = ++LF.mid; m.day = dayKey(); m.read = 0; LF.mail.unshift(m); while (LF.mail.length > LF_CFG.mailKeep) { const i = LF.mail.map(q => q.read).lastIndexOf(1); LF.mail.splice(i >= 0 ? i : LF.mail.length - 1, 1); } }
+function lfMakeMail(first) {
+  if (first) { lfAddMail({ from: '부엉 박사', title: '🦉 화석 발굴을 부탁해요', body: ['노랑 군, 안녕하세요. 부엉 박사예요.', '요즘 마을 땅속에서 옛날 공룡 화석이 자꾸 보인다는 소식이에요.', '이 삽으로 ✕ 표시를 파 보세요. 화석이 나오면 박물관 화석관으로!', '…혹시 노랑 군의 조상님일지도 몰라요. 부엉!'], gift: { shovel: 1 } });
+    lfAddMail({ from: '너구리 사장', title: '📦 출하 상자 설치 완료!', body: ['둥지집 앞에 출하 상자를 놔 뒀어!', '작물이나 물고기를 넣어 두면, 다음 날 아침에 내가 걷어 가서 별사탕으로 바꿔 줄게.', '상점까지 안 와도 돼서 편하지? 헤헤'], gift: null }); return; }
+  const d = dayKey(), md = [Math.floor(d / 100) % 100, d % 100];
+  for (const id in (typeof BDAY !== 'undefined' ? BDAY : {})) { const [m0, d0] = BDAY[id], n = npcById(id); if (n && m0 === md[0] && d0 === md[1]) lfAddMail({ from: '계획이', title: `🎂 오늘은 ${n.name} 생일!`, body: [`노랑아! 오늘은 ${n.name}의 생일이야.`, typeof FR_GIFT !== 'undefined' && FR_GIFT[id] && ITEMS[FR_GIFT[id]] ? `${ITEMS[FR_GIFT[id]].name}을(를) 좋아한대. 선물하러 가 볼까?` : '축하해 주러 가 볼까?'], gift: null }); }
+  const [a, b] = LF_CFG.mailPerDay, n = a + Math.floor(Math.random() * (b - a + 1)), pool = (typeof FR_GIFT !== 'undefined' ? Object.keys(FR_GIFT) : []).map(npcById).filter(Boolean);
+  for (let i = 0; i < n; i++) { if (Math.random() < .25 || !pool.length) { const [from, title, txt] = MAIL_NEWS[Math.floor(Math.random() * MAIL_NEWS.length)]; lfAddMail({ from, title, body: [txt], gift: null }); continue; }
+    const w = pool.map(q => 1 + frLv(q.id) * 2); let r = Math.random() * w.reduce((x, y) => x + y, 0), npc = pool[0]; for (let k = 0; k < pool.length; k++) { if ((r -= w[k]) <= 0) { npc = pool[k]; break; } }
+    const lv = frLv(npc.id), fav = FR_GIFT[npc.id], gid = lv >= 3 && fav && ITEMS[fav] && ITEMS[fav].type !== 'eq' && Math.random() < .5 ? fav : MAIL_SMALL.filter(x => ITEMS[x])[Math.floor(Math.random() * MAIL_SMALL.length) % MAIL_SMALL.filter(x => ITEMS[x]).length], gift = Math.random() < .6 && gid ? { [gid]: lv >= 4 ? 2 : 1 } : null;
+    const body = MAIL_BODY[Math.floor(Math.random() * MAIL_BODY.length)].replace('{item}', gid && ITEMS[gid] ? ITEMS[gid].name : '간식');
+    lfAddMail({ from: npc.name, fid: npc.id, title: `💌 ${npc.name}의 편지`, body: [`노랑아, 안녕! ${npc.name}이야.`, body, lv >= 4 ? '우리 단짝이잖아! 언제든 놀러 와 ♥' : '그럼 또 봐!'], gift }); } }
+function openMail() { menu = { kind: 'mail', title: '📮 우편함', tabs: ['받은 편지'], tab: 0, sel: 0, page: 0 }; sfx('blip'); }
+function readMail(m) { menu = null; sfx('quest'); const g = m.gift && !m.got ? m.gift : null;
+  say([L(m.from, m.title), ...m.body.map(t => L(m.from, t))], () => { m.read = 1; if (g) { m.got = 1; for (const [id, n] of Object.entries(g)) if (ITEMS[id]) addItem(id, n); toast(`동봉된 선물: ${Object.entries(g).map(([id, n]) => (ITEMS[id] || {}).name + (n > 1 ? ' ×' + n : '')).join(', ')}`); if (m.fid) addFriend(m.fid, 1); } save(); }); }
+function mailEntries() { const E = [], un = LF.mail.filter(m => !m.read).length, gifts = LF.mail.filter(m => m.gift && !m.got);
+  E.push({ name: `편지 ${LF.mail.length}통 · 안 읽은 편지 ${un}통`, desc: '날짜가 바뀌면 아침에 새 편지가 와요 · 친한 주민일수록 자주 써요', tag: '', col: '#f3e6cf', act: () => { } });
+  if (gifts.length > 1) E.push({ name: `🎁 선물 ${gifts.length}개 한꺼번에 받기`, desc: '편지는 읽은 것으로 표시돼요', tag: '받기', col: '#ffd23f', act: () => { for (const m of gifts) { m.got = 1; m.read = 1; for (const [id, n] of Object.entries(m.gift)) if (ITEMS[id]) addItem(id, n); } sfx('star'); pmsg('선물을 몽땅 받았다!'); save(); } });
+  for (const m of LF.mail) E.push({ name: `${m.read ? '' : '✉️ '}${m.title}`, desc: `${m.from} · ${String(m.day).slice(4, 6)}/${String(m.day).slice(6)}${m.gift && !m.got ? ' · 🎁 선물 동봉' : ''}`, tag: m.read ? '읽음' : '새 편지', col: m.read ? '#efe2c8' : '#ffd23f', act: () => readMail(m) });
+  if (!LF.mail.length) E.push({ name: '편지가 없어요', desc: '내일 아침을 기다려 봐요', tag: '', act: () => { } });
+  return E; }
+
+// ---------- ③ 화석 파기 ----------
+function lfMakeDig() { LF.dig = []; LF.dug = {}; const d = dayKey(); let s = d % 99991 + 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const pick = (x0, x1, y0, y1, n) => { let tries = 0; while (n > 0 && tries++ < 400) { const x = x0 + Math.floor(r() * (x1 - x0)), y = y0 + Math.floor(r() * (y1 - y0)); if (!inMap(x, y) || solid[y][x] || ground[y][x] !== 0 || (fence[y] && fence[y][x]) || (typeof bridge !== 'undefined' && bridge.has(y * W + x))) continue; if (Math.hypot(x - 8.5, y - 12.5) < 3 || LF.dig.some(q => Math.hypot(q.x - x, q.y - y) < 4)) continue; LF.dig.push({ k: `${d}_${x}_${y}`, x, y }); n--; } };
+  pick(2, 42, 3, 32, LF_CFG.digVillage); pick(46, 70, 3, 32, LF_CFG.digForest); if (R3 && R3.digG) R3.digG.userData.key = ''; }
+function digNear() { if (curRoom.id !== 'v1' && curRoom.id !== 'f1') return null; for (const s of LF.dig) if (!LF.dug[s.k] && Math.hypot(P.x - (s.x + .5) * T, P.y - (s.y + .5) * T) < 16) return s; return null; }
+function doDig(s) { if (!inv.shovel) { sfx('bonk'); toast('삽이 있어야 파지! 우편함을 확인해 봐'); return; } LF.dug[s.k] = 1; const x = (s.x + .5) * T, y = (s.y + .5) * T; sfx('pop'); shake(1.5, .15); burst(x, y - 4, '#8a6a4a', 16); P.hop = .3;
+  const C = LF_CFG.dig, r = Math.random(); let msg;
+  if (r < C.fossil) { addItem('fossil_q'); msg = '수상한 화석을 파냈다! 부엉 박사에게 가져가자'; }
+  else if (r < C.fossil + C.treasure) { const n = 5 + Math.floor(Math.random() * 16); hearts += n; floaters.push({ x, y: y - 30, t: 1.3, text: `✦+${n}`, col: '#ffe680' }); msg = `묻혀 있던 별사탕 ✦${n}!`; }
+  else if (r < C.fossil + C.treasure + C.mat) { const ids = ['acorn', 'wood', 'f_berry', 'herb', 'f_power'].filter(k => ITEMS[k]), id = ids[Math.floor(Math.random() * ids.length)]; addItem(id, 1 + Math.floor(Math.random() * 2)); msg = `${ITEMS[id].name}이(가) 나왔다`; }
+  else { const id = Math.random() < .5 && ITEMS.elite_core ? 'elite_core' : 'egg_gold'; if (ITEMS[id]) addItem(id); msg = `반짝! ${ITEMS[id] ? ITEMS[id].name : '보물'}!`; }
+  toast(msg); stat('dig'); save(); }
+// 박물관 화석관
+function fosOwned(id) { return (inv['fos_' + id] || 0) > 0; }
+function fossilEntries() { const E = [], don = FOS.filter(f => LF.fdon[f[0]]).length, sets = Object.keys(FSET).filter(k => FOS.filter(f => f[2] === k).every(f => LF.fdon[f[0]])).length;
+  E.push({ name: `화석 ${don}/${FOS.length} · 공룡 ${sets}/${Object.keys(FSET).length}마리 완성`, desc: `공룡 한 마리를 다 맞추면 ✦${LF_CFG.setReward} + EXP ${LF_CFG.setXp} · 전부 모으면 특별한 선물`, tag: '', col: '#c9b6ff', act: () => { } });
+  const q = inv.fossil_q || 0; E.push({ img: q ? itemImg('fossil_q') : null, name: `🔍 수상한 화석 감정 (×${q})`, desc: '부엉 박사가 무슨 화석인지 알려 줘요 · 아직 없는 조각이 먼저 나와요', tag: q ? '감정' : '없음', col: q ? '#ffd23f' : '#d9cbb5',
+    act: () => { if (!(inv.fossil_q > 0)) return pmsg('수상한 화석이 없어요. ✕ 표시를 파 보자!', 1); inv.fossil_q--; const want = FOS.filter(f => !LF.fdon[f[0]] && !fosOwned(f[0])), pool = want.length && Math.random() < .75 ? want : FOS, f = pool[Math.floor(Math.random() * pool.length)]; addItem('fos_' + f[0]); sfx('star'); pmsg(`부엉! 이건 ${f[1]} 화석이에요!${LF.fdon[f[0]] ? ' (이미 있는 조각)' : ''}`); save(); } });
+  let last = '';
+  for (const [id, nm, set] of FOS) { const has = inv['fos_' + id] || 0, done = LF.fdon[id], head = set !== last ? (set ? FSET[set] : '🪨 작은 화석') + ' · ' : ''; last = set;
+    E.push({ img: done || has ? itemImg('fos_' + id) : null, name: `${head}${done || has ? nm : '???'}`, desc: done ? '기증 완료 ✓' + (has ? ` · 겹친 조각 ${has}개는 상점에 팔 수 있어요` : '') : has ? '누르면 기증해요' : '아직 못 찾았어요', tag: done ? '전시 중' : has ? '기증' : '-', col: done ? '#9be37a' : has ? '#ffd23f' : '#efe2c8',
+      act: () => { if (done || !has) return pmsg(done ? '멋지게 전시 중!' : '수상한 화석을 감정해 보자'); inv['fos_' + id]--; LF.fdon[id] = 1; hearts += 3; sfx('star'); pmsg(`${nm} 화석 기증! ✦+3`); fosSetCheck(set); save(); } }); }
+  return E; }
+function fosSetCheck(set) { if (set && !LF.sets[set] && FOS.filter(f => f[2] === set).every(f => LF.fdon[f[0]])) { LF.sets[set] = 1; hearts += LF_CFG.setReward; gainXp(LF_CFG.setXp); setTimeout(() => banner(`${FSET[set]} 완성!`, `화석관에 전시했어요 · ✦${LF_CFG.setReward}`, '#c9b6ff'), 400); }
+  if (FOS.every(f => LF.fdon[f[0]]) && !LF.sets.all) { LF.sets.all = 1; if (typeof giveFurn === 'function') giveFurn('rexfossil'); setTimeout(() => banner('화석관 완성!', '부엉 박사의 선물: 티라노 화석 모형 (둥지집에 놓여요)', '#ffd23f'), 2600); } }
+if (typeof openMuseum === 'function') openMuseum = (o => () => { o(); if (menu && menu.kind === 'museum') menu.tabs = [...menu.tabs, '🦴 화석관']; })(openMuseum);
+museumEntries = (o => m => m.tab === 2 ? fossilEntries() : o(m))(museumEntries);
+
+// ---------- ④ 가구 자유 배치 · 둥지집 확장 ----------
+FURN.rexfossil = { name: '티라노 화석 모형', t: [[45, 44]], desc: '화석관을 완성하면 부엉 박사가 줘요' };
+const FB = {}; for (const k in FURN) { const t = FURN[k].t; if (k === 'frame') continue; if (!t.length) { FB[k] = { w: 3, h: 2, ry: 0, flat: 1 }; continue; } const xs = t.map(q => q[0]), ys = t.map(q => q[1]); FB[k] = { w: Math.max(...xs) - Math.min(...xs) + 1, h: Math.max(...ys) - Math.min(...ys) + 1, ry: k === 'sofa' ? Math.PI : k === 'fireplace' ? -Math.PI / 2 : 0 }; }
+let PL = null, DECO_MODE = 'move';
+const homeIn = (x, y) => x > HM.x0 && x < HM.x1 && y > HM.y0 && y < HM.y1;
+function furnTiles(k) { return LF.fpos[k] ? LF.fpos[k].t : FURN[k].t; }
+function plRect() { const k = PL.k, b = FB[k], rot = PL.r % 2, w = rot ? b.h : b.w, h = rot ? b.w : b.h, tx = Math.floor(P.x / T), ty = Math.floor((P.y - 4) / T), dv = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[P.dir] || [0, 1];
+  let x0, y0; if (dv[0] > 0) { x0 = tx + 1; y0 = ty - Math.floor((h - 1) / 2); } else if (dv[0] < 0) { x0 = tx - w; y0 = ty - Math.floor((h - 1) / 2); } else if (dv[1] < 0) { x0 = tx - Math.floor((w - 1) / 2); y0 = ty - h; } else { x0 = tx - Math.floor((w - 1) / 2); y0 = ty + 1; }
+  const tiles = []; for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) tiles.push([x, y]);
+  const own = new Set(furnTiles(k).map(([x, y]) => y * W + x)), ok = tiles.every(([x, y]) => homeIn(x, y) && !(x === HM.door && y === HM.y1 - 1) && !(x === tx && y === ty) && (b.flat || !solid[y][x] || own.has(y * W + x)));
+  return { tiles, ok }; }
+function startPlace(k) { if (curRoom.id !== 'home') return pmsg('둥지집 안에서 옮길 수 있어요', 1); if (!FB[k]) return pmsg('이건 벽에 걸려 있어서 못 옮겨요', 1); menu = null; const m = R3 && R3.furn && R3.furn[k]; PL = { k, r: (LF.fpos[k] && LF.fpos[k].r) || 0, o: m ? { x: m.position.x, z: m.position.z, ry: m.rotation.y, v: m.visible } : null }; sfx('blip'); toast(`${FURN[k].name} 옮기기 · A 놓기 · B 돌리기 · 구르기 취소`); }
+function placeNow() { const { tiles, ok } = plRect(), k = PL.k; if (!ok) { sfx('bonk'); toast('여기는 못 놓아요 (빨간 칸)'); return; }
+  if (!FB[k].flat) for (const [x, y] of furnTiles(k)) if (homeIn(x, y)) solid[y][x] = false;
+  LF.fpos[k] = { t: tiles, r: PL.r }; if (!FB[k].flat) FURN[k].t = tiles; FOWN[k] = 1; FON[k] = 1; furnSolid(); furn3D(k); sfx('pop'); burst(P.x, P.y - 10, '#ffd23f', 10); PL = null; save(); }
+function furn3D(k) { if (!R3 || !R3.furn || !R3.furn[k]) return; const p = LF.fpos[k], m = R3.furn[k]; if (!p) return; const xs = p.t.map(q => q[0]), ys = p.t.map(q => q[1]); m.position.x = xs.reduce((a, b) => a + b, 0) / xs.length + .5; m.position.z = zt(ys.reduce((a, b) => a + b, 0) / ys.length) + .5; m.rotation.y = FB[k].ry + p.r * Math.PI / 2; }
+function lfApplyPos() { for (const k in LF.fpos) { if (!FURN[k] || !FB[k]) continue; if (!FB[k].flat) { for (const [x, y] of FURN[k].t) if (homeIn(x, y)) solid[y][x] = false; FURN[k].t = LF.fpos[k].t; } } furnSolid(); }
+// 집 확장
+function homeGrid() { for (let y = HM.y0 - 3; y <= HM.y1 + 3; y++) for (let x = HM.x0 - 3; x <= HM.x1 + 3; x++) if (inMap(x, y)) { ground[y][x] = G_HWALL; solid[y][x] = true; }
+  for (let y = HM.y0 + 1; y <= HM.y1 - 1; y++) for (let x = HM.x0 + 1; x <= HM.x1 - 1; x++) { ground[y][x] = G_HOME; solid[y][x] = false; } ground[HM.y1][HM.door] = G_HOME; solid[HM.y1][HM.door] = false;
+  const r = ROOMS.find(q => q.id === 'home'); if (r) { r.x1 = HM.x1 + 1; r.y1 = HM.y1 + 1; } furnSolid(); }
+function homeExpandTo(lv) { while (LF.homeLv < lv) { LF.homeLv++; const c = LF_CFG.home[LF.homeLv]; HM.x1 += c.add[0]; HM.y1 += c.add[1]; } homeGrid();
+  if (R3 && R3.homeRoom) { R3.scene.remove(R3.homeRoom); for (const k in (R3.furn || {})) R3.scene.remove(R3.furn[k]); R3.homeRoom = null; R3.furn = null; R3.homeBeams = []; }
+  if (!(typeof USE3D !== 'undefined' && USE3D)) try { prerenderGround(); } catch (e) { } }
+function expandEntries() { const E = [], lv = LF.homeLv, nx = LF_CFG.home[lv + 1], W0 = HM.x1 - HM.x0 - 1, H0 = HM.y1 - HM.y0 - 1;
+  E.push({ name: `둥지집 ${lv + 1}단계 · 바닥 ${W0}×${H0}칸`, desc: '두더지 목수에게 맡기면 바로 넓혀 줘요 · 가구는 그대로', tag: '', col: '#f3e6cf', act: () => { } });
+  if (!nx) { E.push({ name: '최대 크기예요!', desc: '더 넓히려면 다음 업데이트를 기다려요', tag: '완료', col: '#9be37a', act: () => { } }); return E; }
+  const needs = Object.entries(nx.need), can = hearts >= nx.cost && needs.every(([k, n]) => (inv[k] || 0) >= n);
+  E.push({ name: `${lv + 2}단계로 넓히기 → 바닥 ${W0 + nx.add[0]}×${H0 + nx.add[1]}칸`, desc: `✦${nx.cost} · ${needs.map(([k, n]) => `${ITEMS[k] ? ITEMS[k].name : k} ${inv[k] || 0}/${n}`).join(' · ')}`, tag: can ? '확장!' : '부족', col: can ? '#ffd23f' : '#d9cbb5',
+    act: () => { if (!can) { sfx('bonk'); return pmsg('재료나 별사탕이 모자라요', 1); } hearts -= nx.cost; for (const [k, n] of needs) inv[k] -= n; homeExpandTo(lv + 1); sfx('tada'); menu = null; banner('둥지집 확장!', `바닥이 ${HM.x1 - HM.x0 - 1}×${HM.y1 - HM.y0 - 1}칸이 됐어요`, '#ffd23f'); if (curRoom.id === 'home') startWipe(() => warpTo((HM.door + .5) * T, (HM.y1 - .6) * T, 'up')); save(); } });
+  return E; }
+openDeco = (o => () => { o(); if (menu && menu.kind === 'deco') menu.tabs = [...menu.tabs, '🔨 집 확장']; })(openDeco);
+decoEntries = (o => m => { if (m.tab === 2) return expandEntries(); const E = o(m); if (m.tab !== 0) return E;
+  const keys = Object.keys(FURN); let i = 0; for (const e of E) { const k = keys[i++]; if (!k || !FOWN[k] || DECO_MODE !== 'move') continue; if (FB[k]) { e.tag = '옮기기'; e.act = () => startPlace(k); } }
+  E.unshift({ name: DECO_MODE === 'move' ? '🔧 지금: 옮기기 모드' : '📦 지금: 넣고 빼기 모드', desc: DECO_MODE === 'move' ? '가구를 고르면 둥지집 안에서 원하는 칸에 놓아요 · 눌러서 모드 바꾸기' : '가구를 고르면 꺼내거나 치워요 · 눌러서 모드 바꾸기', tag: '바꾸기', col: '#c9b6ff', act: () => { DECO_MODE = DECO_MODE === 'move' ? 'stash' : 'move'; sfx('blip'); } });
+  return E; })(decoEntries);
+homeNear = (o => () => { if (curRoom.id !== 'home' || PL) return null; for (const k of ['stove', 'closet', 'bed']) { const t = furnTiles(k); if (!t.length) continue; const xs = t.map(q => q[0]), ys = t.map(q => q[1]), x0 = Math.min(...xs) * T, x1 = (Math.max(...xs) + 1) * T, y0 = Math.min(...ys) * T, y1 = (Math.max(...ys) + 1) * T, dx = Math.max(x0 - P.x, 0, P.x - x1), dy = Math.max(y0 - P.y, 0, P.y - 4 - y1); if (Math.hypot(dx, dy) < 12) return k; } return null; })(homeNear);
+swipe = (o => (...a) => { if (PL) { PL.r = (PL.r + 1) % 4; sfx('blip'); return; } return o(...a); })(swipe);
+function plCancel() { const k = PL.k, oo = PL.o; PL = null; const m = R3 && R3.furn && R3.furn[k]; if (m && oo) { m.position.x = oo.x; m.position.z = oo.z; m.rotation.y = oo.ry; } }
+dodge = (o => () => { if (PL) { plCancel(); toast('옮기기 취소'); return false; } return o(); })(dodge);
+sellAllSafe = (o => id => (id === 'fossil_q' || (id.startsWith('fos_') && !LF.fdon[id.slice(4)])) ? false : o(id))(sellAllSafe);
+if (typeof syncHome3D === 'function') syncHome3D = (o => () => { o(); if (R3.furn && !R3.furn.__lf) { Object.defineProperty(R3.furn, '__lf', { value: 1 }); for (const k in LF.fpos) furn3D(k); }
+  if (PL && R3.furn && R3.furn[PL.k]) { const { tiles } = plRect(), m = R3.furn[PL.k], xs = tiles.map(q => q[0]), ys = tiles.map(q => q[1]); m.visible = true; m.position.x = xs.reduce((a, b) => a + b, 0) / xs.length + .5; m.position.z = zt(ys.reduce((a, b) => a + b, 0) / ys.length) + .5; m.rotation.y = FB[PL.k].ry + PL.r * Math.PI / 2; } })(syncHome3D);
+if (typeof furnModel === 'function') furnModel = (o => k => { if (k !== 'rexfossil') return o(k); const b = '#f3ead8', g = grp(mesh('b', '#8a6a4a', 1.0, .12, .5, 0, .06, 0)); for (let i = 0; i < 5; i++) g.add(mesh('s', b, .12, .1, .1, -.3 + i * .14, .55 + Math.sin(i * .8) * .05, 0)); g.add(mesh('s', b, .26, .2, .18, .42, .62, 0), mesh('b', b, .2, .05, .12, .5, .52, 0), mesh('c', b, .03, .4, .03, -.05, .32, .08), mesh('c', b, .03, .4, .03, -.05, .32, -.08), mesh('c', b, .03, .4, .03, .2, .32, .08), mesh('c', b, .03, .4, .03, .2, .32, -.08), mesh('co', b, .07, .3, .07, -.58, .5, 0)); g.children[g.children.length - 1].rotation.z = Math.PI / 2; return g; })(furnModel);
+
+// ---------- 상호작용 · 표시 ----------
+townInteract = (o => () => { if (dlg || menu) return o(); if (PL) { placeNow(); return true; } lfPlace();
+  if (curRoom.id === 'v1' && Math.hypot(P.x - SHIPB.x, P.y - SHIPB.y) < 24) { openShip(); return true; }
+  if (curRoom.id === 'v1' && Math.hypot(P.x - MAILBOX.x, P.y - MAILBOX.y) < 22) { openMail(); return true; }
+  const s = digNear(); if (s) { doDig(s); return true; } return o(); })(townInteract);
+townHint = (o => () => { if (PL) return { x: P.x, y: P.y - 44, t: `${KA()} 놓기 · B 돌리기 · 구르기 취소` }; lfPlace();
+  if (curRoom.id === 'v1' && Math.hypot(P.x - SHIPB.x, P.y - SHIPB.y) < 24) return { x: SHIPB.x, y: SHIPB.y - 34, t: `${KA()} 출하 상자${shipTotal() ? ` (✦${shipTotal()})` : ''}` };
+  if (curRoom.id === 'v1' && Math.hypot(P.x - MAILBOX.x, P.y - MAILBOX.y) < 22) { const un = LF.mail.filter(m => !m.read).length; return { x: MAILBOX.x, y: MAILBOX.y - 34, t: `${KA()} 우편함${un ? ` (새 편지 ${un})` : ''}` }; }
+  const s = digNear(); if (s) return { x: (s.x + .5) * T, y: (s.y + .5) * T - 30, t: inv.shovel ? `${KA()} 파기` : '삽이 필요해' }; return o(); })(townHint);
+const panelK = { ship: shipEntries, mail: mailEntries };
+panelEntries = (o => () => menu && panelK[menu.kind] ? panelK[menu.kind](menu) : o())(panelEntries);
+if (typeof townEntries === 'function') townEntries = (o => m => panelK[m.kind] ? panelK[m.kind](m) : o(m))(townEntries);
+update = (o => dt => { o(dt); if (state !== 'play') return; try { if (LF.d !== dayKey()) lfNewDay(); lfMorning(); if (PL && curRoom.id !== 'home') plCancel(); } catch (e) { console.warn('life2', e); } })(update);
+drawOverlay4 = (o => () => { o(); if (state !== 'play' || menu || dlg) return; try { const s0 = DPR, is3 = typeof USE3D !== 'undefined' && USE3D;
+  if (curRoom.id === 'v1') { lfPlace(); const un = LF.mail.filter(m => !m.read).length; if (un) { const [x, y] = fxScr(MAILBOX.x, MAILBOX.y - (is3 ? 26 : 30), is3 ? 1.6 : 1); const b = Math.sin(time * 4) * 2 * s0; ctx.fillStyle = '#fff8e7'; ctx.strokeStyle = '#e2543b'; ctx.lineWidth = 2 * s0; ctx.beginPath(); ctx.arc(x, y + b, 11 * s0, 0, 6.29); ctx.fill(); ctx.stroke(); text('✉', x, y + b + s0, 13 * s0, '#e2543b', 'center'); }
+    if (!is3) { const x = (SHIPB.x - cam.x) * SC, y = (SHIPB.y - cam.y) * SC, s = SC / 2; ctx.fillStyle = '#a0705a'; ctx.fillRect(x - 8 * s, y - 12 * s, 16 * s, 11 * s); ctx.fillStyle = '#c98a5a'; ctx.fillRect(x - 9 * s, y - 14 * s, 18 * s, 3 * s); ctx.fillStyle = '#fff3e0'; ctx.font = `bold ${Math.round(5 * s)}px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('출하', x, y - 5 * s); } }
+  if (!is3 && (curRoom.id === 'v1' || curRoom.id === 'f1')) for (const sp of LF.dig) { if (LF.dug[sp.k]) continue; const x = ((sp.x + .5) * T - cam.x) * SC, y = ((sp.y + .5) * T - cam.y) * SC, r = 4 * SC / 2; ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 2 * SC / 2; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); }
+  if (PL && curRoom.id === 'home') { const { tiles, ok } = plRect(); ctx.fillStyle = ok ? 'rgba(155,227,122,.45)' : 'rgba(255,107,107,.45)'; ctx.strokeStyle = ok ? '#5fb84a' : '#e2543b'; ctx.lineWidth = 2 * s0;
+    for (const [tx, ty] of tiles) { const cs = is3 ? [[0, 0], [1, 0], [1, 1], [0, 1]].map(([a, b]) => project3D((tx + a) * T, (ty + b) * T + .3 * T, .03)) : [[0, 0], [1, 0], [1, 1], [0, 1]].map(([a, b]) => [((tx + a) * T - cam.x) * SC, ((ty + b) * T - cam.y) * SC]); ctx.beginPath(); cs.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    if (!is3) { const xs = tiles.map(q => q[0]), ys = tiles.map(q => q[1]), cx = ((Math.min(...xs) + Math.max(...xs) + 1) / 2 * T - cam.x) * SC, cy = ((Math.min(...ys) + Math.max(...ys) + 1) / 2 * T - cam.y) * SC; text(FURN[PL.k].name, cx, cy, 10 * s0, '#33222a', 'center', true); } }
+  } catch (e) { } })(drawOverlay4);
+// 2D: 둥지집 가구 (2D 기기에서도 보이게 간단한 상자로)
+drawOverlay4 = (o => () => { try { if (!(typeof USE3D !== 'undefined' && USE3D) && state === 'play' && curRoom.id === 'home') { const s = SC / 2; for (const k in FURN) { if (!(FOWN[k] && FON[k]) || (PL && PL.k === k)) continue; const t = k === 'rug' ? (LF.fpos.rug ? LF.fpos.rug.t : [[42, 41], [43, 41], [44, 41], [42, 42], [43, 42], [44, 42]]) : FURN[k].t; if (!t.length) continue; const xs = t.map(q => q[0]), ys = t.map(q => q[1]), x0 = (Math.min(...xs) * T - cam.x) * SC, y0 = (Math.min(...ys) * T - cam.y) * SC, w = (Math.max(...xs) - Math.min(...xs) + 1) * T * SC, h = (Math.max(...ys) - Math.min(...ys) + 1) * T * SC;
+    ctx.fillStyle = k === 'rug' ? 'rgba(255,210,63,.45)' : '#c98a5a'; ctx.fillRect(x0 + 2 * s, y0 + 2 * s, w - 4 * s, h - 4 * s); if (k !== 'rug') { ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(x0 + 2 * s, y0 + 2 * s, w - 4 * s, 3 * s); ctx.fillStyle = '#fff8e7'; ctx.font = `bold ${Math.round(4.5 * s)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(FURN[k].name.split(' ').pop(), x0 + w / 2, y0 + h / 2); } } } } catch (e) { } o(); })(drawOverlay4);
+// 3D: 출하 상자 · 화석 자리 ✕
+function syncLife3D() { if (!R3) return; lfPlace(); const ov = curRoom.id === 'v1' || curRoom.id === 'f1';
+  if (!R3.shipBin) { const x = SHIPB.x / T, z = ZU(SHIPB.y) - .4, g = grp(mesh('b', '#a0705a', .9, .55, .62, 0, .28, 0), mesh('b', '#c98a5a', .98, .09, .7, 0, .6, 0), mesh('b', '#7a5a3c', .92, .05, .05, 0, .3, .32), mesh('b', '#7a5a3c', .92, .05, .05, 0, .48, .32)); const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(.7, .26), new THREE.MeshBasicMaterial({ map: farmText('출하', 160, 60, '#c98a5a', '#fff8e7') })); sg.position.set(0, .4, .33); g.add(sg); g.position.set(x, 0, z); R3.scene.add(g); R3.shipBin = g; }
+  R3.shipBin.visible = curRoom.id === 'v1';
+  const key = LF.dig.filter(s => !LF.dug[s.k]).map(s => s.k).join(','); if (!R3.digG || R3.digG.userData.key !== key) { if (R3.digG) R3.scene.remove(R3.digG); const g = new THREE.Group(); g.userData.key = key; for (const s of LF.dig) { if (LF.dug[s.k]) continue; const X = s.x + .5, Z = zt(s.y) + .5; for (const a of [1, -1]) { const b = mesh('b', '#6a4a2a', .55, .02, .1, X, .035, Z); b.rotation.y = a * Math.PI / 4; g.add(b); } g.add(mesh('s', '#8a6a4a', .16, .05, .16, X + .25, .02, Z - .2)); } R3.scene.add(g); R3.digG = g; }
+  R3.digG.visible = ov; }
+if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncLife3D());
+
+// ---------- 저장 ----------
+townSave = (o => () => Object.assign(o(), { lf2: { d: LF.d, ship: LF.ship, rcpt: LF.rcpt, mail: LF.mail, mid: LF.mid, dig: LF.dig, dug: LF.dug, fdon: LF.fdon, fpos: LF.fpos, homeLv: LF.homeLv, sets: LF.sets } }))(townSave);
+townLoad = (o => d => { o(d); if (d && d.lf2) { const h = d.lf2.homeLv || 0; Object.assign(LF, d.lf2, { homeLv: 0 }); if (h) homeExpandTo(h); lfApplyPos(); } })(townLoad);
+if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('둥지집 앞 출하 상자에 넣어 두면 다음 날 아침 별사탕으로 바뀌어요', '우편함에 ✉ 표시가 뜨면 새 편지! 선물이 들어 있을 때도 있어요', '마을에 ✕ 표시가 보이면 삽으로 파 봐요. 공룡 화석이 나올지도!');
+
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
 </script>
