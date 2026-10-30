@@ -8056,7 +8056,7 @@ function iconModel(id) {
   if (id.startsWith('milk') || id.startsWith('gmilk')) return bottle('#ffffff', id.startsWith('g') ? '#8fd16f' : id.endsWith('_p') ? '#ffd23f' : '#7fcaf2');
   if (id.startsWith('honey')) return jar(id === 'honey_chestnut' ? '#a8642a' : id === 'honey_buckwheat' ? '#7a3f24' : id === 'honey_acacia' ? '#ffe27a' : '#ffb02e');
   if (id.startsWith('wool')) return fluff(id === 'wool_rainbow' ? ['#ff9fb2', '#ffd23f', '#9be37a', '#7fcaf2', '#c9b6ff'] : id === 'wool_p' ? ['#fff8e7', '#ffeec8'] : ['#ffffff', '#f2eee6']);
-  if (id.startsWith('pot_')) return flask({ pot_red: '#e2443b', pot_blue: '#4fa8e8', pot_purple: '#a35bbf' }[id] || '#e2443b');
+  if (id.startsWith('pot_')) return flask({ pot_red: '#e2443b', pot_blue: '#4fa8e8', pot_purple: '#a35bbf', pot_big: '#ff5c7a', pot_guard: '#5fb84a', pot_sneak: '#8a76c9', pot_luck: '#e8b923', pot_xp: '#3f9ad6', pot_rainbow: '#ff8ad0' }[id] || '#e2443b');
   switch (id) {
     case 'bread': return G(m('s', '#d99a5a', .36, .22, .24, 0, .2, 0), m('s', '#f2c48a', .3, .06, .2, 0, .36, 0));
     case 'cake': return G(m('c', '#f6e7d4', .34, .2, .34, 0, .12, 0), m('c', '#f08a24', .35, .08, .35, 0, .26, 0), m('c', '#fff8e7', .34, .14, .34, 0, .36, 0), m('s', '#e2443b', .07, .07, .07, 0, .48, 0));
@@ -8961,7 +8961,9 @@ for (const id in ITEMS) { const it = ITEMS[id]; if (it.sell > 0 || it.type === '
 function sellBonusCat() { return ['작물', '물고기', '곤충', '요리', '재료'][dayKey() % 5]; }
 function sellPrice(id) { const it = ITEMS[id]; let v = Math.max(1, Math.round(it.sell * (sellCat(id) === sellBonusCat() ? 1.3 : 1))); if (it.price > 0 && sellCat(id) !== '작물') v = Math.min(v, Math.max(1, it.price - 1)); return v; }  // 산 값보다 비싸게는 안 사요
 function isEquipped(id) { if (typeof equip === 'undefined') return false; for (const k in equip) if (equip[k] === id) return true; return false; }
-function sellable(id) { const it = ITEMS[id]; return it && it.sell > 0 && inv[id] > 0 && it.type !== 'doll' && !isEquipped(id); }
+function keepN(id) { const it = ITEMS[id]; return it && (it.type === 'doll' || id.startsWith('hat_')) ? 1 : 0; }  // 인형·모자는 1개는 꼭 남겨요(중복만 팔기)
+function sellN(id) { return Math.max(0, (inv[id] || 0) - keepN(id) - (isEquipped(id) && keepN(id) === 0 ? inv[id] : 0)); }
+function sellable(id) { const it = ITEMS[id]; return it && it.sell > 0 && sellN(id) > 0 && (keepN(id) || !isEquipped(id)); }
 function sellAllSafe(id) { const it = ITEMS[id], c = sellCat(id); if (c === '장비' || c === '소모품' || c === '기타') return false; if (it.type === 'crit' && typeof DON !== 'undefined' && !DON[id]) return false; return true; }
 function sellAllList() { return Object.keys(inv).filter(id => sellable(id) && sellAllSafe(id)); }
 function keeperNpc(k) { const S = SHOPS[k]; return (S.id && npcById(S.id)) || NPCS.find(n => n.name === S.keeper); }
@@ -8970,14 +8972,14 @@ function doSell(id, n, k) { n = Math.min(n, inv[id] || 0); if (!n) return 0; con
 function sellEntries(m) { const k = shopKey(m), S = SHOPS[k], E = [], bc = sellBonusCat(), list = Object.keys(inv).filter(sellable);
   E.push({ name: `${S.keeper}: "${list.length ? '뭘 팔아 줄 거야?' : '빈손이네? 헤헤'}"`, desc: `📈 오늘 비싸게 사요: ${bc} +30%`, tag: '', col: S.col, act: () => { } });
   E.push({ name: `누르면 팔기: ${SHOPX.mode === 'one' ? '1개씩' : '몽땅'}`, desc: '눌러서 바꾸기 · 몽땅은 그 물건을 전부 팔아요', tag: SHOPX.mode === 'one' ? '1개' : '전부', col: '#f3e6cf', act: () => { SHOPX.mode = SHOPX.mode === 'one' ? 'all' : 'one'; sfx('blip'); } });
-  const all = sellAllList(), tot = all.reduce((a, id) => a + sellPrice(id) * inv[id], 0), cnt = all.reduce((a, id) => a + inv[id], 0), arm = SHOPX.confirm > time;
+  const all = sellAllList(), tot = all.reduce((a, id) => a + sellPrice(id) * sellN(id), 0), cnt = all.reduce((a, id) => a + sellN(id), 0), arm = SHOPX.confirm > time;
   E.push({ name: arm ? `정말 팔까요? 한 번 더 누르면 판매!` : `모두 팔기 (${cnt}개)`, desc: '장비·소모품·인형·아직 기증 안 한 생물은 빼고 팔아요', tag: cnt ? `✦ ${tot}` : '없음', col: cnt ? (arm ? '#ff8fa3' : '#ffd23f') : '#d9cbb5',
-    act: () => { if (!cnt) return pmsg('모두 팔기로 팔 물건이 없어요', 1); if (!arm) { SHOPX.confirm = time + 3; sfx('blip'); return; } SHOPX.confirm = 0; let got = 0; for (const id of all) got += doSell(id, inv[id], k); sfx('star'); shopThanks(k, true); pmsg(`${cnt}개 몽땅 판매! ✦+${got}`); burst(P.x, P.y - 20, '#ffd23f', 18); save(); } });
+    act: () => { if (!cnt) return pmsg('모두 팔기로 팔 물건이 없어요', 1); if (!arm) { SHOPX.confirm = time + 3; sfx('blip'); return; } SHOPX.confirm = 0; let got = 0; for (const id of all) got += doSell(id, sellN(id), k); sfx('star'); shopThanks(k, true); pmsg(`${cnt}개 몽땅 판매! ✦+${got}`); burst(P.x, P.y - 20, '#ffd23f', 18); save(); } });
   list.sort((a, b) => SELL_CATS.indexOf(sellCat(a)) - SELL_CATS.indexOf(sellCat(b)) || sellPrice(b) - sellPrice(a));
-  let last = null; for (const id of list) { const it = ITEMS[id], c = sellCat(id), p = sellPrice(id), hot = c === bc, n = inv[id];
-    const note = c === '장비' ? '장비 · 모두 팔기에서 빠져요' : c === '소모품' ? '소모품 · 모두 팔기에서 빠져요' : it.type === 'crit' && typeof DON !== 'undefined' && !DON[id] ? '🏛️ 아직 기증 안 했어요 · 모두 팔기에서 빠져요' : it.dish ? '정성 가득 요리' : '';
+  let last = null; for (const id of list) { const it = ITEMS[id], c = sellCat(id), p = sellPrice(id), hot = c === bc, n = sellN(id);
+    const note = c === '장비' ? '장비 · 모두 팔기에서 빠져요' : c === '소모품' ? '소모품 · 모두 팔기에서 빠져요' : it.type === 'crit' && typeof DON !== 'undefined' && !DON[id] ? '🏛️ 아직 기증 안 했어요 · 모두 팔기에서 빠져요' : it.dish ? '정성 가득 요리' : keepN(id) ? '겹친 것만 팔아요 · 1개는 남겨요' : '';
     E.push({ img: itemImg(id), name: `${c !== last ? `[${c}] ` : ''}${it.name} ×${n}${hot ? ' 📈' : ''}`, desc: `하나 ✦${p}${n > 1 ? ` · 전부 ✦${p * n}` : ''}${note ? ' · ' + note : ''}`, tag: SHOPX.mode === 'one' ? `✦ ${p}` : `✦ ${p * n}`, col: hot ? '#ffd23f' : '#9be37a',
-      act: () => { if (!(inv[id] > 0)) return pmsg('다 팔았어!'); const q = SHOPX.mode === 'one' ? 1 : inv[id]; const got = doSell(id, q, k); sfx('heart'); shopThanks(k, q > 2); pmsg(`${it.name}${q > 1 ? ` ${q}개` : ''} 판매! ✦+${got}`); save(); } }); last = c; }
+      act: () => { if (!(sellN(id) > 0)) return pmsg('다 팔았어!'); const q = SHOPX.mode === 'one' ? 1 : sellN(id); const got = doSell(id, q, k); sfx('heart'); shopThanks(k, q > 2); pmsg(`${it.name}${q > 1 ? ` ${q}개` : ''} 판매! ✦+${got}`); save(); } }); last = c; }
   if (!list.length) E.push({ name: '팔 물건이 없어요', desc: '작물, 달걀, 양털, 물고기, 요리를 가져와 봐', tag: '', act: () => { } });
   return E; }
 // 오늘의 특가 (첫 탭 맨 위)
@@ -9094,6 +9096,120 @@ window.__SYNC3D.push(() => { if (!R3 || !R3.scene) return; const on = curRoom.id
   // 참새
   BIRDS.forEach((f, fi) => f.b.forEach((s, i) => { const key = 'bird' + fi + '_' + i; if (!on || !s.on || f.back > 0) return; const m = ent(key, sparrowModel); m.position.set(U(s.x), U(s.z) * 1.2, ZU(s.y) - .2); m.rotation.y = s.fly ? Math.atan2(s.vx, s.vy) : s.face > 0 ? Math.PI / 2 : -Math.PI / 2;
     m.userData.b.rotation.x = s.peck > 0 ? .6 : 0; m.userData.wings.forEach((w, j) => w.rotation.z = s.fly ? Math.sin(time * 40 + j * Math.PI) * .9 : 0); })); });
+
+// ===== growth.js : 레벨 곡선 · 생활 경험치 · 연금술 확장 · 엘리트 몬스터 =====
+// 수치는 GR 한 곳에서 조정
+const GR = {
+  need: lv => 16 + (lv - 1) * 9,           // 다음 레벨까지 필요 EXP (Lv1→2: 16, Lv10→11: 97, Lv19→20: 178)
+  act: { harvest: 1, fish: 3, bug: 3, cook: 3, craft: 2, donate: 6, fest: 6, trial: 12, gift: 5, market: 1, wood: 1, talk: 1, alch: 3 },
+  actCap: 60,                               // 생활 EXP 하루 상한
+  hunt: { n: 10, bonus: 2 },                // 하루 첫 10마리 보너스 EXP
+  firstKill: 10,                            // 처음 잡는 몬스터 종류 보너스
+  elite: { p: .06, gap: 35, xp: 12, hp: { king: 4, gold: 2.5, thorn: 3 }, sc: 1.45, gold: [10, 16] },
+};
+LV_CFG.need = GR.need;
+const GRS = { d: 0, act: 0, hunt: 0, kinds: {}, elite: 0, eT: -1e9, bait: 0 };
+const GB = { guard: 0, guardN: 0, luck: 0, sneak: 0 };   // 새 물약 버프(초)
+function grDaily() { const k = dayKey(); if (GRS.d !== k) { GRS.d = k; GRS.act = 0; GRS.hunt = 0; } }
+
+// ---- 1. 생활 경험치 ----
+stat = (o => (k, n = 1) => { const r = o(k, n); try { const v = GR.act[k]; if (v && state === 'play') { grDaily(); const g = Math.min(v * n, GR.actCap - GRS.act); if (g > 0) { GRS.act += g; gainXp(g); } } } catch (e) { } return r; })(stat);
+
+// ---- 2. 연금술 레시피 확장 ----
+function potIcon(c1, c2, shape) { let cv = null; return () => { if (cv) return cv; cv = document.createElement('canvas'); cv.width = cv.height = 16; const g = cv.getContext('2d'), px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  if (shape === 'bomb') { px(5, 6, 7, 7, '#5a4a3e'); px(4, 7, 9, 5, '#5a4a3e'); px(6, 7, 2, 2, '#8a7a6a'); px(8, 3, 1, 3, '#c9a27a'); px(9, 2, 2, 2, c1); return cv; }
+  if (shape === 'gem') { px(7, 2, 2, 1, '#fff'); px(5, 3, 6, 3, c1); px(4, 6, 8, 3, c2); px(5, 9, 6, 2, c2); px(6, 11, 4, 2, c1); px(7, 13, 2, 1, c1); px(6, 4, 2, 2, '#ffffffaa'); return cv; }
+  if (shape === 'bait') { px(4, 8, 8, 5, '#b58a5a'); px(3, 7, 10, 2, '#d9a96a'); px(5, 5, 2, 3, c1); px(8, 4, 3, 4, c2); px(7, 9, 2, 2, '#ffd23f'); return cv; }
+  px(6, 2, 4, 2, '#c9a27a'); px(7, 4, 2, 2, '#e8f4ff'); px(4, 6, 8, 7, '#e8f4ff'); px(5, 7, 6, 5, c1); px(5, 10, 6, 2, c2); px(6, 8, 1, 2, '#ffffffcc'); px(4, 13, 8, 1, '#9ab'); return cv; }; }
+const NEWITEMS = {
+  pot_big: { name: '큰 회복 물약', desc: 'HP 전부 회복', heal: 999, ic: potIcon('#ff6b8a', '#d63a5a'), sell: 6 },
+  pot_guard: { name: '튼튼 물약', desc: '45초 동안 공격 3번 막아줘요', gx: 'guard', ic: potIcon('#9be37a', '#5fb84a'), sell: 5 },
+  pot_sneak: { name: '살금 물약', desc: '60초 동안 몬스터가 눈치 못 채요', gx: 'sneak', ic: potIcon('#b9a8e8', '#8a76c9'), sell: 5 },
+  pot_luck: { name: '행운 물약', desc: '60초 동안 몬스터 재료 2배', gx: 'luck', ic: potIcon('#ffe066', '#e8b923'), sell: 6 },
+  pot_xp: { name: '지혜의 물약', desc: '마시면 EXP +40', gx: 'xp', ic: potIcon('#7fcaf2', '#3f9ad6'), sell: 8 },
+  pot_rainbow: { name: '무지개 물약', desc: '60초 동안 힘·속도·방어·행운 모두!', gx: 'rainbow', ic: potIcon('#ff9ad5', '#9be3ff'), sell: 15 },
+  bomb_acorn: { name: '도토리 폭탄', desc: '주변 몬스터에게 쾅! 큰 피해', gx: 'bomb', ic: potIcon('#ff8a3d', '', 'bomb'), sell: 4 },
+  bait_king: { name: '왕 미끼', desc: '근처 몬스터를 엘리트로 불러내요 (보상 듬뿍)', gx: 'bait', ic: potIcon('#e2543b', '#ffd23f', 'bait'), sell: 4 },
+};
+for (const id in NEWITEMS) { const d = NEWITEMS[id]; ITEMS[id] = { name: d.name, type: 'use', desc: d.desc, sell: d.sell, gx: d.gx, heal: d.heal, get icon() { return this._ic || d.ic(); }, set icon(v) { this._ic = v; } }; }
+ITEMS.elite_core = { name: '왕 결정', type: 'mat', desc: '엘리트 몬스터가 남긴 반짝이는 결정 · 연금술 재료', sell: 25, get icon() { return this._ic || GEM(); }, set icon(v) { this._ic = v; } };
+const GEM = potIcon('#ffe680', '#ffb52e', 'gem');
+const NEWREC = [
+  { out: 'pot_big', need: { pot_red: 1, herb: 2 } },
+  { out: 'pot_guard', need: { shrimp: 2, lotusleaf: 1 } },
+  { out: 'pot_sneak', need: { f_sneak: 2, f_fluff: 1 } },
+  { out: 'pot_luck', need: { f_berry: 2, wing: 2 } },
+  { out: 'pot_xp', need: { jelly: 2, herb: 1, acorn: 2 } },
+  { out: 'bomb_acorn', need: { acorn: 3, cap: 1 } },
+  { out: 'bait_king', need: { hay: 2, cap: 2, wing: 1 } },
+  { out: 'pot_rainbow', need: { elite_core: 1, pot_red: 1, f_power: 1 } },
+  { out: 'egg_gold', need: { elite_core: 2, egg_p: 1 } },
+  { out: 'wool_p', need: { wool: 3, elite_core: 1 } },
+];
+for (const r of NEWREC) if (ITEMS[r.out] && Object.keys(r.need).every(k => ITEMS[k])) RECIPES.push(r);
+if (ITEMS.honey && !(ITEMS.honey.sell > 0)) ITEMS.honey.sell = 6;
+if (ITEMS.pepero && !(ITEMS.pepero.sell > 0)) ITEMS.pepero.sell = 2;
+for (const id in ITEMS) { const it = ITEMS[id]; if (it.type === 'doll' && !(it.sell > 0)) it.sell = id === 'doll_gold' ? 60 : 12; else if (id.startsWith('hat_') && it.type === 'eq' && !(it.sell > 0)) it.sell = 10; }
+{ const i = QUICK_ORDER.indexOf('pot_red'); if (i >= 0) QUICK_ORDER.splice(i + 1, 0, 'pot_big'); }
+// 연금술로 만들면 EXP
+museumEntries = (o => m => { const E = o(m); if (m.tab === 1) { let i = 0; for (const e of E) if (e.tag === '만들기') { const r = RECIPES[i++], a = e.act; if (r) e.act = () => { const b = inv[r.out] || 0; a(); if ((inv[r.out] || 0) > b) stat('alch'); }; } } return E; })(museumEntries);
+
+// ---- 새 물약 효과 ----
+useItem = (o => id => { const it = ITEMS[id]; if (!it || !it.gx || !(inv[id] > 0)) return o(id);
+  const fl = (t, c) => floaters.push({ x: P.x, y: P.y - 30, t: 1.3, text: t, col: c });
+  if (it.gx === 'bomb') { if (!enemies.some(e => (!e.room || e.room === curRoom.id) && Math.hypot(e.x - P.x, e.y - P.y) < 90) && !boss) { toast('근처에 몬스터가 없어! 아껴 두자'); return false; } }
+  inv[id]--; sfx('heal');
+  if (it.gx === 'guard') { GB.guard = 45; GB.guardN = 3; fl('튼튼해졌다! 🛡️×3', '#9be37a'); }
+  else if (it.gx === 'sneak') { GB.sneak = 60; fl('살금살금… 🤫', '#c9b6ff'); }
+  else if (it.gx === 'luck') { GB.luck = 60; fl('행운이 가득! 🍀', '#ffe066'); }
+  else if (it.gx === 'xp') { gainXp(40); fl('머리가 맑아졌다!', '#7fcaf2'); }
+  else if (it.gx === 'rainbow') { buffs.atk = 60; buffs.spd = 60; GB.guard = 60; GB.guardN = 3; GB.luck = 60; fl('무지개 파워!! 🌈', '#ff9ad5'); burst(P.x, P.y - 20, '#ff9ad5', 20); }
+  else if (it.gx === 'bomb') { sfx('pop'); shake(4, .3); if (typeof fx === 'function') fx({ k: 'boom', x: P.x, y: P.y - 6, r: 70, col: '#ff8a3d', d: .5 }); smack(P.x, P.y - 6, 70, .22, atkOf() + 4); fl('쾅!', '#ff8a3d'); }
+  else if (it.gx === 'bait') { const c = enemies.filter(e => !e.elite && e.kind !== 'jellymini' && (!e.room || e.room === curRoom.id) && Math.hypot(e.x - P.x, e.y - P.y) < 220).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y))[0];
+    if (c) { makeElite(c); fl('왕이 나타났다!', '#ffd23f'); } else { GRS.bait = 1; fl('냄새가 퍼진다… 다음 몬스터는 왕!', '#ffd23f'); } }
+  save(); return true; })(useItem);
+hurtPlayer = (o => (dmg, src) => { if (GB.guard > 0 && GB.guardN > 0 && P.inv <= 0 && P.roll <= 0 && state === 'play') { GB.guardN--; if (!GB.guardN) GB.guard = 0; P.inv = .8; sfx('bonk'); floaters.push({ x: P.x, y: P.y - 28, t: .9, text: `막았다! 🛡️×${GB.guardN}`, col: '#9be37a' }); if (typeof fx === 'function') fx({ k: 'tink', x: P.x, y: P.y - 16, d: .3 }); return; } return o(dmg, src); })(hurtPlayer);
+if (typeof notice === 'function') notice = (o => (e, d) => { if (GB.sneak > 0 && e && e.aw === 0) return; return o(e, d); })(notice);
+
+// ---- 3. 엘리트 몬스터 ----
+const ELN = { king: '👑 왕', gold: '✨ 황금', thorn: '🌵 가시' }, ELC = { king: '#ffd23f', gold: '#ffe680', thorn: '#9be37a' };
+function makeElite(e, af) { if (e.elite) return; af = af || (Math.random() < .5 ? 'king' : Math.random() < .5 ? 'gold' : 'thorn'); e.elite = af; e.max = e.hp = Math.ceil((e.max || e.hp) * GR.elite.hp[af]); e._g = 1; GRS.eT = time; }
+function eliteScan() { for (const e of enemies) { if (e._g) continue; e._g = 1; if (e.kind === 'jellymini' || boss) continue;
+  if (GRS.bait) { GRS.bait = 0; makeElite(e); continue; }
+  if (enemies.some(o2 => o2.elite) || time - GRS.eT < GR.elite.gap) continue; if (Math.random() < GR.elite.p) makeElite(e); } }
+update = (o => dt => { o(dt); if (state !== 'play') return; for (const k of ['guard', 'luck', 'sneak']) if (GB[k] > 0) GB[k] = Math.max(0, GB[k] - dt); try { eliteScan(); el3D(); } catch (err) { } })(update);
+hitEnemy = (o => (e, dmg) => { const el = e && e.elite, mel = !SHOT_HIT && jobRange() === 'melee'; o(e, dmg);
+  if (el === 'king' && enemies.includes(e)) { e.vx *= .35; e.vy *= .35; }
+  if (el === 'thorn' && mel && enemies.includes(e) && Math.random() < .25) { floaters.push({ x: P.x, y: P.y - 34, t: .8, text: '따끔!', col: '#9be37a' }); hurtPlayer(1, e); } })(hitEnemy);
+killEnemy = (o => e => { const D = ENEMY[e.kind] || {}, el = e.elite, x = e.x, y = e.y; o(e);
+  const drop = (id, n = 1) => { for (let i = 0; i < n; i++) pickups.push({ kind: 'item', id, x, y: y - 6, vx: (Math.random() - .5) * 70, vy: -80 - Math.random() * 20, t: 0 }); };
+  grDaily(); if (GRS.hunt < GR.hunt.n) { GRS.hunt++; gainXp(GR.hunt.bonus, x, y - 12, true); if (GRS.hunt === GR.hunt.n) toast(`오늘의 첫 사냥 보너스 끝! (${GR.hunt.n}마리 × EXP +${GR.hunt.bonus})`); }
+  if (!GRS.kinds[e.kind] && e.kind !== 'jellymini') { GRS.kinds[e.kind] = 1; gainXp(GR.firstKill, x, y - 24); toast(`처음 잡은 몬스터! ${D.name || ''} · EXP +${GR.firstKill}`); }
+  if (GB.luck > 0 && D.drop && ITEMS[D.drop]) drop(D.drop);
+  if (el) { GRS.elite++; drop('elite_core'); if (D.drop && ITEMS[D.drop]) drop(D.drop, 2); gainXp(GR.elite.xp, x, y - 30);
+    if (el === 'gold') { const n = GR.elite.gold[0] + Math.floor(Math.random() * (GR.elite.gold[1] - GR.elite.gold[0] + 1)); hearts += n; floaters.push({ x, y: y - 40, t: 1.4, text: `✦+${n}`, col: '#ffe680' }); burst(x, y - 8, '#ffe680', 24); }
+    for (const [id, p] of (D.rare || [])) if (Math.random() < p * 4 && ITEMS[id]) { drop(id); break; }
+    banner(`${ELN[el]} ${D.name || ''} 처치!`, `왕 결정 + 재료 듬뿍 · EXP +${GR.elite.xp}`, ELC[el]); shake(3, .25); stat('elite'); save(); } })(killEnemy);
+// 그리기: 2D 크기 키우기 + 발밑 오라
+drawEnemy = (o => e => { if (!e.elite) return o(e); const s = GR.elite.sc, c = ELC[e.elite];
+  ctx.save(); ctx.globalAlpha = .45 + Math.sin(time * 6) * .15; ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(e.x, e.y + 1, 11, 4.5, 0, 0, 6.29); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(e.x, e.y); ctx.scale(s, s); ctx.translate(-e.x, -e.y); o(e); ctx.restore(); })(drawEnemy);
+function el3D() { if (typeof USE3D === 'undefined' || !USE3D || !R3 || !R3.ents) return; for (const e of enemies) { if (!e.elite) continue; const m = R3.ents.get(e); if (!m || m.userData.el) continue; m.userData.el = 1; m.scale.setScalar(GR.elite.sc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.36, .035, 6, 24), new THREE.MeshBasicMaterial({ color: ELC[e.elite], transparent: true, opacity: .85 })); ring.rotation.x = -Math.PI / 2; ring.position.y = .03; m.add(ring);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(.09, .16, 5), new THREE.MeshLambertMaterial({ color: ELC[e.elite], emissive: ELC[e.elite], emissiveIntensity: .35 })); crown.position.y = .78; m.add(crown); } }
+// 이름표 + 체력바 + 버프 표시
+drawOverlay4 = (o => () => { o(); if (state !== 'play') return; try { const s0 = DPR;
+  for (const e of enemies) { if (!e.elite || (e.room && e.room !== curRoom.id)) continue; const D = ENEMY[e.kind] || {}, [x, y] = fxScr(e.x, e.y - (D.fly ? 44 : 36)), w = 40 * s0;
+    text(`${ELN[e.elite]} ${D.name || ''}`, x, y - 8 * s0, 11 * s0, ELC[e.elite], 'center', true);
+    ctx.fillStyle = 'rgba(40,25,30,.75)'; ctx.fillRect(x - w / 2 - s0, y - s0, w + 2 * s0, 5 * s0); ctx.fillStyle = ELC[e.elite]; ctx.fillRect(x - w / 2, y, w * Math.max(0, e.hp / e.max), 3 * s0); }
+  const bf = []; if (GB.guard > 0) bf.push(`🛡️${GB.guardN}`); if (GB.luck > 0) bf.push(`🍀${Math.ceil(GB.luck)}`); if (GB.sneak > 0) bf.push(`🤫${Math.ceil(GB.sneak)}`);
+  if (bf.length && !menu && !dlg) text(bf.join('  '), W0() / 2, 64 * s0, 12 * s0, '#fff', 'center', true); } catch (err) { } })(drawOverlay4);
+function W0() { return ctx.canvas.width; }
+
+// ---- 저장 ----
+townSave = (o => () => Object.assign(o(), { grow: { d: GRS.d, act: GRS.act, hunt: GRS.hunt, kinds: GRS.kinds, elite: GRS.elite } }))(townSave);
+townLoad = (o => d => { o(d); if (d && d.grow) Object.assign(GRS, d.grow); grDaily(); })(townLoad);
+if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('가끔 👑 왕·✨ 황금·🌵 가시 엘리트 몬스터가 나타나요. 잡으면 왕 결정과 재료를 듬뿍!', '부엉 박사의 연금술이 14가지로 늘었어요. 튼튼·살금·행운·지혜 물약을 만들어 봐요!', '농사·낚시·곤충·요리·연금술로도 EXP를 얻어요 (하루 60까지)');
 
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
