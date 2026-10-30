@@ -165,7 +165,7 @@ function tileCanvas(i) {
 let seed = 7; function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
 
 // ---------- map ----------
-const W = 72, H = 34, T = 16, FX = 44, HT = 142; // H: overworld rows, HT: total rows (dungeon below)
+const W = 72, H = 34, T = 16, FX = 44, HT = 142 + 12 * 29; // 142행 아래는 레벨별 사냥터 12곳 (fields.js) // H: overworld rows, HT: total rows (dungeon below)
 const G_GRASS = 0, G_PATH = 1, G_WATER = 2, G_MUD = 3, G_PLOT = 4;
 const ground = [], solid = [], fence = [];
 for (let y = 0; y < HT; y++) { ground.push(new Array(W).fill(0)); solid.push(new Array(W).fill(false)); fence.push(new Array(W).fill(false)); }
@@ -1124,7 +1124,10 @@ function spray() {
   for (const e of enemies.slice()) if (e.inv <= 0 && Math.hypot(e.x - (P.x + d.x * 18), e.y - 6 - (P.y + d.y * 14)) < 20) { e.slow = 2.5; hitEnemy(e, 1); }
   for (const t of tufts) if (t.alive && Math.hypot(t.x - (P.x + d.x * 16), t.y - (P.y + d.y * 16)) < 14) t.wet = 2;
 }
-function roll() { const d = dirVec(); if (d.x) P.face = d.x; P.rollHit = true; P.roll = .42; P.rollD = d; P.rollA = 0; P.cool = .55; sfx('swipe'); }
+// 구르기 공통 설정: 짧고 또렷하게 (시간, 시작 속도, 앞구르기 1바퀴)
+const ROLL_CFG = { atk: { dur: .32, sp: 150 }, dodge: { dur: .28, sp: 160 }, flips: 1 };
+function rollDirSet(d) { if (Math.abs(d.x) > .2) P.face = d.x > 0 ? 1 : -1; P.dir = Math.abs(d.x) >= Math.abs(d.y) ? (d.x > 0 ? 'right' : 'left') : (d.y > 0 ? 'down' : 'up'); }
+function roll() { const d = dirVec(); rollDirSet(d); P.rollHit = true; P.rollDur = ROLL_CFG.atk.dur; P.roll = P.rollDur; P.rollD = d; P.rollA = 0; P.cool = .55; sfx('swipe'); }
 function pumpkinBlast() {
   P.cool = .9; P.blast = .5; sfx('bonk'); noise(.3, .14); tone(120, .3, 'sawtooth', .05, 0, -60);
   burst(P.x, P.y - 8, '#f08a24', 30); burst(P.x, P.y - 8, '#ffd23f', 14); burst(P.x, P.y - 8, '#7a3fb0', 8);
@@ -1163,11 +1166,11 @@ function update(dt) {
   if (P.inv > 0) P.inv -= dt; for (const b in buffs) if (buffs[b] > 0) buffs[b] -= dt; if (milkT > 0) milkT -= dt;
   if (P.x < (FX - 1) * T && hp < maxHp() && state === 'play') { regenT += dt; if (regenT > 6) { regenT = 0; hp++; } }
   if (P.roll > 0) {
-    P.roll -= dt; const sp = P.rollHit === false ? 205 : 170, d = P.rollD;
+    const dur = P.rollDur || .3, cfg = P.rollHit === false ? ROLL_CFG.dodge : ROLL_CFG.atk; P.roll -= dt; const k0 = Math.max(0, P.roll) / dur, sp = cfg.sp * (.35 + 1.3 * k0), d = P.rollD;  // 처음엔 빠르게, 끝엔 멈추듯
     const nx = P.x + d.x * sp * dt, ny = P.y + d.y * sp * dt;
     if (boxFree(nx, P.y) && !npcBlock(nx, P.y)) P.x = nx; else P.roll = 0;
     if (boxFree(P.x, ny) && !npcBlock(P.x, ny)) P.y = ny; else if (d.y) P.roll = 0;
-    P.rollA += dt * 26 * (d.x ? d.x : 1);
+    { const k = 1 - Math.max(0, P.roll) / dur; P.rollA = (1 - (1 - k) * (1 - k)) * Math.PI * 2 * ROLL_CFG.flips; }  // 정확히 한 바퀴, 끝에서 부드럽게
     if (P.rollHit !== false) smack(P.x, P.y - 2, 15);
     if (Math.random() < dt * 30) parts.push({ x: P.x - d.x * 6, y: P.y, vx: -d.x * 20, vy: -10, t: .35, c: '#e6d3b0', g: 0, sz: 2 });
     mx = my = 0;
@@ -1531,7 +1534,7 @@ function drawPlayer() {
   if (P.hold && P.hold.t > 0) fr = 'ff';
   let img = dinoSpr(fr);
   if (P.roll > 0) {
-    ctx.save(); ctx.translate(Math.round(P.x), Math.round(P.y - 9)); ctx.rotate(P.rollA); if (P.face < 0) ctx.scale(-1, 1); ctx.drawImage(img, -9, -9); ctx.restore();
+    ctx.save(); ctx.translate(Math.round(P.x), Math.round(P.y - 9)); ctx.rotate(P.rollA * (P.face < 0 ? -1 : 1)); if (P.face < 0) ctx.scale(-1, 1); ctx.drawImage(img, -9, -9); ctx.restore();
     ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(P.x - P.rollD.x * (12 + i * 3), P.y - 14 + i * 5 - P.rollD.y * 10); ctx.lineTo(P.x - P.rollD.x * (20 + i * 3), P.y - 14 + i * 5 - P.rollD.y * 18); ctx.stroke(); }
     return;
   }
@@ -4568,7 +4571,7 @@ function moveVec() {
   let x = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0), y = (keys.arrowdown || keys.s ? 1 : 0) - (keys.arrowup || keys.w ? 1 : 0); const d = Math.hypot(x, y); if (d) return { x: x / d, y: y / d };
   return dirVec(); }
 function canDodge() { return state === 'play' && !dlg && !menu && !phone && !mini && !fishing && !mapOpen && !(typeof EP !== 'undefined' && EP) && !(P.hold && P.hold.t > 0) && !wipe; }
-function dodge() { if (!canDodge() || P.roll > 0 || HUNT.dodgeCD > 0) return false; const v = moveVec(); P.rollD = v; if (Math.abs(v.x) > .2) P.face = v.x > 0 ? 1 : -1; P.roll = .36; P.rollA = 0; P.rollHit = false; HUNT.dodgeCD = .75; HUNT.combo = 0;
+function dodge() { if (!canDodge() || P.roll > 0 || HUNT.dodgeCD > 0) return false; const v = moveVec(); P.rollD = v; rollDirSet(v); P.rollDur = ROLL_CFG.dodge.dur; P.roll = P.rollDur; P.rollA = 0; P.rollHit = false; HUNT.dodgeCD = .75; HUNT.combo = 0;
   sfx('roll'); for (let i = 0; i < 6; i++) parts.push({ x: P.x - v.x * 6, y: P.y, vx: -v.x * 40 + (Math.random() - .5) * 30, vy: -20 - Math.random() * 20, t: .4, c: '#e6d3b0', g: 60, sz: 2 }); stat('dodge'); return true; }
 function dodgeShown() { if (!TOUCH() || state !== 'play' || menu || phone || dlg || mini || (typeof EP !== 'undefined' && EP) || !tut.done) return false; return !curRoom.indoor && !fishing && !mapOpen; }
 function dodgeBtn() { const B = btnLayout(), r = B.b.r; return { x: B.b.x - r * 1.95, y: B.b.y + r * .35, r: r * .62 }; }
@@ -6965,6 +6968,7 @@ const U = v => v / T;
 const ZOFF = 40; // dungeon rows are pushed far away in 3D so the overworld never peeks in
 const zt = ty => ty >= H ? ty + ZOFF : ty;
 const ZU = py => zt(py / T);
+const ROLL_PIV = .36; // 3D 앞구르기 회전 중심 높이 (몸 가운데)
 function init3D() {
   if (!window.THREE || window.__force2D) return false;
   try {
@@ -7245,9 +7249,10 @@ function sync3D(dt) {
     pm.position.set(U(P.x), pjump + (P.hop > 0 ? Math.sin(P.hop / .3 * Math.PI) * .3 : 0), ZU(P.y) - .25);
     const dv = P.dir === 'left' ? [-1, 0] : P.dir === 'right' ? [1, 0] : P.dir === 'up' ? [0, -1] : [0, 1];
     let ta = faceAngle(dv[0], dv[1]); if ((P.hold && P.hold.t > 0) || state === 'title') ta = state === 'title' ? .5 : 0;
-    pm.rotation.y = lerpAng(pm.rotation.y, ta, Math.min(1, dt * 12));
+    if (P.roll > 0 && P.rollD) ta = faceAngle(P.rollD.x, P.rollD.y);  // 구르는 쪽을 바라보고
+    pm.rotation.y = P.roll > 0 ? ta : lerpAng(pm.rotation.y, ta, Math.min(1, dt * 12));
     const bob = annoPose(dt, (P.moving || state === 'title') && !(P.roll > 0), P.spin, buffs.spd > 0 ? 1.4 : 1);
-    ud.inner.rotation.set(P.roll > 0 ? P.rollA : 0, P.spin > 0 ? (1 - P.spin / .35) * Math.PI * 2 : 0, 0); ud.inner.position.y = (P.roll > 0 ? .35 : 0) + bob;
+    { const a = P.roll > 0 ? P.rollA : 0, h = ROLL_PIV; ud.inner.rotation.set(a, P.spin > 0 ? (1 - P.spin / .35) * Math.PI * 2 : 0, 0); ud.inner.position.y = h * (1 - Math.cos(a)) + Math.abs(Math.sin(a / 2)) * .12 + bob; ud.inner.position.z = -h * Math.sin(a); const sq = P.roll > 0 ? 1 - Math.sin(a / 2) * .12 : 1; ud.inner.scale.set(1, sq, 1); }  // 몸 가운데를 축으로 앞구르기
     pm.visible = !(P.inv > 0 && state === 'play' && Math.floor(P.inv * 14) % 2);
     if (P.hold && P.hold.t > 0) { if (ud.heldImg !== P.hold.img) { ud.held.clear(); const tex = new THREE.CanvasTexture(P.hold.img); tex.magFilter = THREE.NearestFilter; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex })); sp.scale.set(.55, .55 * P.hold.img.height / P.hold.img.width, 1); ud.held.add(sp); ud.heldImg = P.hold.img; } ud.held.visible = true; } else ud.held.visible = false;
   }
@@ -7259,7 +7264,8 @@ function sync3D(dt) {
   pm.position.set(U(P.x), pjump + (P.hop > 0 ? Math.sin(P.hop / .3 * Math.PI) * .3 : 0), ZU(P.y) - .25);
   const dv = P.dir === 'left' ? [-1, 0] : P.dir === 'right' ? [1, 0] : P.dir === 'up' ? [0, -1] : [0, 1];
   let ta = faceAngle(dv[0], dv[1]); if (P.hold && P.hold.t > 0) ta = 0;
-  pm.rotation.y = lerpAng(pm.rotation.y, ta, Math.min(1, dt * 14));
+  if (P.roll > 0 && P.rollD) ta = faceAngle(P.rollD.x, P.rollD.y);
+  pm.rotation.y = P.roll > 0 ? ta : lerpAng(pm.rotation.y, ta, Math.min(1, dt * 14));
   const walk = P.moving ? Math.sin(P.walk * Math.PI / 2) : 0;
   ud.legL.rotation.x = walk * .7; ud.legR.rotation.x = -walk * .7; ud.footL.position.z = .05 + walk * .07; ud.footR.position.z = .05 - walk * .07;
   ud.body.position.y = P.moving ? Math.abs(walk) * .05 : Math.sin(time * 2.2) * .012;
@@ -7267,7 +7273,7 @@ function sync3D(dt) {
   ud.armL.position.y = ud.armR.position.y = .55 + (P.flap > 0 || (P.hold && P.hold.t > 0) ? Math.abs(Math.sin(time * 18)) * .08 : 0);
   ud.body.rotation.set(0, 0, 0);
   if (P.spin > 0) ud.body.rotation.y = (1 - P.spin / .35) * Math.PI * 2;
-  if (P.roll > 0) { ud.body.rotation.x = P.rollA; ud.body.position.y = .3; }
+  if (P.roll > 0) { const a = P.rollA, h = .3; ud.body.rotation.x = a; ud.body.position.y = h * (1 - Math.cos(a)) + Math.abs(Math.sin(a / 2)) * .1; ud.body.position.z = -h * Math.sin(a); } else ud.body.position.z = 0;
   pm.visible = !(P.inv > 0 && state === 'play' && Math.floor(P.inv * 14) % 2);
   if (P.hold && P.hold.t > 0) { if (ud.heldImg !== P.hold.img) { ud.held.clear(); const tex = new THREE.CanvasTexture(P.hold.img); tex.magFilter = THREE.NearestFilter; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex })); sp.scale.set(.55, .55 * P.hold.img.height / P.hold.img.width, 1); ud.held.add(sp); ud.heldImg = P.hold.img; } ud.held.visible = true; ud.held.position.y = 1.6 + Math.sin(time * 4) * .03; } else ud.held.visible = false;
   }
@@ -9210,6 +9216,154 @@ function W0() { return ctx.canvas.width; }
 townSave = (o => () => Object.assign(o(), { grow: { d: GRS.d, act: GRS.act, hunt: GRS.hunt, kinds: GRS.kinds, elite: GRS.elite } }))(townSave);
 townLoad = (o => d => { o(d); if (d && d.grow) Object.assign(GRS, d.grow); grDaily(); })(townLoad);
 if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('가끔 👑 왕·✨ 황금·🌵 가시 엘리트 몬스터가 나타나요. 잡으면 왕 결정과 재료를 듬뿍!', '부엉 박사의 연금술이 14가지로 늘었어요. 튼튼·살금·행운·지혜 물약을 만들어 봐요!', '농사·낚시·곤충·요리·연금술로도 EXP를 얻어요 (하루 60까지)');
+
+// ===== fields.js : 마을마다 레벨별 사냥터 (기존 사냥터 = 1단계 + 새 사냥터 3곳) =====
+// 지도 맨 아래(142행부터)에 사냥터를 한 줄에 하나씩 쌓아요. 섬 여러 개를 다리로 이은 넓은 지형.
+const FBASE = 142, FBAND = 29, FW = 62, FH = 26;           // 시작 행, 사냥터 한 칸 높이, 가로·세로(타일)
+const G_FL = 40, G_FD = 41, G_FV = 42;                     // 땅, 다리, 바깥(막힘)
+const FPAL = {   // 테마 색: 바깥, 땅, 절벽, 다리, 장애물, 3D 바깥 높이, 꾸밈
+  forest: { v: '#2f5f34', l: '#7cc35f', c: '#8a6a4a', d: '#c98a5a', o: '#3f7d3b', vy: -.6, deco: 'tree' },
+  forest2: { v: '#2a4a3a', l: '#6aa85a', c: '#6a5a4a', d: '#b0805a', o: '#8a4a6a', vy: -.6, deco: 'shroom' },
+  forest3: { v: '#22402a', l: '#5d9a4c', c: '#5a4a3a', d: '#a0704a', o: '#2f5a2a', vy: -.6, deco: 'oak' },
+  water: { v: '#4fa8e8', l: '#8fcf6a', c: '#c9b080', d: '#c98a5a', o: '#5f8a4a', vy: -.13, deco: 'reed' },
+  water2: { v: '#5a7f9a', l: '#7aa86a', c: '#9a9070', d: '#a0805a', o: '#4a6a4a', vy: -.13, deco: 'reed' },
+  water3: { v: '#3a8ab8', l: '#9be0b0', c: '#b8c8a0', d: '#e0c090', o: '#7fcaf2', vy: -.13, deco: 'bubble' },
+  cloud: { v: '#c9dcfb', l: '#a8e08a', c: '#a596cf', d: '#fff3e0', o: '#ffd6e4', vy: -1.4, deco: 'puff' },
+  cloud2: { v: '#8a8aa8', l: '#8ac87a', c: '#7a7098', d: '#e8e0c8', o: '#ffe066', vy: -1.4, deco: 'bolt' },
+  cloud3: { v: '#f0d8f8', l: '#b8e898', c: '#c9a6e8', d: '#fff8e7', o: '#9be3ff', vy: -1.4, deco: 'puff' },
+  snow: { v: '#3f7fb0', l: '#f6fbff', c: '#9cc6e6', d: '#dff4ff', o: '#2f6f4a', vy: -.13, deco: 'pine' },
+  snow2: { v: '#2f5f8a', l: '#e6f2fb', c: '#7fa8c8', d: '#c8e4f4', o: '#bfe3f7', vy: -.13, deco: 'ice' },
+  snow3: { v: '#1f3f6a', l: '#eef6ff', c: '#6a8ab8', d: '#dff4ff', o: '#7fe8c8', vy: -.13, deco: 'ice' },
+};
+// 마을별 사냥터. hub = 원래 사냥터(1단계). lv = 권장 레벨. hpK = 몬스터 체력 배수, xpK = 경험치 배수, dmg = 맞을 때 피해
+const FHUB = {
+  v1: { room: 'f1', name: '도토리 숲', lv: 1, at: () => [47, 17] },
+  wv: { room: 'wm', name: '갈대 습지', lv: 5, at: () => [WVO.x + 37, WVO.y + 10] },
+  cv: { room: 'cm', name: '바람 언덕', lv: 10, at: () => [CVO.x + 36, CVO.y + 12] },
+  sv: { room: 'sm', name: '눈보라 언덕', lv: 15, at: () => [SVO.x + 38, SVO.y + 11] },
+};
+const FIELDS = [
+  { id: 'fa1', vil: 'v1', name: '다람쥐 오솔길', lv: 3, th: 'forest', mobs: [['shroom', 3], ['wasp', 2], ['seedflower', 1], ['boarlet', 1]], n: 10, hpK: 1.3, xpK: 1.5, dmg: 1, el: .06 },
+  { id: 'fa2', vil: 'v1', name: '으스스 버섯골', lv: 6, th: 'forest2', mobs: [['shroom', 2], ['boarlet', 2], ['jelly', 2], ['seedflower', 2], ['wasp', 1]], n: 12, hpK: 1.8, xpK: 2, dmg: 1, el: .08 },
+  { id: 'fa3', vil: 'v1', name: '천년 고목숲', lv: 9, th: 'forest3', mobs: [['boarlet', 3], ['seedflower', 2], ['jelly', 2], ['wasp', 2], ['furball', 1]], n: 13, hpK: 2.4, xpK: 2.6, dmg: 2, el: .1 },
+  { id: 'fb1', vil: 'wv', name: '개굴개굴 연못', lv: 8, th: 'water', mobs: [['frog', 3], ['mosq', 2], ['cray', 2], ['jelly', 1]], n: 11, hpK: 1.8, xpK: 2, dmg: 1, el: .07 },
+  { id: 'fb2', vil: 'wv', name: '안개 늪', lv: 11, th: 'water2', mobs: [['cray', 2], ['shieldcrab', 2], ['jelly', 2], ['mosq', 2], ['frog', 1]], n: 12, hpK: 2.4, xpK: 2.5, dmg: 2, el: .09 },
+  { id: 'fb3', vil: 'wv', name: '거품 소용돌이', lv: 14, th: 'water3', mobs: [['shieldcrab', 3], ['jelly', 2], ['cray', 2], ['sparkcloud', 1]], n: 13, hpK: 3, xpK: 3, dmg: 2, el: .12 },
+  { id: 'fc1', vil: 'cv', name: '솜사탕 들판', lv: 13, th: 'cloud', mobs: [['furball', 3], ['sparrow', 2], ['dandy', 2], ['windram', 1]], n: 11, hpK: 2.8, xpK: 3, dmg: 2, el: .08 },
+  { id: 'fc2', vil: 'cv', name: '번개 구름길', lv: 16, th: 'cloud2', mobs: [['sparkcloud', 3], ['windram', 2], ['sparrow', 2], ['furball', 1]], n: 12, hpK: 3.4, xpK: 3.4, dmg: 2, el: .1 },
+  { id: 'fc3', vil: 'cv', name: '무지개 절벽', lv: 19, th: 'cloud3', mobs: [['windram', 3], ['sparkcloud', 2], ['furball', 2], ['dandy', 1]], n: 13, hpK: 4, xpK: 3.8, dmg: 2, el: .12 },
+  { id: 'fd1', vil: 'sv', name: '포근 눈밭', lv: 18, th: 'snow', mobs: [['snowbun', 3], ['snowpeng', 2], ['icebat', 2]], n: 11, hpK: 3.8, xpK: 3.8, dmg: 2, el: .1 },
+  { id: 'fd2', vil: 'sv', name: '고드름 계곡', lv: 22, th: 'snow2', mobs: [['icebat', 3], ['snowlump', 2], ['snowpeng', 2]], n: 12, hpK: 4.6, xpK: 4.4, dmg: 2, el: .12 },
+  { id: 'fd3', vil: 'sv', name: '오로라 설원', lv: 26, th: 'snow3', mobs: [['snowlump', 3], ['snowpeng', 2], ['icebat', 2], ['snowbun', 1]], n: 13, hpK: 5.5, xpK: 5, dmg: 3, el: .15 },
+];
+const FDROP = { v1: ['acorn', 'f_power', 'f_berry', 'herb'], wv: ['shrimp', 'lotusleaf', 'herb', 'jelly'], cv: ['wool', 'f_fluff', 'f_voice', 'wool_p'], sv: ['f_tough', 'f_sneak', 'wool_p', 'snowball'] };
+const FSTAT = { tick: 0, warn: '', warnT: 0 };
+const fById = id => FIELDS.find(f => f.id === id), curField = () => curRoom && fById(curRoom.id);
+
+// ---- 지형 만들기 ----
+FIELDS.forEach((F, i) => {
+  F.tier = FIELDS.filter(q => q.vil === F.vil).indexOf(F) + 2; F.x = Math.floor((W - FW) / 2); F.y = FBASE + i * FBAND + 2; F.pal = FPAL[F.th];
+  let s0 = 7919 * (i + 3); const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  const set = (lx, ly, code, sol) => { if (lx < 0 || ly < 0 || lx >= FW || ly >= FH) return; ground[F.y + ly][F.x + lx] = code; solid[F.y + ly][F.x + lx] = sol; };
+  for (let y = F.y - 2; y < F.y - 2 + FBAND && y < HT; y++) for (let x = 0; x < W; x++) { ground[y][x] = G_FV; solid[y][x] = true; }
+  // 큰 섬 5개를 가로로 잇고, 위아래에 곁가지 섬 2개
+  F.ell = []; let px = 0;
+  for (let k = 0; k < 5; k++) { const rx = 4.6 + r() * 2.4, ry = 4.2 + r() * 2.2, cx = k === 0 ? 7 : Math.min(FW - rx - 1.2, px + rx + 1.2 + r() * 1.8), cy = Math.max(ry + 1, Math.min(FH - ry - 1, 6 + r() * (FH - 12))); F.ell.push({ cx, cy, rx, ry, k }); px = cx + rx; }
+  for (const k of [1, 3]) { const p = F.ell[k], up = p.cy > FH / 2, rx = 3.6 + r() * 1.8, ry = 3 + r() * 1.2; F.ell.push({ cx: p.cx + (r() - .5) * 4, cy: up ? Math.max(ry + .8, p.cy - p.ry - ry - 1.5) : Math.min(FH - ry - .8, p.cy + p.ry + ry + 1.5), rx, ry, k: 5, par: k }); }
+  const isIn = (lx, ly) => F.ell.some(e => { const dx = (lx + .5 - e.cx) / e.rx, dy = (ly + .5 - e.cy) / e.ry; return dx * dx + dy * dy < 1; });
+  for (let ly = 0; ly < FH; ly++) for (let lx = 0; lx < FW; lx++) if (isIn(lx, ly)) set(lx, ly, G_FL, false);
+  // 다리 (L자, 폭 2)
+  const bridge = (a, b) => { const x0 = Math.round(a.cx), y0 = Math.round(a.cy), x1 = Math.round(b.cx), y1 = Math.round(b.cy);
+    for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) for (const dy of [0, 1]) if (ground[F.y + y0 + dy] && ground[F.y + y0 + dy][F.x + x] === G_FV) set(x, y0 + dy, G_FD, false);
+    for (let y = Math.min(y0, y1); y <= Math.max(y0, y1) + 1; y++) for (const dx of [0, 1]) if (ground[F.y + y] && ground[F.y + y][F.x + x1 + dx] === G_FV) set(x1 + dx, y, G_FD, false); };
+  for (let k = 1; k < 5; k++) bridge(F.ell[k - 1], F.ell[k]); for (const e of F.ell) if (e.par !== undefined) bridge(F.ell[e.par], e);
+  // 입구 (첫 섬 가운데) · 장애물 (나무/바위)
+  F.ent = [Math.round(F.ell[0].cx - 1), Math.round(F.ell[0].cy)]; F.board = [F.ent[0] - 2, F.ent[1] - 2]; F.obs = [];
+  const nearDeck = (lx, ly) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const gy = F.y + ly + dy, gx = F.x + lx + dx; if (ground[gy] && ground[gy][gx] === G_FD) return true; } return false; };
+  for (let ly = 1; ly < FH - 1; ly++) for (let lx = 1; lx < FW - 1; lx++) { if (ground[F.y + ly][F.x + lx] !== G_FL || nearDeck(lx, ly) || Math.hypot(lx - F.ent[0], ly - F.ent[1]) < 4.5) continue; const edge = !isIn(lx - 1, ly) || !isIn(lx + 1, ly) || !isIn(lx, ly - 1) || !isIn(lx, ly + 1); if (r() < (edge ? .14 : .045)) { set(lx, ly, G_FL, true); F.obs.push([lx, ly, r()]); } }
+  set(F.board[0], F.board[1], G_FL, true);
+  F.land = []; for (let ly = 0; ly < FH; ly++) for (let lx = 0; lx < FW; lx++) if (!solid[F.y + ly][F.x + lx] && ground[F.y + ly][F.x + lx] === G_FL) F.land.push([F.x + lx, F.y + ly]);
+  ROOMS.push({ id: F.id, name: F.name, x0: 0, y0: F.y - 2, x1: W, y1: F.y - 2 + FBAND, field: 1 });
+});
+const fPx = (F, lx, ly) => [(F.x + lx + .5) * T, (F.y + ly + .6) * T];
+
+// ---- 안내판: 각 마을 사냥터 입구 ----
+const FBOARD = {};
+function fFreeNear(tx, ty) { let best = null, bd = 1e9; for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) { const x = tx + dx, y = ty + dy; if (!inMap(x, y) || solid[y][x] || ground[y][x] === G_WATER || (typeof bridge !== 'undefined' && bridge.has(y * W + x))) continue; const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = [x, y]; } } return best || [tx, ty]; }
+function fBoards() { for (const v in FHUB) { if (FBOARD[v]) continue; try { const [x, y] = fFreeNear(...FHUB[v].at()); const rt = fFreeNear(x + 1, y + 1); FBOARD[v] = { x: (x + .5) * T, y: (y + .6) * T, room: FHUB[v].room, rx: (rt[0] + .5) * T, ry: (rt[1] + .6) * T }; if (!(rt[0] === x && rt[1] === y)) solid[y][x] = true; } catch (e) { } } }
+function fBoardNear() { fBoards(); for (const v in FBOARD) { const b = FBOARD[v]; if (curRoom.id === b.room && Math.hypot(P.x - b.x, P.y - b.y) < 26) return { v, b }; } const F = curField(); if (F) { const [bx, by] = fPx(F, F.board[0], F.board[1]); if (Math.hypot(P.x - bx, P.y - by) < 28) return { v: F.vil, field: F, b: { x: bx, y: by } }; } return null; }
+function openFieldMenu(v) { menu = { kind: 'fields', title: '🗺️ 사냥터 안내판', tabs: [`${FHUB[v].name} 갈림길`], tab: 0, sel: 0, page: 0, v }; sfx('blip'); }
+function fieldEntries(m) { const v = m.v, H0 = FHUB[v], here = curField(), E = [];
+  E.push({ name: `내 레벨 Lv.${LVL.lv}`, desc: '권장 레벨보다 낮으면 몬스터가 아프게 때려요. 몬스터 체력·경험치·재료도 단계마다 올라가요', tag: '', col: '#f3e6cf', act: () => { } });
+  const go = (id, x, y, lv, nm) => { const low = LVL.lv < lv - 2; if (low && FSTAT.warn !== id) { FSTAT.warn = id; FSTAT.warnT = time + 3; sfx('bonk'); pmsg(`권장 Lv.${lv}! 위험해요 · 한 번 더 누르면 출발`, 1); return; } FSTAT.warn = ''; menu = null; sfx('star'); startWipe(() => { warpTo(x, y, 'right'); toast(`${nm} 도착!`); }); };
+  if (here) { const b = FBOARD[v]; E.push({ name: `🏠 ${H0.name}(으)로 돌아가기`, desc: `1단계 · 권장 Lv.${H0.lv} · 마을 바로 옆`, tag: '이동', col: '#9be37a', act: () => go('hub', b.rx, b.ry, 0, H0.name) }); }
+  else E.push({ name: `1단계 · ${H0.name} (여기)`, desc: `권장 Lv.${H0.lv} · 지금 있는 사냥터예요`, tag: '여기', col: '#d9cbb5', act: () => pmsg('여기가 바로 그곳이야!') });
+  for (const F of FIELDS.filter(q => q.vil === v)) { const [x, y] = fPx(F, F.ent[0] + 1.5, F.ent[1]), names = [...new Set(F.mobs.map(q => (ENEMY[q[0]] || {}).name).filter(Boolean))].slice(0, 3).join('·'), low = LVL.lv < F.lv - 2, me = here === F;
+    E.push({ name: `${F.tier}단계 · ${F.name}${me ? ' (여기)' : ''}`, desc: `권장 Lv.${F.lv} · ${names} · 체력 ×${F.hpK} · EXP ×${F.xpK}${F.dmg > 1 ? ` · 아픔 ${F.dmg}` : ''}`, tag: me ? '여기' : low ? `⚠ Lv.${F.lv}` : `Lv.${F.lv}`, col: me ? '#d9cbb5' : low ? '#ff8fa3' : LVL.lv >= F.lv + 4 ? '#bfe0ff' : '#ffd23f', act: () => me ? pmsg('여기가 바로 그곳이야!') : go(F.id, x, y, F.lv, F.name) }); }
+  return E; }
+panelEntries = (o => () => menu && menu.kind === 'fields' ? fieldEntries(menu) : o())(panelEntries);
+if (typeof townEntries === 'function') townEntries = (o => m => m.kind === 'fields' ? fieldEntries(m) : o(m))(townEntries);
+townInteract = (o => () => { const k = fBoardNear(); if (k && !dlg && !menu) { openFieldMenu(k.v); return true; } return o(); })(townInteract);
+townHint = (o => () => { const k = fBoardNear(); if (k) return { x: k.b.x, y: k.b.y - 34, t: `${KA()} 사냥터 안내판` }; return o(); })(townHint);
+
+// ---- 몬스터: 들어가면 채우고, 줄면 다시 ----
+function fSpawn(F, far = 150) { if (!F.land.length) return; const pick = () => { let t = Math.random() * F.mobs.reduce((a, q) => a + q[1], 0); for (const [k, w] of F.mobs) { if ((t -= w) <= 0) return k; } return F.mobs[0][0]; };
+  for (let tries = 0; tries < 40; tries++) { const [tx, ty] = F.land[Math.floor(Math.random() * F.land.length)], x = tx * T + 8, y = ty * T + 12; const [ex, ey] = fPx(F, F.ent[0], F.ent[1]);
+    if (Math.hypot(x - P.x, y - P.y) < far || Math.hypot(x - ex, y - ey) < 90) continue; const kind = pick(), D = ENEMY[kind]; if (!D) return; const hp = Math.ceil(D.hp * F.hpK);
+    const e = { kind, room: F.id, fd: F.id, x, y, hx: x, hy: y, hp, max: hp, vx: 0, vy: 0, t: Math.random() * 3, inv: .5, flash: 0, kb: 0, hopT: 1 + Math.random(), hop: 0, face: 1, slow: 0, _v: 1, _g: 1, aw: 0, zz: Math.random() < .4, zzT: Math.random() * 1.5 };
+    enemies.push(e); if (typeof makeElite === 'function' && Math.random() < F.el && enemies.filter(q => q.fd === F.id && q.elite).length < 2) makeElite(e); return e; } }
+function fTick(dt) { const F = curField(); if (!F || dlg || menu) return; const mine = enemies.filter(e => e.fd === F.id);
+  if (!F.filled) { F.filled = 1; for (let i = mine.length; i < F.n; i++) fSpawn(F); return; }
+  FSTAT.tick -= dt; if (FSTAT.tick <= 0) { FSTAT.tick = 5; if (mine.length < F.n) { fSpawn(F, 170); if (mine.length < F.n * .5) fSpawn(F, 170); } }
+  for (const e of mine) if (e.aw === 1 && Math.hypot(P.x - e.x, P.y - e.y) > 260 && !e.elite) { e.aw = 0; e.zz = false; e.x += (e.hx - e.x) * .02; } }   // 멀리 떨어지면 포기
+update = (o => dt => { o(dt); if (state === 'play') try { fTick(dt); } catch (err) { } })(update);
+// 더 아프게 · 더 많은 경험치 · 테마 재료
+hurtPlayer = (o => (dmg, src) => { const h0 = hp; o(dmg, src); const F = src && src.fd && fById(src.fd); if (F && F.dmg > 1 && hp < h0 && hp > 0) { const x = F.dmg - 1; hp = Math.max(0, hp - x); floaters.push({ x: P.x + 8, y: P.y - 36, t: .8, text: `-${F.dmg}`, col: '#ff6b8a' }); if (hp <= 0) faint(); } })(hurtPlayer);
+killEnemy = (o => e => { const F = e.fd && fById(e.fd), D = ENEMY[e.kind] || {}, x = e.x, y = e.y; o(e); if (!F) return;
+  const extra = Math.round((D.exp || 1) * (F.xpK - 1)); if (extra > 0) gainXp(extra, x, y - 16, true);
+  const pool = (FDROP[F.vil] || []).filter(id => ITEMS[id]); if (pool.length && Math.random() < .12 * F.tier) pickups.push({ kind: 'item', id: pool[Math.floor(Math.random() * Math.min(pool.length, F.tier))], x, y: y - 6, vx: (Math.random() - .5) * 60, vy: -80, t: 0 }); })(killEnemy);
+enterRoom = (o => r => { const F = fById(r.id); if (F && r.name !== lastArea) { lastArea = r.name; banner(`${F.tier}단계 · ${F.name}`, `권장 Lv.${F.lv} · 안내판에서 다른 사냥터로 갈 수 있어요`, LVL.lv < F.lv - 2 ? '#ff8fa3' : '#ffd23f'); } o(r); })(enterRoom);
+faint = (o => () => { if (curField()) { for (const F of FIELDS) F.filled = 0; for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].fd) enemies.splice(i, 1); } return o(); })(faint);
+drawMinimap = (o => () => { if (curField()) return; return o(); })(drawMinimap);
+updateTown = (o => dt => { o(dt); if (typeof mapOpen !== 'undefined' && mapOpen && curField()) { mapOpen = false; if (typeof WMAP !== 'undefined') WMAP = true; } })(updateTown);
+if (typeof regionMus === 'function') regionMus = (o => () => { const F = curField(); if (F) { if (typeof nightAmt === 'function' && nightAmt() > .6) return null; return F.vil === 'wv' ? 'water' : F.vil === 'cv' ? 'cloud' : F.vil === 'sv' ? 'snow' : o(); } return o(); })(regionMus);
+
+// ---- 2D 그리기 ----
+prerenderGround = (o => () => { o(); if (typeof USE3D !== 'undefined' && USE3D) return; const g = groundC.getContext('2d');
+  for (const F of FIELDS) { const p = F.pal; for (let y = F.y - 2; y < F.y - 2 + FBAND && y < HT; y++) for (let x = 0; x < W; x++) { const c = ground[y][x], col = c === G_FL ? p.l : c === G_FD ? p.d : p.v; g.fillStyle = col; g.fillRect(x * T, y * T, T, T);
+      if (c === G_FV && (x * 7 + y * 5) % 6 === 0) { g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(x * T + 3, y * T + 6, 8, 3); } if (c === G_FL && (x * 5 + y * 3) % 7 === 0) { g.fillStyle = 'rgba(0,0,0,.08)'; g.fillRect(x * T + 4, y * T + 9, 3, 3); } if (c === G_FD) { g.fillStyle = 'rgba(60,40,30,.18)'; g.fillRect(x * T, y * T + 7, T, 1); } }
+    for (const [lx, ly] of F.obs) { const X = (F.x + lx) * T + 8, Y = (F.y + ly) * T + 8; g.fillStyle = 'rgba(0,0,0,.2)'; g.beginPath(); g.ellipse(X, Y + 5, 7, 3, 0, 0, 6.29); g.fill(); g.fillStyle = p.o; g.beginPath(); g.arc(X, Y - 1, 7, 0, 6.29); g.fill(); g.fillStyle = 'rgba(255,255,255,.22)'; g.beginPath(); g.arc(X - 2, Y - 4, 3, 0, 6.29); g.fill(); } } })(prerenderGround);
+drawOverlay4 = (o => () => { try { if (!(typeof USE3D !== 'undefined' && USE3D) && state === 'play') { fBoards(); const list = Object.values(FBOARD).filter(b => b.room === curRoom.id); const F = curField(); if (F) { const [bx, by] = fPx(F, F.board[0], F.board[1]); list.push({ x: bx, y: by }); }
+  for (const b of list) { const x = (b.x - cam.x) * SC, y = (b.y - cam.y) * SC, s = SC / 2; ctx.fillStyle = '#8a5a3c'; ctx.fillRect(x - 7 * s, y - 14 * s, 2 * s, 14 * s); ctx.fillRect(x + 5 * s, y - 14 * s, 2 * s, 14 * s); ctx.fillStyle = '#c98a5a'; ctx.fillRect(x - 10 * s, y - 22 * s, 20 * s, 10 * s); ctx.fillStyle = '#fff3e0'; ctx.font = `bold ${Math.round(6 * s)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('사냥터', x, y - 17 * s); } } } catch (e) { } o(); })(drawOverlay4);
+
+// ---- 3D ----
+function boardModel() { const b = grp(mesh('c', '#8a5a3c', .06, 1.1, .06, -.45, .55, 0), mesh('c', '#8a5a3c', .06, 1.1, .06, .45, .55, 0), mesh('b', '#c98a5a', 1.25, .62, .08, 0, 1.0, 0)); const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(1.1, .5), new THREE.MeshBasicMaterial({ map: farmText('사냥터', 220, 100, '#c98a5a', '#fff8e7') })); sg.position.set(0, 1.0, .05); b.add(sg); b.add(mesh('co', '#e2543b', .14, .2, .14, 0, 1.42, 0)); return b; }
+function buildField3D(F) { const S = R3.scene, g = new THREE.Group(); S.add(g); F.root = g; const p = F.pal, zc = ly => zt(F.y + ly);
+  let s0 = 131 + F.tier * 17 + F.y; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  const base = new THREE.Mesh(new THREE.PlaneBufferGeometry(W + 90, FBAND + 60), new THREE.MeshStandardMaterial({ color: p.v, roughness: p.vy > -.2 ? .35 : 1, metalness: p.vy > -.2 ? .1 : 0 })); base.rotation.x = -Math.PI / 2; base.position.set(W / 2, p.vy, zc(FH / 2)); base.receiveShadow = true; g.add(base);
+  const cyl = new THREE.CylinderBufferGeometry(1, 1, 1, 40); for (const e of F.ell) { const X = F.x + e.cx, Z = zc(e.cy), deep = p.vy < -1 ? 1.5 : .9; const cl = new THREE.Mesh(cyl, M(p.c, { roughness: 1 })); cl.scale.set(e.rx + .12, deep, e.ry + .12); cl.position.set(X, -.08 - deep / 2 + .04, Z); g.add(cl); const top = new THREE.Mesh(cyl, M(p.l, { roughness: .95 })); top.scale.set(e.rx, .14, e.ry); top.position.set(X, -.05, Z); top.receiveShadow = true; g.add(top); }
+  { const deck = []; for (let ly = 0; ly < FH; ly++) for (let lx = 0; lx < FW; lx++) if (ground[F.y + ly][F.x + lx] === G_FD) deck.push([F.x + lx, F.y + ly]); if (deck.length) { const im = new THREE.InstancedMesh(new THREE.BoxBufferGeometry(1, 1, 1), M(p.d, { roughness: .9 }), deck.length), d = new THREE.Object3D(); deck.forEach(([x, y], i) => { d.position.set(x + .5, -.05, zt(y) + .5); d.scale.set(1.001, .14, 1.001); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); im.receiveShadow = true; g.add(im); } }
+  // 장애물
+  for (const [lx, ly, q] of F.obs) { const X = F.x + lx + .5, Z = zc(ly) + .5, dc = p.deco;
+    if (dc === 'tree' || dc === 'oak') { const s = dc === 'oak' ? 1.35 : 1; g.add(mesh('c', '#7a5a3c', .14 * s, .7 * s, .14 * s, X, .35 * s, Z), mesh('s', q < .5 ? p.o : '#4f9a45', .55 * s, .5 * s, .55 * s, X, .95 * s, Z), mesh('s', '#5fae52', .38 * s, .34 * s, .38 * s, X + .2, 1.25 * s, Z - .1)); }
+    else if (dc === 'shroom') { const c = q < .5 ? '#e2543b' : '#a35bbf'; g.add(mesh('c', '#f3e6cf', .14, .5, .14, X, .25, Z), mesh('hemi', c, .5, .35, .5, X, .5, Z), mesh('s', '#ffffff', .07, .07, .07, X + .18, .7, Z + .1)); }
+    else if (dc === 'reed') { for (let k = 0; k < 4; k++) g.add(mesh('c', '#5f8a4a', .03, .9, .03, X + (k - 1.5) * .12, .45, Z + (k % 2) * .1), mesh('c', '#8a5a3c', .05, .2, .05, X + (k - 1.5) * .12, .9, Z + (k % 2) * .1)); g.add(mesh('s', '#7a8a7a', .35, .2, .3, X, .08, Z)); }
+    else if (dc === 'bubble') { g.add(mesh('s', '#9aa8b0', .4, .3, .35, X, .12, Z), mesh('s', M('#bfe8ff', { transparent: true, opacity: .55, roughness: .1 }), .22, .22, .22, X + .1, .6 + q * .3, Z)); }
+    else if (dc === 'puff' || dc === 'bolt') { g.add(mesh('s', dc === 'bolt' ? '#d8d8e8' : '#ffffff', .5, .38, .5, X, .3, Z), mesh('s', dc === 'bolt' ? '#c8c8d8' : p.o, .32, .28, .32, X + .25, .5, Z)); if (dc === 'bolt' && q < .4) g.add(mesh('co', '#ffe066', .1, .4, .1, X, .9, Z)); }
+    else if (dc === 'pine') { g.add(mesh('c', '#6a4a3a', .1, .4, .1, X, .2, Z), mesh('co', p.o, .55, .8, .55, X, .75, Z), mesh('co', '#f6fbff', .4, .35, .4, X, 1.15, Z)); }
+    else { g.add(mesh('co', q < .5 ? p.o : '#dff4ff', .25, .9 + q * .5, .25, X, .45, Z), mesh('co', '#bfe3f7', .18, .6, .18, X + .25, .3, Z + .1)); } }
+  // 바깥 꾸밈 (숲: 빽빽한 나무 / 물: 연잎 / 구름: 구름 / 눈: 얼음)
+  { const pts = []; for (let i = 0; i < 220; i++) { const x = -10 + r() * (W + 20), y = F.y - 6 + r() * (FH + 12), tx = Math.floor(x), ty = Math.floor(y); if (ty >= F.y - 2 && ty < F.y + FH + 1 && tx >= 0 && tx < W) { let near = false; for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) { const gy = ty + dy, gx = tx + dx; if (ground[gy] && ground[gy][gx] !== undefined && ground[gy][gx] !== G_FV) { near = true; break; } } if (near) continue; } pts.push([x, zt(y), .6 + r() * .9]); }
+    const forest = p.deco === 'tree' || p.deco === 'oak' || p.deco === 'shroom', geo = forest ? new THREE.ConeBufferGeometry(1, 2.2, 7) : p.vy < -1 ? new THREE.SphereBufferGeometry(1, 10, 8) : new THREE.CylinderBufferGeometry(1, 1, .05, 12);
+    const im = new THREE.InstancedMesh(geo, M(forest ? p.v === '#2f5f34' ? '#3f7d3b' : '#2f5f34' : p.vy < -1 ? '#ffffff' : p.deco === 'reed' || p.deco === 'bubble' ? '#6fb85a' : '#e8f4ff', { roughness: 1 }), pts.length), d = new THREE.Object3D();
+    pts.forEach(([x, z, s], i) => { d.position.set(x, forest ? p.vy + 1.1 * s : p.vy < -1 ? p.vy + .1 : p.vy + .03, z); d.scale.set(s * (forest ? .9 : 1.3), forest ? s : p.vy < -1 ? s * .5 : 1, s * (forest ? .9 : 1)); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); g.add(im); }
+  // 잔디·꽃
+  { const fl = []; for (const [x, y] of F.land) if (r() < .18) fl.push([x + r(), zt(y) + r()]); if (fl.length) { const fm = new THREE.InstancedMesh(new THREE.SphereBufferGeometry(.05, 6, 4), new THREE.MeshStandardMaterial({ color: '#ffffff' }), fl.length), d = new THREE.Object3D(), col = new THREE.Color(), cs = p.vy < -1 ? ['#ffe066', '#ff8fb5', '#c9b6ff'] : p.l === '#f6fbff' || p.l.startsWith('#e') ? ['#ffffff', '#bfe3f7', '#dff4ff'] : ['#ffe066', '#ffffff', '#ff8fb5', '#9be37a']; fl.forEach(([x, z], i) => { d.position.set(x, .05, z); d.updateMatrix(); fm.setMatrixAt(i, d.matrix); fm.setColorAt(i, col.set(cs[i % cs.length])); }); g.add(fm); } }
+  { const b = boardModel(); b.position.set(F.x + F.board[0] + .5, 0, zc(F.board[1]) + .5); g.add(b); } }
+function syncFields3D() { if (!R3) return; const F = curField(); if (F && !F.root) { try { buildField3D(F); } catch (e) { console.warn('field3d', e); } } for (const q of FIELDS) if (q.root) q.root.visible = q === F;
+  fBoards(); for (const v in FBOARD) { const b = FBOARD[v]; if (!b.m) { try { b.m = boardModel(); b.m.position.set(b.x / T, 0, ZU(b.y) - .4); R3.scene.add(b.m); } catch (e) { } } if (b.m) b.m.visible = curRoom.id === b.room; } }
+if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncFields3D());
+if (typeof applyEnv3D === 'function') { let saved = null; applyEnv3D = (o => dt => { o(dt); const sc = R3 && R3.scene; if (!sc || !sc.fog) return; const F = curField(); if (F && state === 'play') { if (!saved) saved = sc.fog.color.getHex(); sc.fog.color.set(F.pal.vy < -1 ? '#dfe8fb' : F.vil === 'sv' ? '#cfe4f5' : F.vil === 'v1' ? '#b8d8a8' : '#bfe0f0'); } else if (saved !== null) { sc.fog.color.setHex(saved); saved = null; } })(applyEnv3D); }
 
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
