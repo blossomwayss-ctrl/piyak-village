@@ -165,7 +165,7 @@ function tileCanvas(i) {
 let seed = 7; function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
 
 // ---------- map ----------
-const W = 72, H = 34, T = 16, FX = 44, HT = 114; // H: overworld rows, HT: total rows (dungeon below)
+const W = 72, H = 34, T = 16, FX = 44, HT = 142; // H: overworld rows, HT: total rows (dungeon below)
 const G_GRASS = 0, G_PATH = 1, G_WATER = 2, G_MUD = 3, G_PLOT = 4;
 const ground = [], solid = [], fence = [];
 for (let y = 0; y < HT; y++) { ground.push(new Array(W).fill(0)); solid.push(new Array(W).fill(false)); fence.push(new Array(W).fill(false)); }
@@ -6365,6 +6365,598 @@ prerenderGround = (o => () => { o(); if (typeof USE3D !== 'undefined' && USE3D) 
   for (let y = 58; y < HT; y++) for (let x = 0; x < W; x++) { const c = ground[y][x]; let col = COL[c]; if (!col) col = inR(CVO, x, y) || y >= CVO.y - 2 ? '#d8d2f5' : '#5aa8d8';
     else if (solid[y][x] && (c === G_CLAND || c === G_ISLE || c === G_DECK)) col = '#e8d8f0';
     g.fillStyle = col; g.fillRect(x * T, y * T, T, T); if (c === G_WATER || c === G_SHAL) { g.fillStyle = 'rgba(255,255,255,.25)'; if ((x * 7 + y * 3) % 5 === 0) g.fillRect(x * T + 3, y * T + 6, 8, 2); } if (col === '#d8d2f5' && (x * 5 + y * 11) % 7 === 0) { g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x * T + 8, y * T + 8, 6, 0, 6.29); g.fill(); } } })(prerenderGround);
+
+// ---------- snow.js: 네 번째 마을 「반짝 눈꽃마을」 + 눈보라 언덕 + 눈보라 대장 (시즌 2 · 4장) ----------
+// 가는 법: 몽글몽글 구름언덕 열기구 아저씨 (✦6) — 메인 스토리 3장을 마치면 열려요
+const SVO = { x: 4, y: 116, w: 64, h: 26 };
+const G_SNOW = 27, G_ICE = 28, G_ICEHOLE = 29, G_SBR = 30;
+const svg = (lx, ly) => [lx + SVO.x, ly + SVO.y];
+function svSet(code, lx, ly, sol = false) { if (lx < 0 || ly < 0 || lx >= SVO.w || ly >= SVO.h) return; const [x, y] = svg(lx, ly); ground[y][x] = code; solid[y][x] = sol; }
+function svRect(code, x0, y0, x1, y1) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) svSet(code, x, y); }
+const SV_ELL = [];
+function svEll(cx, cy, rx, ry, code = G_SNOW, keep = true) { if (keep) SV_ELL.push({ cx, cy, rx, ry }); for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) { const dx = (x + .5 - cx) / rx, dy = (y + .5 - cy) / ry; if (dx * dx + dy * dy < 1) svSet(code, x, y); } }
+// 마을 (로컬 x 0~31): 눈 덮인 고원 + 얼음 호수
+svEll(16, 12.5, 13.5, 9.5); svEll(5.5, 20.5, 4.2, 3.4);
+const SV_LAKE = { cx: 9, cy: 14, rx: 4.6, ry: 3.2 }; svEll(SV_LAKE.cx, SV_LAKE.cy, SV_LAKE.rx, SV_LAKE.ry, G_ICE, false);
+const SV_HOLES = [[7, 14], [10, 13], [11, 16]]; for (const [x, y] of SV_HOLES) svSet(G_ICEHOLE, x, y, true);
+svRect(G_SBR, 28, 11, 36, 12);
+// 눈보라 언덕 (로컬 x 32~63)
+svEll(41, 11.5, 6, 6.5); svEll(47, 4.5, 4.5, 3.6); svEll(47, 19.5, 5, 4); svRect(G_SBR, 45, 7, 46, 9); svRect(G_SBR, 45, 15, 46, 16);
+svEll(56, 12, 7.6, 7.6); svRect(G_SBR, 47, 11, 50, 12);
+const SVB = { igloo1: [20, 4, 22, 6], igloo2: [25, 8, 27, 10], shop: [21, 16, 24, 17], chief: [4, 5, 6, 7] };
+for (const k in SVB) { const [a, b, c, d] = SVB[k]; for (let y = b; y <= d; y++) for (let x = a; x <= c; x++) { const [gx, gy] = svg(x, y); solid[gy][gx] = true; } }
+const SVP = { station: { x: (SVO.x + 5.5) * T, y: (SVO.y + 21.6) * T }, plaza: { x: (SVO.x + 16) * T, y: (SVO.y + 11) * T }, snowman: { x: (SVO.x + 15.5) * T, y: (SVO.y + 8.8) * T }, arena: { x: (SVO.x + 56) * T, y: (SVO.y + 12) * T }, cloud: null };
+// 구름언덕 열기구 자리
+{ let best = null, bd = 1e9; for (let ly = 14; ly < 24; ly++) for (let lx = 6; lx < 16; lx++) { const [x, y] = cvg(lx, ly); if (solid[y][x] || ground[y][x] !== G_CLAND) continue; const d = Math.hypot(lx - 11, ly - 19); if (d < bd) { bd = d; best = [x, y]; } } SVP.cloud = { x: (best ? best[0] : CVO.x + 11) * T + 8, y: (best ? best[1] : CVO.y + 19) * T + 10 }; }
+ROOMS.push({ id: 'sv', name: '반짝 눈꽃마을', x0: SVO.x, y0: SVO.y - 3, x1: SVO.x + 32, y1: SVO.y + SVO.h }, { id: 'sm', name: '눈보라 언덕', x0: SVO.x + 32, y0: SVO.y - 3, x1: SVO.x + SVO.w, y1: SVO.y + SVO.h });
+const inSV = () => curRoom && (curRoom.id === 'sv' || curRoom.id === 'sm');
+function svUnlocked() { return window.__svOpen || (typeof CLOUDS !== 'undefined' && CLOUDS.beaten && typeof MSTORY !== 'undefined' && (MSTORY.ch > 3 || (MSTORY.ch === 3 && MSTORY.st === 'cleared'))); }
+enterRoom = (o => r => { if ((r.id === 'sv' || r.id === 'sm') && r.name !== lastArea) { lastArea = r.name; if (r.id === 'sv') banner('반짝 눈꽃마을', '이번엔… 펭귄인 척! 뒤뚱뒤뚱', '#dff4ff'); else banner('눈보라 언덕', '눈토끼·고드름 박쥐·굴러 눈뭉치 주의!', '#bfe8ff'); } o(r); if (r.id === 'sm') smSpawn(); })(enterRoom);
+drawMinimap = (o => () => { if (inSV()) return; return o(); })(drawMinimap);
+updateTown = (o => dt => { o(dt); if (mapOpen && inSV()) { mapOpen = false; WMAP = true; } })(updateTown);
+// 세계 지도 · 빠른 이동
+{ const w = WORLD.find(q => q.id === 'snow'); if (w) { w.open = () => svUnlocked(); w.sub = '펭귄인 척 · 얼음 마을'; } }
+LOCK_WHY.snow = '메인 스토리 3장을 마치면 구름언덕 열기구가 떠요'; HOW_GO.snow = '구름언덕 열기구 아저씨 · ✦6'; HOW_SHORT.snow = '처음엔 열기구로!';
+hereV = (o => () => inSV() ? 'snow' : o())(hereV);
+travelDest = (o => id => id === 'snow' ? [SVP.station.x + 20, SVP.station.y - 16, 'up'] : o(id))(travelDest);
+wmKey = (o => k => k === '4' ? fastTravel('snow') : o(k))(wmKey);
+startGame = (o => () => { const wasLoaded = loaded; o(); if (wasLoaded && TRV.last === 'snow' && svUnlocked()) { const [x, y, d] = travelDest('snow'); warpTo(x, y, d); } })(startGame);
+
+// ===== 열기구 (구름언덕 ↔ 눈꽃마을) =====
+const BALLOON_FARE = 6;
+function balloonNear() { if (curRoom.id === 'cv' && Math.hypot(P.x - SVP.cloud.x, P.y - SVP.cloud.y) < 24) return 'go'; if (curRoom.id === 'sv' && Math.hypot(P.x - SVP.station.x, P.y - SVP.station.y) < 26) return 'back'; return null; }
+function balloonGo() { if (!svUnlocked()) { say([L('열기구 아저씨', '북쪽 눈꽃마을로 가는 열기구야. 그런데 아직 눈보라가 심해서…'), L('열기구 아저씨', typeof MSTORY !== 'undefined' && MSTORY.ch < 3 ? '구름언덕 일이 다 정리되면 띄워 줄게! (메인 스토리 3장)' : '먹구름 대장과 화해하고, 깍깍이 기자 일도 마무리하고 오렴!')]); return; }
+  if (hearts < BALLOON_FARE) { say([L('열기구 아저씨', `요금은 ✦${BALLOON_FARE}이야!`)]); return; }
+  say([L('열기구 아저씨', `눈꽃마을까지 두둥실~ 요금 ✦${BALLOON_FARE}!`), L('열기구 아저씨', '거긴 펭귄 마을이야. 뒤뚱뒤뚱 걷는 연습 했니?'), L('안노랑', '(이번엔 펭귄인 척…! 뒤뚱…)')], () => { hearts -= BALLOON_FARE; sfx('cable'); startWipe(() => { warpTo(SVP.station.x + 20, SVP.station.y - 16, 'up'); setTimeout(() => toast('🎈 두둥실… 눈꽃마을에 도착! 춥다!'), 500); }); }); }
+function balloonBack() { say([L('안노랑', '(열기구 타고 구름언덕으로 돌아갈까?)')], () => { sfx('cable'); startWipe(() => warpTo(SVP.cloud.x + 18, SVP.cloud.y + 10, 'down')); }); }
+
+// ===== 주민 =====
+const SNOW_IDS = ['sv_chief', 'sv_shop', 'sv_seal', 'sv_kid'];
+NPCS.push(
+  npc({ id: 'balloonist', name: '열기구 아저씨', spr: 'balloonist', x: SVP.cloud.x - 22, y: SVP.cloud.y - 4, wander: 0 }),
+  npc({ id: 'sv_chief', name: '펭 촌장', spr: 'pchief', x: (SVO.x + 14) * T, y: (SVO.y + 12) * T, wander: 12 }),
+  npc({ id: 'sv_shop', name: '뒤뚱 사장', spr: 'penguin', x: (SVO.x + 22.5) * T, y: (SVO.y + 19) * T, wander: 4 }),
+  npc({ id: 'sv_seal', name: '물범 할매', spr: 'seal', x: (SVO.x + 9) * T, y: (SVO.y + 18.6) * T, wander: 5 }),
+  npc({ id: 'sv_kid', name: '펭펭이', spr: 'pkid', x: (SVO.x + 18) * T, y: (SVO.y + 15) * T, wander: 22 }),
+);
+for (const k of ['balloonist', 'pchief', 'penguin', 'seal', 'pkid']) if (!SP[k]) SP[k] = SP.duck || SP.pig;
+const SVT = {
+  sv_chief: ['뒤뚱~ 눈꽃마을에 온 걸 환영하네. …자네 펭귄치고 꽤 노랗구먼?', '얼음 호수 구멍에서 낚시를 해 보게. 추운 날 잡은 물고기가 제일 달다네.', '광장에서 눈사람을 만들면 마을이 반짝반짝해진다네. 눈뭉치는 언덕에 잔뜩 있지.'],
+  sv_shop: ['뒤뚱 상점이야! 고드름 꼬리, 털방울 비니, 오리털 패딩 다 있어!', '펭귄은 패딩 안 입냐고? 이건 패션이야, 패션!', '핫팩 하나 사 가. 너 덜덜 떨고 있잖아!'],
+  sv_seal: ['끄응… 물범 할매란다. 얼음 구멍 낚시는 \'톡\' 하고 찌가 내려갈 때 당기는 거야.', '젊었을 땐 저 언덕 눈보라 속에서도 낮잠을 잤지…', '펭귄인 척? 끄응… 나도 가끔 펭귄인 척 줄을 선단다.'],
+  sv_kid: ['펭펭! 너 새로 온 펭귄이야? 배로 미끄러져 봐!', '너 꼬리가 왜 그렇게 길어? 펭귄 꼬리는 짧은데!', '눈사람 같이 만들자! 눈뭉치 세 개면 돼!'],
+  balloonist: ['두둥실~ 열기구 아저씨야. 북쪽 눈꽃마을로 가는 유일한 길이지.'],
+};
+function svTalk(n) { if (n.id === 'balloonist') { balloonGo(); return true; } if (!SNOW_IDS.includes(n.id)) return false;
+  if (n.id === 'sv_shop') { say([L('뒤뚱 사장', SVT.sv_shop[Math.floor(Math.random() * 3)])], () => openSvShop()); return true; }
+  if (n.id === 'sv_chief' && !SNOWB.beaten) { say([L('펭 촌장', '언덕 꼭대기에 눈보라 대장이 버티고 있어서 축제 준비를 못 하고 있다네.'), L('펭 촌장', '대장이 굴러올 땐 옆으로 피하게. 끝까지 굴러가서 어지러워할 때가 기회야!')]); return true; }
+  const pool = SVT[n.id]; say([L(n.name, pool[Math.floor(Math.random() * pool.length)])]); return true; }
+farmTalk = (orig => n => svTalk(n) || orig(n))(farmTalk);
+function penguinModel(scale = 1, extra) { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); const m = mesh;
+  b.add(m('s', '#2b3350', .26, .32, .24, 0, .38, 0), m('s', '#ffffff', .19, .26, .12, 0, .36, .13), m('s', '#2b3350', .19, .18, .18, 0, .74, .02), m('s', '#ffffff', .13, .1, .08, 0, .72, .13));
+  for (const s of [-1, 1]) { b.add(m('s', '#1d1418', .025, .03, .02, s * .06, .76, .19)); const f = m('s', '#2b3350', .06, .2, .1, s * .26, .4, 0); f.rotation.z = s * .4; b.add(f); b.add(m('s', '#f08a24', .07, .03, .1, s * .09, .05, .06)); }
+  const bk = m('co', '#f08a24', .045, .1, .045, 0, .72, .22); bk.rotation.x = Math.PI / 2; b.add(bk); if (extra) extra(b, m); g.scale.setScalar(scale); g.userData = { b }; return g; }
+animal = (o => kind => {
+  if (kind === 'penguin') return penguinModel(1, (b, m) => b.add(m('b', '#e2443b', .3, .06, .14, 0, .58, .02)));
+  if (kind === 'pkid') return penguinModel(.7, (b, m) => b.add(m('s', '#bfe8ff', .1, .1, .1, 0, .94, 0)));
+  if (kind === 'pchief') return penguinModel(1.15, (b, m) => { b.add(m('c', '#7f93b5', .2, .06, .2, 0, .9, .02), m('c', '#7f93b5', .13, .14, .13, 0, .98, .02), m('c', '#c98a5a', .015, .55, .015, .3, .3, .05)); });
+  if (kind === 'seal') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); const m = mesh; b.add(m('s', '#9aa3ad', .28, .2, .4, 0, .2, 0), m('s', '#9aa3ad', .18, .17, .18, 0, .4, .28), m('s', '#ffffff', .07, .05, .05, 0, .36, .43)); for (const s of [-1, 1]) { b.add(m('s', '#1d1418', .025, .03, .02, s * .07, .45, .42)); b.add(m('s', '#7d8794', .12, .04, .08, s * .22, .1, .12)); } b.add(m('c', '#e2443b', .2, .05, .2, 0, .5, .26)); g.userData = { b }; return g; }
+  if (kind === 'balloonist') { const g = o('pig'), b = g.userData.b; g.traverse(q => { if (q.isMesh && q.material && q.material.color && q.material.color.getHexString() === 'f5a3b5') q.material = M('#c9a0dc'); }); b.add(mesh('c', '#2b3350', .2, .1, .2, 0, .8, .1), mesh('b', '#ffd23f', .26, .04, .06, 0, .64, .2)); return g; }
+  return o(kind); })(animal);
+
+// ===== 상점 · 장비 · 특산 =====
+VIL.snow = { name: '반짝 눈꽃 세트', col: '#dff4ff', b3: { def: 1, hp: 3 }, b5: { atk: 2, def: 1 } };
+Object.assign(HATS, { beanie: { name: '털방울 비니', skill: '꼬리', price: 0, desc: '외형 · 눈꽃마을 · 용기 +2' } });
+HAT_STAT.beanie = { hp: 2, vil: 'snow' }; ITEMS.hat_beanie = { name: '털방울 비니', type: 'eq', slot: 'hat', hatK: 'beanie', hp: 2, vil: 'snow', sell: 0 };
+Object.assign(ITEMS, {
+  icicle: { name: '고드름 꼬리', type: 'eq', slot: 'tail', spr: 'starring', atk: 4, price: 34, sell: 12, vil: 'snow' },
+  flakebell: { name: '눈꽃 방울', type: 'eq', slot: 'tail', spr: 'bell', atk: 6, sell: 44, vil: 'snow' },
+  mitten: { name: '벙어리장갑', type: 'eq', slot: 'glove', def: 1, hp: 1, price: 16, sell: 6, vil: 'snow' },
+  padding: { name: '오리털 패딩', type: 'eq', slot: 'body', def: 2, hp: 3, price: 32, sell: 12, vil: 'snow' },
+  snowcape: { name: '눈꽃 망토', type: 'eq', slot: 'cape', def: 1, spd: 1, price: 24, sell: 9, vil: 'snow' },
+  snowball: { name: '눈뭉치', type: 'mat', sell: 1, price: 1 },
+  snowberry: { name: '눈꽃 열매', type: 'mat', sell: 5, price: 4 },
+  hotpack: { name: '핫팩', type: 'use', heal: 4, sell: 6, price: 6 },
+});
+ITEMS.snowball.desc = '눈보라 언덕에서 주워요 · 세 개면 광장에서 눈사람!'; ITEMS.snowberry.desc = '눈꽃마을 특산 · 열매 · 🫐 새콤'; ITEMS.hotpack.desc = '눈꽃마을 특산 · 회복 4 · 🔥 따끈따끈';
+Object.assign(TWPN, { icicle: { atk: 4, fx: 'freeze', txt: '꼬리 무기 · 꼬리 힘 +4 · 꽁꽁! 맞으면 1초 얼어붙어요' }, flakebell: { atk: 6, fx: 'blizz', txt: '꼬리 무기 · 꼬리 힘 +6 · 눈보라! 주변 장난꾸러기까지 얼려요 (눈보라 대장의 선물)' } });
+if (typeof ING !== 'undefined') Object.assign(ING, { snowberry: ['fruit', 2, 'fresh'] });
+for (const id of ['icicle', 'flakebell', 'mitten', 'padding', 'snowcape', 'hat_beanie']) try { eqDesc(id); } catch (e) { }
+FAVE.sv_chief = 'fondue'; FAVE.sv_kid = 'cake'; FAVE.sv_seal = 'salad'; FAVE.sv_shop = 'snowberry';
+hitEnemy = (orig => (e, dmg) => { const fx = tailFx(); orig(e, dmg); if (fx !== 'freeze' && fx !== 'blizz') return;
+  const frz = q => { q.stun = Math.max(q.stun || 0, 1); floaters.push({ x: q.x, y: q.y - 28, t: .7, text: '꽁꽁!', col: '#bfe8ff' }); burst(q.x, q.y - 10, '#dff4ff', 8); };
+  if (enemies.includes(e)) frz(e); if (fx === 'blizz') { let n = 0; for (const q of enemies) { if (q === e || n >= 3 || Math.hypot(q.x - e.x, q.y - e.y) > 70) continue; n++; frz(q); } } })(hitEnemy);
+tailWeaponModel = (o => id => { const G = (...a) => grp(...a), m = mesh;
+  if (id === 'icicle') { const g = G(m('c', '#8a5a3c', .03, .14, .03, 0, .07, 0)); for (const [x, h] of [[-.06, .3], [0, .42], [.06, .26]]) { const c = m('co', M('#dff4ff', { roughness: .1, metalness: .1 }), .045, h, .045, x, .14 + h / 2, 0); c.rotation.x = Math.PI; g.add(c); } return g; }
+  if (id === 'flakebell') { const g = G(m('c', '#8a5a3c', .03, .14, .03, 0, .07, 0), m('s', M('#bfe8ff', { emissive: '#7fcaf2', emissiveIntensity: .4 }), .14, .14, .14, 0, .3, 0)); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, s = m('b', '#ffffff', .03, .16, .02, Math.cos(a) * .14, .3 + Math.sin(a) * .14, .1); s.rotation.z = a + Math.PI / 2; g.add(s); } return g; }
+  return o(id); })(tailWeaponModel);
+iconModel = (o => id => { const G = (...a) => grp(...a), m = mesh;
+  if (['icicle', 'flakebell'].includes(id)) return tailWeaponModel(id);
+  if (id === 'mitten') return G(m('s', '#e2443b', .22, .2, .26, 0, .2, 0), m('s', '#e2443b', .08, .12, .08, .2, .26, .05), m('c', '#ffffff', .23, .06, .23, 0, .06, 0));
+  if (id === 'padding') return G(m('s', '#7fcaf2', .3, .26, .22, 0, .26, 0), m('tor', '#5aa8d8', .3, .3, .06, 0, .22, 0), m('tor', '#5aa8d8', .3, .3, .06, 0, .32, 0), m('c', '#ffffff', .03, .3, .03, 0, .26, .22));
+  if (id === 'snowcape') return G(m('co', '#bfe8ff', .36, .5, .2, 0, .25, 0), m('s', '#ffffff', .08, .08, .03, -.1, .3, .15), m('s', '#ffffff', .07, .07, .03, .12, .2, .15));
+  if (id === 'snowball') return G(m('s', '#ffffff', .2, .18, .2, 0, .2, 0), m('s', '#eef6ff', .08, .06, .08, .1, .3, .08));
+  if (id === 'snowberry') { const g = G(m('c', '#3b8f5a', .015, .2, .015, 0, .3, 0)); for (const [x, y] of [[-.07, .2], [.07, .22], [0, .12]]) g.add(m('s', '#7a5ad8', .08, .08, .08, x, y, 0)); g.add(m('s', '#ffffff', .03, .03, .03, 0, .42, 0)); return g; }
+  if (id === 'hotpack') return G(m('b', '#ff8f6b', .32, .4, .06, 0, .22, 0), m('b', '#ffffff', .2, .1, .065, 0, .26, 0));
+  return o(id); })(iconModel);
+buildHat = (o => kind => { if (kind !== 'beanie') return o(kind); const g = new THREE.Group(); g.add(mesh('hemi', '#e2443b', .25, .2, .25, 0, 0, 0), mesh('c', '#ffffff', .26, .06, .26, 0, .02, 0), mesh('s', '#ffffff', .09, .09, .09, 0, .21, 0)); return g; })(buildHat);
+eqModel = (o => (slot, id) => { const G = (...a) => grp(...a), m = mesh;
+  if (slot === 'glove' && id === 'mitten') return G(m('s', '#e2443b', .1, .09, .1, 0, 0, 0), m('c', '#ffffff', .1, .03, .1, 0, .05, 0));
+  if (slot === 'body' && id === 'padding') { const g = G(); for (let i = 0; i < 3; i++) g.add(m('tor', '#7fcaf2', .3, .3, .07, 0, -.1 + i * .1, 0)); g.children.forEach(c => c.rotation.x = Math.PI / 2); return g; }
+  if (slot === 'cape' && id === 'snowcape') { const g = o('cape', 'raincape'); g.traverse(q => { if (q.isMesh && q.material && q.material.color && ['ffd23f', 'ffe680'].includes(q.material.color.getHexString())) q.material = M('#bfe8ff', { side: THREE.DoubleSide, roughness: .8 }); }); return g; }
+  return o(slot, id); })(eqModel);
+function openSvShop() { menu = { kind: 'svshop', title: '뒤뚱 상점', tabs: ['꼬리 무기', '눈꽃 장비', '특산', '팔기'], tab: 0, sel: 0, page: 0 }; sfx('blip'); }
+function svEntries(m) { const E = [], buy = id => { const it = ITEMS[id]; if (hearts < it.price) return pmsg(`별사탕이 모자라요 (✦${it.price})`, 1); hearts -= it.price; addItem(id); sfx('pick'); pmsg(`${it.name} 샀어요!`); save(); };
+  const eqRow = id => { const it = ITEMS[id], own = inv[id] > 0 || eqOn(it.slot) === id; return { img: itemImg(id), name: it.name, desc: it.desc, tag: own ? '보유' : `✦ ${it.price}`, col: own ? '#9be37a' : hearts >= it.price ? '#ffd23f' : '#d9cbb5', act: () => { if (!own) buy(id); } }; };
+  if (m.tab === 0) ['icicle'].forEach(id => E.push(eqRow(id)));
+  if (m.tab === 1) { const own = hatOwned.includes('beanie'); E.push({ img: hatImg('beanie'), name: '털방울 비니', desc: ITEMS.hat_beanie.desc, tag: own ? '보유' : '✦ 14', col: own ? '#9be37a' : hearts >= 14 ? '#ffd23f' : '#d9cbb5', act: () => { if (own) return; if (hearts < 14) return pmsg('별사탕이 모자라요', 1); hearts -= 14; hatOwned.push('beanie'); eqSync(); sfx('pick'); pmsg('털방울 비니 샀어요!'); save(); } });
+    ['mitten', 'padding', 'snowcape'].forEach(id => E.push(eqRow(id))); E.push({ name: `❄️ ${VIL.snow.name}`, desc: `3개: ${bonusTxt(VIL.snow.b3)} · 5개: ${bonusTxt(VIL.snow.b5)}`, tag: '', col: '#dff4ff', act: () => { } }); }
+  if (m.tab === 2) for (const id of ['snowberry', 'hotpack', 'snowball']) { const it = ITEMS[id], price = it.price || 4; E.push({ img: itemImg(id), name: `${it.name} (보유 ${inv[id] || 0})`, desc: it.desc, tag: `✦ ${price}`, col: hearts >= price ? '#ffd23f' : '#d9cbb5', act: () => { if (hearts < price) return pmsg('별사탕이 모자라요', 1); hearts -= price; addItem(id); sfx('pick'); pmsg(`${it.name} 샀어요!`); save(); } }); }
+  if (m.tab === 3) return wvEntries(Object.assign({}, m, { tabs: ['', '', '', ''], tab: 3 }));
+  return E; }
+townEntries = (orig => m => m.kind === 'svshop' ? svEntries(m) : orig(m))(townEntries);
+panelEntries = (orig => () => menu && menu.kind === 'svshop' ? svEntries(menu) : orig())(panelEntries);
+
+// ===== 얼음 구멍 낚시 (미니게임) =====
+const ICE_FISH = [
+  { id: 'fish_smelt', name: '반짝 빙어', sea: SEA4R, time: 'any', loc: 'ice', c1: '#dff4ff', w: 10, sell: 8, sz: .5 },
+  { id: 'fish_icecod', name: '얼음 대구', sea: SEA4R, time: 'any', loc: 'ice', c1: '#9aa3ad', w: 7, sell: 13, sz: .9 },
+  { id: 'fish_aurora', name: '오로라 송어', sea: SEA4R, time: 'night', loc: 'ice', c1: '#9be3c8', w: 3, sell: 22, sz: .8 },
+  { id: 'fish_snowcrab', name: '눈꽃 대게', sea: SEA4R, time: 'any', loc: 'ice', c1: '#e8705a', w: 2, sell: 26, sz: .8 },
+];
+for (const f of ICE_FISH) { FISH.push(f); CRIT[f.id] = Object.assign(f, { kind: 'fish' }); ITEMS[f.id] = { name: f.name, type: 'crit', icon: critterIcon(f), desc: '물고기 · 반짝 눈꽃마을 얼음 구멍에만 살아요 · 박물관에 기증하거나 팔 수 있어요', sell: f.sell }; }
+whenStr = (o => c => c.loc === 'ice' ? o(c).replace(/ · (연못|개울|물가마을|구름 바다)/, '') + ' · 얼음 구멍' : o(c))(whenStr);
+function holeNear() { if (curRoom.id !== 'sv') return null; for (const [lx, ly] of SV_HOLES) { const [x, y] = svg(lx, ly), px = x * T + 8, py = y * T + 8; if (Math.hypot(P.x - px, P.y - py) < 24) return { x: px, y: py }; } return null; }
+MINIS.icefish = { create() { return { st: 'wait', t: 1.4 + Math.random() * 2.6, bt: 0, res: '', fish: null, update: iceUpdate, draw: iceDraw, exit() { endMini(); } }; } };
+function iceUpdate(dt) { const m = mini, press = m.press; m.press = 0;
+  if (m.st === 'wait') { m.t -= dt; if (press) { m.st = 'done'; m.res = '너무 일찍 당겼어! 물고기가 도망갔다…'; sfx('bonk'); } else if (m.t <= 0) { m.st = 'bite'; m.bt = .7; sfx('blip'); } }
+  else if (m.st === 'bite') { m.bt -= dt; if (press) { const pool = ICE_FISH.filter(f => critOk(f)); const f = pickWeighted(pool.length ? pool : ICE_FISH); m.fish = f; m.st = 'done'; m.res = `${f.name}를 낚았다!`; stat('icefish'); gotCritter(f.id); sfx('star'); } else if (m.bt <= 0) { m.st = 'done'; m.res = '아깝다! 놓쳤어… 다시 해 볼까?'; sfx('bonk'); } }
+  else if (m.st === 'done' && press) { Object.assign(m, { st: 'wait', t: 1.4 + Math.random() * 2.6, res: '', fish: null }); } }
+function iceDraw() { const m = mini, B = miniFrame('얼음 구멍 낚시', '#dff4ff'), u = B.u, cx = B.x + B.w / 2, cy = B.y + B.h * .5;
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(cx, cy, B.w * .32, B.h * .26, 0, 0, 6.29); ctx.fill(); ctx.fillStyle = '#2f6e9e'; ctx.beginPath(); ctx.ellipse(cx, cy, B.w * .18, B.h * .14, 0, 0, 6.29); ctx.fill(); ctx.strokeStyle = '#bfe8ff'; ctx.lineWidth = 4 * DPR; ctx.stroke();
+  const dip = m.st === 'bite' ? u * .45 : Math.sin(time * 3) * u * .1; ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.beginPath(); ctx.moveTo(cx + B.w * .3, B.y + u * 2.2); ctx.lineTo(cx, cy - u * .2 + dip); ctx.stroke();
+  ctx.fillStyle = '#e2443b'; ctx.beginPath(); ctx.arc(cx, cy + dip, u * .38, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy + dip, u * .38, 0, Math.PI); ctx.fill();
+  if (m.st === 'bite') text('!', cx, cy - u * 2, u * 2.4, '#e2443b', 'center', true);
+  const msg = m.st === 'wait' ? `찌가 '톡' 내려가면 ${TOUCH() ? '화면을 눌러' : 'Z'} 당겨요!` : m.st === 'bite' ? '지금이야!!' : m.res;
+  fitText(msg, cx, B.y + B.h - u * 3.4, u * .9, '#33222a', B.w - u * 2, 'center');
+  if (m.st === 'done') text(`${TOUCH() ? '누르면' : 'Z'} 한 번 더 · 오늘 낚은 수 ${STAT.icefish || 0}`, cx, B.y + B.h - u * 2.2, u * .6, '#5a6a7a', 'center'); }
+
+// ===== 눈뭉치 줍기 · 눈사람 만들기 =====
+const SNOW_PILES = [[40, 9], [43, 14], [38, 12], [47, 3], [49, 6], [46, 18], [44, 21], [50, 20], [53, 9], [59, 15], [12, 6], [24, 13]];
+const SNW = { d: 0, got: {}, built: 0, day: 0 };
+function snwDaily() { const d = dayKey(); if (SNW.d !== d) { SNW.d = d; SNW.got = {}; } }
+function pileNear() { snwDaily(); for (let i = 0; i < SNOW_PILES.length; i++) { if (SNW.got[i]) continue; const [lx, ly] = SNOW_PILES[i], [x, y] = svg(lx, ly); if (Math.hypot(P.x - (x * T + 8), P.y - (y * T + 10)) < 20) return i; } return -1; }
+function snowmanNear() { return curRoom.id === 'sv' && Math.hypot(P.x - SVP.snowman.x, P.y - SVP.snowman.y) < 26; }
+function buildSnowman() { if ((inv.snowball || 0) < 3) { say([L('펭펭이', `눈뭉치가 세 개 필요해! (지금 ${inv.snowball || 0}개) 눈보라 언덕에 잔뜩 있어!`)]); return; }
+  inv.snowball -= 3; if (inv.snowball <= 0) delete inv.snowball; SNW.built++; stat('snowman'); sfx('star'); shake(1.5, .2); burst(SVP.snowman.x, SVP.snowman.y - 10, '#ffffff', 22);
+  const first = SNW.day !== dayKey(); if (first) { SNW.day = dayKey(); hearts += 12; } itemGet(SP.heartc, `눈사람 ${SNW.built}호 완성!`, first ? '✦+12 · 광장이 반짝반짝!' : '광장이 반짝반짝!'); save(); }
+townInteract = (orig => () => { const k = balloonNear(); if (k === 'go') { balloonGo(); return true; } if (k === 'back') { balloonBack(); return true; }
+  if (holeNear()) { startMini('icefish'); return true; }
+  if (inSV()) { const i = pileNear(); if (i >= 0) { SNW.got[i] = 1; addItem('snowball', 1); sfx('pick'); const [lx, ly] = SNOW_PILES[i], [x, y] = svg(lx, ly); burst(x * T + 8, y * T + 6, '#ffffff', 10); floaters.push({ x: x * T + 8, y: y * T - 10, t: 1, text: `눈뭉치 +1 (${inv.snowball})`, col: '#bfe8ff' }); save(); return true; } }
+  if (snowmanNear()) { buildSnowman(); return true; }
+  return orig(); })(townInteract);
+townHint = (orig => () => { const k = balloonNear(); if (k === 'go') return { x: SVP.cloud.x, y: SVP.cloud.y - 40, t: `${KA()} 열기구 (✦${BALLOON_FARE})` }; if (k === 'back') return { x: SVP.station.x, y: SVP.station.y - 44, t: `${KA()} 구름언덕으로` };
+  const h = holeNear(); if (h) return { x: h.x, y: h.y - 30, t: `${KA()} 얼음 낚시` };
+  if (inSV()) { const i = pileNear(); if (i >= 0) { const [x, y] = svg(...SNOW_PILES[i]); return { x: x * T + 8, y: y * T - 18, t: `${KA()} 눈뭉치 줍기` }; } }
+  if (snowmanNear()) return { x: SVP.snowman.x, y: SVP.snowman.y - 36, t: `${KA()} 눈사람 만들기 (눈뭉치 3)` };
+  return orig(); })(townHint);
+
+// ===== 눈보라 언덕 장난꾸러기 =====
+Object.assign(ENEMY, {
+  snowbun: { name: '눈토끼', hp: 6, atk: 2, spd: 46, exp: 5, drop: 'snowball', rare: [['mitten', .03]] },
+  icebat: { name: '고드름 박쥐', hp: 5, atk: 3, spd: 52, exp: 6, drop: 'snowberry', fly: 1, rare: [['icicle', .02]] },
+  snowlump: { name: '굴러 눈뭉치', hp: 9, atk: 3, spd: 32, exp: 7, drop: 'snowball', rare: [['snowcape', .02]] },
+});
+let SMCLR = 0;
+function smSpawn() { if (enemies.some(e => e.room === 'sm')) return; if (SMCLR && Date.now() - SMCLR < REGEN.caveMin * 60000) return;
+  const land = []; for (let ly = 0; ly < SVO.h; ly++) for (let lx = 34; lx < SVO.w; lx++) { const [x, y] = svg(lx, ly); if (!solid[y][x] && ground[y][x] === G_SNOW) land.push([x, y]); }
+  const kinds = ['snowbun', 'snowbun', 'snowbun', 'icebat', 'icebat', 'snowlump', 'snowlump', 'snowlump']; let n = 0;
+  for (let tries = 0; tries < 250 && n < kinds.length && land.length; tries++) { const [tx, ty] = land[Math.floor(Math.random() * land.length)], x = tx * T + 8, y = ty * T + 12; if (Math.hypot(x - P.x, y - P.y) < 110 || Math.hypot(x - SVP.arena.x, y - SVP.arena.y) < 110) continue;
+    const kind = kinds[n], D = ENEMY[kind]; enemies.push({ kind, room: 'sm', x, y, hx: x, hy: y, hp: D.hp, max: D.hp, vx: 0, vy: 0, t: Math.random() * 3, inv: .5, flash: 0, kb: 0, hopT: 1 + Math.random(), hop: 0, face: 1, slow: 0 }); n++; } }
+killEnemy = (orig => e => { const sm = e.room === 'sm'; orig(e); if (sm && !enemies.some(o => o.room === 'sm')) SMCLR = Date.now(); })(killEnemy);
+buildMob = (o => kind => { const m = mesh;
+  if (kind === 'snowbun') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); b.add(m('s', '#ffffff', .2, .18, .22, 0, .2, 0), m('s', '#ffffff', .15, .14, .14, 0, .4, .1)); for (const s of [-1, 1]) { b.add(m('s', '#ffffff', .04, .16, .03, s * .06, .6, .06), m('s', '#1d1418', .025, .03, .02, s * .06, .42, .23)); const br = m('b', '#1d1418', .06, .012, .01, s * .06, .47, .235); br.rotation.z = s * .4; b.add(br); } g.userData = { b }; return g; }
+  if (kind === 'icebat') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); b.add(m('s', '#7f93b5', .13, .13, .13, 0, 0, 0)); for (const s of [-1, 1]) b.add(m('s', '#ffffff', .03, .035, .02, s * .05, .03, .12)); const ic = m('co', M('#dff4ff', { roughness: .1 }), .04, .14, .04, 0, -.16, 0); ic.rotation.x = Math.PI; b.add(ic); const wm = M('#5b6e8f'); const wl = m('s', wm, .18, .03, .1, -.16, .03, 0), wr = m('s', wm, .18, .03, .1, .16, .03, 0); b.add(wl, wr); g.userData = { b, wings: [wl, wr] }; return g; }
+  if (kind === 'snowlump') { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); b.add(m('s', '#f3f8ff', .26, .24, .26, 0, .24, 0)); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; b.add(m('s', '#ffffff', .1, .09, .1, Math.cos(a) * .2, .3 + Math.sin(i) * .05, Math.sin(a) * .2)); } for (const s of [-1, 1]) { b.add(m('s', '#1d1418', .03, .035, .02, s * .08, .3, .25)); const br = m('b', '#1d1418', .07, .014, .01, s * .08, .36, .25); br.rotation.z = s * .4; b.add(br); } g.userData = { b }; return g; }
+  return o(kind); })(buildMob);
+
+// ===== 눈보라 대장 (언덕 꼭대기) =====
+const SNOWB = { beaten: false, day: 0 }; let SNB = null; const SNR = [];
+function sbOK() { return svUnlocked() && (!SNOWB.beaten || SNOWB.day !== dayKey()); }
+function sbIn() { return curRoom.id === 'sm' && Math.hypot(P.x - SVP.arena.x, P.y - SVP.arena.y) < 6.8 * T; }
+function sbStart() { SNB = { x: SVP.arena.x, y: SVP.arena.y - 30, hp: 46, max: 46, st: 'idle', t: 1.6, inv: 0, flash: 0, n: 0, p2: false, dx: 0, dy: 0, rolls: 0 }; banner('눈보라 대장', '굴러오면 옆으로! 어지러워할 때 꼬리로!', '#5b6e8f'); shake(3, .5); sfx('roar'); }
+function sbTick(dt) { if (state !== 'play' || dlg || menu) return;
+  if (!SNB) { if (sbOK() && sbIn()) sbStart(); return; } const b = SNB;
+  if (curRoom.id !== 'sm' || Math.hypot(P.x - SVP.arena.x, P.y - SVP.arena.y) > 12 * T) { SNB = null; SNR.length = 0; toast('눈보라 대장이 언덕 뒤로 데굴데굴 굴러가 버렸어…'); return; }
+  b.t -= dt; if (b.inv > 0) b.inv -= dt; if (b.flash > 0) b.flash -= dt; const fast = b.p2, R = 6.4 * T;
+  if (b.st === 'idle') { const dx = P.x - b.x, dy = P.y - b.y, d = Math.hypot(dx, dy) || 1; b.x += dx / d * Math.min(d, 26 * dt); b.y += dy / d * Math.min(d, 26 * dt);
+    if (b.t <= 0) { b.n++; b.st = (b.n % 3 === 0) ? 'storm' : 'aim'; b.t = b.st === 'aim' ? (fast ? .7 : .95) : 0; b.k = 0; b.rolls = fast ? 2 : 1; if (b.st === 'aim') { const d2 = Math.hypot(P.x - b.x, P.y - b.y) || 1; b.dx = (P.x - b.x) / d2; b.dy = (P.y - b.y) / d2; } } }
+  else if (b.st === 'aim') { const d2 = Math.hypot(P.x - b.x, P.y - b.y) || 1; if (b.t > .35) { b.dx = (P.x - b.x) / d2; b.dy = (P.y - b.y) / d2; } if (b.t <= 0) { b.st = 'roll'; b.t = 2.2; sfx('swipe'); } }
+  else if (b.st === 'roll') { const sp = fast ? 260 : 210; b.x += b.dx * sp * dt; b.y += b.dy * sp * dt; if (Math.random() < dt * 30) parts.push({ x: b.x - b.dx * 20, y: b.y + 4, vx: -b.dx * 60, vy: -40, t: .5, c: '#ffffff', g: 200, sz: 3 });
+    if (Math.hypot(P.x - b.x, P.y - b.y) < 24 && P.roll <= 0) hurtPlayer(2, b);
+    if (Math.hypot(b.x - SVP.arena.x, b.y - SVP.arena.y) > R || b.t <= 0) { const a = Math.atan2(b.y - SVP.arena.y, b.x - SVP.arena.x); b.x = SVP.arena.x + Math.cos(a) * R * .98; b.y = SVP.arena.y + Math.sin(a) * R * .98; shake(3, .3); sfx('bonk'); burst(b.x, b.y - 10, '#ffffff', 20); b.rolls--;
+      if (b.rolls > 0) { b.st = 'aim'; b.t = .55; } else { b.st = 'dizzy'; b.t = fast ? 1.6 : 2.1; floaters.push({ x: b.x, y: b.y - 70, t: 1.2, text: '어질어질~', col: '#ffe066' }); } } }
+  else if (b.st === 'dizzy') { if (b.t <= 0) { b.st = 'idle'; b.t = fast ? .9 : 1.4; } }
+  else if (b.st === 'storm') { if (!b.k) { b.k = 1; const n = fast ? 8 : 5; for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, d = i === 0 ? 0 : 20 + Math.random() * 70; SNR.push({ x: P.x + Math.cos(a) * d, y: P.y + Math.sin(a) * d * .8, t: 1.1 + i * .08, r: 15 }); } floaters.push({ x: b.x, y: b.y - 80, t: 1, text: '눈덩이 받아라!', col: '#bfe8ff' }); b.t = 1.8; } if (b.t <= 0) { b.st = 'idle'; b.t = 1.2; } }
+  else if (b.st === 'rage') { if (b.t <= 0) { b.st = 'idle'; b.t = .8; } }
+  else if (b.st === 'dead') { if (b.t <= 0) sbBeaten(); }
+  for (let i = SNR.length - 1; i >= 0; i--) { const q = SNR[i]; q.t -= dt; if (q.t > 0) continue; SNR.splice(i, 1); burst(q.x, q.y - 4, '#ffffff', 10); if (Math.hypot(P.x - q.x, P.y - q.y) < q.r) hurtPlayer(1, q); } }
+function hitSnowBoss(dmg) { const b = SNB; if (!b || b.inv > 0 || b.st !== 'dizzy') return; const before = b.hp; b.hp -= dmg; b.inv = .3; b.flash = .18; sfx('bonk'); shake(1.5, .12); floaters.push({ x: b.x, y: b.y - 60, t: .8, text: ['퍽!', '눈 날린다!', '앗 차가!'][Math.floor(Math.random() * 3)], col: '#fff' });
+  if (!b.p2 && b.hp <= b.max / 2 && before > b.max / 2) { b.p2 = true; b.st = 'rage'; b.t = 1.8; b.inv = 1.8; SNR.length = 0; shake(5, .9); sfx('roar'); banner('눈보라 대장 2페이즈!', '연속 굴러오기 · 눈덩이 폭탄! 끝까지 피해요', '#3a4468'); }
+  if (b.hp <= 0) { b.st = 'dead'; b.t = 1.4; b.inv = 9; SNR.length = 0; sfx('star'); shake(4, .8); for (let i = 0; i < 4; i++) setTimeout(() => burst(SVP.arena.x + (Math.random() - .5) * 50, SVP.arena.y - 20, ['#ffffff', '#bfe8ff', '#ffe066'][i % 3], 26), i * 250); } }
+smack = (orig => (x, y, R, heartP, dmg) => { orig(x, y, R, heartP, dmg); if (SNB && SNB.st === 'dizzy' && Math.hypot(SNB.x - x, SNB.y - y) < R + 30) hitSnowBoss(dmg === undefined ? atkOf() : dmg); })(smack);
+function sbBeaten() { const first = !SNOWB.beaten; SNB = null; SNOWB.beaten = true; SNOWB.day = dayKey(); hp = maxHp();
+  if (first) { stars++; hearts += 50; say([L('눈보라 대장', '흐엉… 사실 얼음 축제에 나도 끼고 싶었어. 근데 다들 내가 차갑다고 피하잖아…'), L('펭 촌장', '뒤뚱~ 그래서 눈보라를 일으켰구먼. 그럼 올해 축제 눈사람 대장을 맡아 주게!'), L('눈보라 대장', '정말?! 그, 그럼 이거 받아. 노란… 펭귄? 아무튼 고마워!'), L('안노랑', '(펭귄인 척… 성공인가?)')], () => { addItem('flakebell', 1); itemGet(SP.heartc, '눈보라 대장과 화해!', '★+1 · ✦+50 · 눈꽃 방울'); save(); }); }
+  else { hearts += 18; addItem('snowball', 3); itemGet(SP.heartc, '오늘도 눈보라 대장과 화해!', '✦+18 · 눈뭉치 ×3'); save(); } }
+updateTown = (o => dt => { o(dt); try { sbTick(dt); } catch (e) { console.warn('sb', e); } })(updateTown);
+faint = (orig => () => { SNB = null; SNR.length = 0; return orig(); })(faint);
+
+// ===== 3D =====
+const sz_ = ly => zt(SVO.y + ly), sx_ = lx => SVO.x + lx;
+function snowmanModel(s = 1, angry = false) { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); const m = mesh, wm = M('#ffffff', { roughness: .95 });
+  b.add(m('s', wm, .5 * s, .46 * s, .5 * s, 0, .45 * s, 0), m('s', wm, .36 * s, .34 * s, .36 * s, 0, 1.08 * s, 0), m('s', wm, .26 * s, .25 * s, .26 * s, 0, 1.55 * s, 0));
+  for (const x of [-1, 1]) { b.add(m('s', '#1d1418', .035 * s, .04 * s, .03 * s, x * .09 * s, 1.6 * s, .23 * s)); if (angry) { const br = m('b', '#1d1418', .12 * s, .025 * s, .02 * s, x * .09 * s, 1.7 * s, .22 * s); br.rotation.z = x * .45; b.add(br); } const arm = m('c', '#8a5a3c', .025 * s, .5 * s, .025 * s, x * .5 * s, 1.15 * s, 0); arm.rotation.z = x * (angry ? -1.0 : -.7); b.add(arm); }
+  const nose = m('co', '#f08a24', .04 * s, .18 * s, .04 * s, 0, 1.54 * s, .3 * s); nose.rotation.x = Math.PI / 2; b.add(nose);
+  b.add(m('tor', angry ? '#3a5ea8' : '#e2443b', .26 * s, .26 * s, .07 * s, 0, 1.33 * s, 0)); b.children[b.children.length - 1].rotation.x = Math.PI / 2;
+  if (angry) b.add(m('c', '#2b3350', .2 * s, .18 * s, .2 * s, 0, 1.86 * s, 0), m('c', '#2b3350', .26 * s, .03 * s, .26 * s, 0, 1.77 * s, 0));
+  for (let i = 0; i < 3; i++) b.add(m('s', '#1d1418', .03 * s, .03 * s, .02 * s, 0, (.95 + i * .13) * s, .35 * s));
+  g.userData = { b }; return g; }
+function balloonModel() { const g = new THREE.Group(); g.add(mesh('s', '#ff8fa3', .9, 1.0, .9, 0, 2.4, 0)); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, s0 = mesh('s', i % 2 ? '#ffd23f' : '#ffffff', .2, .95, .2, Math.cos(a) * .82, 2.4, Math.sin(a) * .82); g.add(s0); }
+  for (const [x, z] of [[-.25, -.25], [.25, -.25], [-.25, .25], [.25, .25]]) g.add(mesh('c', '#8a5a3c', .015, 1.0, .015, x, 1.05, z)); g.add(mesh('b', '#c98a5a', .6, .4, .6, 0, .35, 0), mesh('b', '#a0703a', .64, .06, .64, 0, .57, 0)); return g; }
+function buildSV3D() { const S = R3.scene, g = new THREE.Group(); S.add(g); R3.svRoot = g; const Cx = SVO.x + SVO.w / 2, Cz = sz_(SVO.h / 2);
+  const sea = new THREE.Mesh(new THREE.PlaneBufferGeometry(SVO.w + 80, SVO.h + 60), new THREE.MeshStandardMaterial({ color: '#3f7fb0', roughness: .3, metalness: .1 })); sea.rotation.x = -Math.PI / 2; sea.position.set(Cx, -1.2, Cz); g.add(sea);
+  { let s0 = 41; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; for (let i = 0; i < 26; i++) { const x = SVO.x - 15 + r() * (SVO.w + 30), z = sz_(-12) + r() * (SVO.h + 24), [gx, gy] = [Math.floor(x), Math.floor(z - 40)]; if (gy >= SVO.y && gy < SVO.y + SVO.h && gx >= 0 && gx < W && ground[gy] && ground[gy][gx] !== G_WVOID) continue; const fl = mesh('c', '#f3f8ff', .6 + r() * 1.4, .18, .5 + r() * 1.2, x, -1.08, z); fl.rotation.y = r() * 3; g.add(fl); } }
+  const cyl = new THREE.CylinderBufferGeometry(1, 1, 1, 48); for (const e of SV_ELL) { const X = SVO.x + e.cx, Z = sz_(e.cy); const cliff = new THREE.Mesh(cyl, M('#9cc6e6', { roughness: .6 })); cliff.scale.set(e.rx + .15, 1.4, e.ry + .15); cliff.position.set(X, -.75, Z); cliff.receiveShadow = true; g.add(cliff); const top = new THREE.Mesh(cyl, M('#fbfdff', { roughness: .95 })); top.scale.set(e.rx, .14, e.ry); top.position.set(X, -.05, Z); top.receiveShadow = true; g.add(top); }
+  { const lake = new THREE.Mesh(cyl, M('#bfe3f7', { roughness: .08, metalness: .2 })); lake.scale.set(SV_LAKE.rx, .02, SV_LAKE.ry); lake.position.set(SVO.x + SV_LAKE.cx, .03, sz_(SV_LAKE.cy)); g.add(lake); for (const [lx, ly] of SV_HOLES) g.add(mesh('c', '#2f6e9e', .34, .03, .34, sx_(lx) + .5, .05, sz_(ly) + .5), mesh('tor', '#ffffff', .36, .36, .08, sx_(lx) + .5, .06, sz_(ly) + .5)); g.children.slice(-SV_HOLES.length * 2).forEach((c, i) => { if (i % 2) c.rotation.x = Math.PI / 2; }); }
+  { const deck = []; for (let ly = 0; ly < SVO.h; ly++) for (let lx = 0; lx < SVO.w; lx++) { const [x, y] = svg(lx, ly); if (ground[y][x] === G_SBR) deck.push([x, y]); } const im = new THREE.InstancedMesh(new THREE.BoxBufferGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#dff4ff', roughness: .2 }), deck.length), d = new THREE.Object3D(); deck.forEach(([x, y], i) => { d.position.set(x + .5, -.05, zt(y) + .5); d.scale.set(1.001, .14, 1.001); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); im.receiveShadow = true; g.add(im); }
+  { let s0 = 53; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; for (const e of SV_ELL) for (let i = 0; i < e.rx * e.ry * .18; i++) { const a = r() * 6.28, rr0 = Math.sqrt(r()) * .9, x = SVO.x + e.cx + Math.cos(a) * e.rx * rr0, z = sz_(e.cy) + Math.sin(a) * e.ry * rr0, [gx, gy] = [Math.floor(x), Math.floor(z - 40)]; if (!ground[gy] || ground[gy][gx] !== G_SNOW || solid[gy][gx]) continue; if (Math.hypot(x - (SVO.x + SV_LAKE.cx), z - sz_(SV_LAKE.cy)) < 5.5) continue; if (Math.hypot(x - SVP.plaza.x / T, z - zt(SVP.plaza.y / T)) < 4) continue;
+      const s = .6 + r() * .5; g.add(grp(mesh('c', '#8a5a3c', .07 * s, .5 * s, .07 * s, x, .25 * s, z), mesh('co', '#3b8f5a', .5 * s, .7 * s, .5 * s, x, .75 * s, z), mesh('co', '#ffffff', .36 * s, .3 * s, .36 * s, x, 1.0 * s, z), mesh('co', '#3b8f5a', .34 * s, .5 * s, .34 * s, x, 1.2 * s, z), mesh('co', '#ffffff', .22 * s, .2 * s, .22 * s, x, 1.42 * s, z))); } }
+  const igloo = (lx, ly, s = 1) => { const X = sx_(lx) + .5, Z = sz_(ly) + .5, ig = grp(mesh('hemi', '#f3f8ff', 1.5 * s, 1.2 * s, 1.5 * s, X, 0, Z)); for (let i = 1; i < 4; i++) { const t0 = mesh('tor', '#d6e6f4', 1.5 * s * Math.cos(i * .38), 1.5 * s * Math.cos(i * .38), .03, X, 1.2 * s * Math.sin(i * .38), Z); t0.rotation.x = Math.PI / 2; ig.add(t0); } ig.add(mesh('c', '#f3f8ff', .5 * s, .6 * s, .5 * s, X, .3 * s, Z + 1.45 * s), mesh('b', '#2b3350', .45 * s, .5 * s, .05, X, .25 * s, Z + 1.72 * s)); g.add(ig); };
+  igloo(21, 5); igloo(26, 9, .9); igloo(5, 6, 1.2);
+  { const X = sx_(22.5) + .5, Z = sz_(16.5) + .5, s = grp(mesh('b', '#e9eef5', 3.6, 1.3, 1.8, X, .65, Z), mesh('b', '#3a5ea8', 3.8, .1, 2, X, 1.35, Z)); for (let i = 0; i < 6; i++) { const a = mesh('b', i % 2 ? '#ffffff' : '#7fcaf2', .62, .06, .9, X - 1.55 + i * .62, 1.15, Z + 1.2); a.rotation.x = .35; s.add(a); } const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.2, .5), new THREE.MeshBasicMaterial({ map: farmText('뒤뚱 상점', 256, 58, '#ffffff', '#2b3350') })); sg.position.set(X, 1.7, Z + .95); s.add(sg); g.add(s); }
+  { const b = balloonModel(); b.position.set(SVP.station.x / T + 1.6, 0, ZU(SVP.station.y) - .6); g.add(b); R3.svBalloon = b; }
+  { const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(2.8, .6), new THREE.MeshBasicMaterial({ map: farmText('반짝 눈꽃마을', 320, 70, '#7fcaf2', '#fff') })); sg.position.set(sx_(11), 1.2, sz_(20.5)); g.add(sg, mesh('c', '#8a5a3c', .05, 1.2, .05, sx_(9.8), .55, sz_(20.5) - .05), mesh('c', '#8a5a3c', .05, 1.2, .05, sx_(12.2), .55, sz_(20.5) - .05)); }
+  { const X = SVP.snowman.x / T, Z = ZU(SVP.snowman.y); g.add(mesh('c', '#dff4ff', 1.0, .05, 1.0, X, .03, Z)); const sg = new THREE.Mesh(new THREE.PlaneBufferGeometry(1.4, .36), new THREE.MeshBasicMaterial({ map: farmText('눈사람 자리', 220, 58, '#ffffff', '#3a5ea8') })); sg.position.set(X, .55, Z + 1.05); g.add(sg); }
+  { const aur = new THREE.Mesh(new THREE.PlaneBufferGeometry(SVO.w + 40, 10), new THREE.MeshBasicMaterial({ color: '#7fe8c8', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })); aur.position.set(Cx, 7, sz_(-10)); g.add(aur); R3.svAurora = aur; }
+  { const n = 140, pm = new THREE.InstancedMesh(new THREE.SphereBufferGeometry(.05, 5, 4), new THREE.MeshBasicMaterial({ color: '#ffffff' }), n), d = new THREE.Object3D(), seeds = []; for (let i = 0; i < n; i++) seeds.push([Math.random(), Math.random(), Math.random(), .4 + Math.random() * .6]); g.add(pm); R3.svFlakes = { pm, d, seeds }; } }
+function syncSV3D() { if (!R3) return; const near = inSV(); if (near && !R3.svRoot) { try { buildSV3D(); } catch (e) { console.warn('sv3d', e); } }
+  if (R3.svRoot) { R3.svRoot.visible = near;
+    if (near) { const pm = R3.ents.get(P); const cxp = pm ? pm.position.x : SVO.x + 16, czp = pm ? pm.position.z : sz_(12); const F = R3.svFlakes; if (F) { F.seeds.forEach(([a, b, c, s], i) => { const y = 6 - ((time * s * .8 + c * 6) % 6.5); F.d.position.set(cxp - 9 + a * 18 + Math.sin(time + i) * .3, y, czp - 7 + b * 12); F.d.scale.setScalar(.8 + s); F.d.updateMatrix(); F.pm.setMatrixAt(i, F.d.matrix); }); F.pm.instanceMatrix.needsUpdate = true; }
+      if (R3.svAurora) R3.svAurora.material.opacity = nightAmt() * (.35 + Math.sin(time * .7) * .1); if (R3.svBalloon) R3.svBalloon.position.y = Math.sin(time * 1.2) * .08; } }
+  if (curRoom.id === 'cv' && R3.cvRoot && !R3.svCloudBalloon && svUnlocked !== undefined) { const b = balloonModel(); b.scale.setScalar(.85); b.position.set(SVP.cloud.x / T + 1.5, 0, ZU(SVP.cloud.y) - .6); R3.cvRoot.add(b); R3.svCloudBalloon = b; }
+  if (R3.svCloudBalloon) R3.svCloudBalloon.position.y = Math.sin(time * 1.1) * .08;
+  // 눈뭉치 더미 · 지은 눈사람 · 보스
+  if (near) { snwDaily(); SNOW_PILES.forEach(([lx, ly], i) => { if (SNW.got[i]) { const m0 = R3.ents.get('snp' + i); if (m0) m0.visible = false; return; } const m0 = ent('snp' + i, () => grp(mesh('s', '#ffffff', .3, .18, .3, 0, .08, 0), mesh('s', '#f3f8ff', .16, .12, .16, .12, .16, .05))); m0.visible = true; const [x, y] = svg(lx, ly); m0.position.set(x + .5, 0, zt(y) + .5); });
+    const SPOTS = [[-2.2, 0], [2.2, 0], [-1.4, -1.6], [1.4, -1.6], [0, -2.4], [-3, -1.2]]; for (let i = 0; i < Math.min(SNW.built, SPOTS.length); i++) { const m0 = ent('snm' + i, () => snowmanModel(.55)); m0.position.set(SVP.snowman.x / T + SPOTS[i][0], 0, ZU(SVP.snowman.y) + SPOTS[i][1]); m0.rotation.y = -SPOTS[i][0] * .15; } }
+  const b = SNB; let m = R3.ents.get('snb'); if (b) { m = ent('snb', () => snowmanModel(1.15, true)); m.visible = !(b.flash > 0 && Math.floor(b.flash * 40) % 2) && !(b.st === 'dead' && Math.floor(b.t * 10) % 2); m.position.set(U(b.x), 0, ZU(b.y) - .2); m.rotation.z = b.st === 'roll' ? Math.sin(time * 30) * .15 : b.st === 'dizzy' ? Math.sin(time * 6) * .12 : 0; m.rotation.y = b.st === 'roll' ? Math.atan2(b.dx, b.dy) : 0; m.userData.b.rotation.x = b.st === 'roll' ? time * 12 % 6.28 : 0; } else if (m) m.visible = false; }
+__SYNC3D.push(() => syncSV3D());
+function drawSVFx() { if (!R3 || !inSV() || typeof project3D !== 'function') return; const b = SNB;
+  for (const q of SNR) { const [cx, cy] = project3D(q.x, q.y, .02), [ex] = project3D(q.x + q.r, q.y, .02), Rr = Math.abs(ex - cx), k = 1 - Math.min(1, q.t / 1.1); ctx.save(); ctx.globalAlpha = .4 + k * .45; ctx.fillStyle = 'rgba(191,232,255,.3)'; ctx.strokeStyle = '#5aa8d8'; ctx.lineWidth = 3 * DPR; ctx.beginPath(); ctx.ellipse(cx, cy, Rr, Rr * .55, 0, 0, 6.29); ctx.fill(); ctx.stroke(); text('❄', cx, cy, Rr * .9, '#ffffff', 'center'); ctx.restore(); }
+  if (!b) return;
+  if (b.st === 'aim') { const [ax, ay] = project3D(b.x, b.y, .02), [bx, by] = project3D(b.x + b.dx * 6.4 * T * 2, b.y + b.dy * 6.4 * T * 2, .02); ctx.save(); ctx.strokeStyle = 'rgba(255,107,107,.75)'; ctx.lineWidth = 16 * DPR; ctx.setLineDash([14 * DPR, 10 * DPR]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.restore(); }
+  if (b.st === 'dizzy') { const [sx, sy] = project3D(b.x, b.y, 2.6); for (let i = 0; i < 3; i++) { const a = time * 4 + i * 2.09; star5(sx + Math.cos(a) * 18 * DPR, sy + Math.sin(a) * 6 * DPR, 7 * DPR, '#ffd23f'); } text('지금이야!', sx, sy - 22 * DPR, 12 * DPR, '#ffe066', 'center', true); }
+  if (b.st !== 'dead') { const w = Math.min(CW * .7, 340 * DPR), h = 12 * DPR, x = CW / 2 - w / 2, y = CH * .16; ctx.fillStyle = 'rgba(51,34,42,.75)'; rr(x - 4 * DPR, y - 4 * DPR, w + 8 * DPR, h + 8 * DPR, 8 * DPR); ctx.fill(); ctx.fillStyle = '#5a4a50'; rr(x, y, w, h, 6 * DPR); ctx.fill(); ctx.fillStyle = b.p2 ? '#3a5ea8' : '#7fcaf2'; rr(x, y, w * Math.max(0, b.hp / b.max), h, 6 * DPR); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(x + w / 2 - DPR, y - 2 * DPR, 2 * DPR, h + 4 * DPR); text(`눈보라 대장${b.p2 ? ' · 2페이즈' : ''}`, CW / 2, y - 12 * DPR, 13 * DPR * TXS(), '#fff', 'center', true); } }
+drawOverlay4 = (o => () => { drawSVFx(); o(); })(drawOverlay4);
+{ let saved = null; applyEnv3D = (o => dt => { o(dt); const sc = R3 && R3.scene; if (!sc || !sc.fog) return; const on = inSV() && state === 'play';
+  if (on) { if (!saved) saved = [sc.fog.near, sc.fog.far]; const n = nightAmt(); sc.background.setHex(mixHex('#bfe3f7', '#101a36', n)); sc.fog.color.setHex(mixHex('#eaf4fb', '#1d2a4a', n)); sc.fog.near = 38; sc.fog.far = 90;
+    R3.hemi.groundColor.setHex(mixHex('#c8dcef', '#2c3550', n)); R3.hemi.color.setHex(mixHex('#ffffff', '#8b97d6', n)); R3.renderer.toneMappingExposure *= .92; }
+  else if (saved && !(typeof inCV === 'function' && inCV())) { sc.fog.near = saved[0]; sc.fog.far = saved[1]; saved = null; } })(applyEnv3D); }
+// 2D 화면(3D 안 되는 기기): 눈꽃마을 바닥 색칠
+prerenderGround = (o => () => { o(); if (typeof USE3D !== 'undefined' && USE3D) return; const g = groundC.getContext('2d'), COL = { [G_SNOW]: '#f6fbff', [G_ICE]: '#bfe3f7', [G_ICEHOLE]: '#2f6e9e', [G_SBR]: '#dff4ff' };
+  for (let ly = -2; ly < SVO.h; ly++) for (let x = 0; x < W; x++) { const y = SVO.y + ly; if (y < 0 || y >= HT) continue; const c = ground[y][x]; const col = COL[c] || '#3f7fb0'; g.fillStyle = col; g.fillRect(x * T, y * T, T, T); if (!COL[c] && (x * 5 + y * 3) % 7 === 0) { g.fillStyle = '#f3f8ff'; g.fillRect(x * T + 3, y * T + 6, 9, 4); } } })(prerenderGround);
+MUS.snow = { step: .3, mel: [76, 0, 79, 0, 83, 0, 81, 79, 76, 0, 0, 0, 74, 0, 76, 79, 0, 76, 74, 0, 72, 0, 0, 0, 74, 76, 0, 79, 81, 0, 79, 0], bass: [52, 59, 57, 59, 50, 57, 55, 59], mw: 'triangle', mv: .026, bell: true };
+regionMus = (o => () => { if (inSV()) return nightAmt() > .6 ? null : 'snow'; return o(); })(regionMus);
+// 박물관 세트 (눈꽃마을 생물)
+FURN.snowglobe = { name: '스노우볼', t: [[45, 44]], desc: '박물관: 눈꽃마을 물고기 4종 기증 보상' };
+furnModel = (o => k => k === 'snowglobe' ? grp(mesh('c', '#c98a5a', .3, .1, .3, 0, .05, 0), mesh('s', M('#dff4ff', { transparent: true, opacity: .55, roughness: .05 }), .3, .3, .3, 0, .38, 0), mesh('s', '#ffffff', .1, .09, .1, 0, .2, 0), mesh('s', '#ffffff', .07, .07, .07, 0, .32, 0), mesh('co', '#3b8f5a', .08, .16, .08, .1, .26, 0)) : o(k))(furnModel);
+if (typeof MUS_SETS !== 'undefined') MUS_SETS.push({ k: 'sv', name: '반짝 눈꽃마을', ids: () => ICE_FISH.map(c => c.id), furn: 'snowglobe' });
+// 퀘스트 (눈꽃마을)
+VIL_NAME.snow = '🐧 반짝 눈꽃마을';
+qbOpen = (o => q => q.vil === 'snow' ? svUnlocked() : o(q))(qbOpen);
+QB.push(
+  { id: 's_bun', vil: 'snow', who: 'sv_chief', t: '눈토끼 장난 그만!', ask: '뒤뚱~ 눈보라 언덕 눈토끼들이 축제 장식을 자꾸 물어 가네. 다섯 마리만 놀래 주게.', k: 'k_snowbun', n: 5, rw: { hearts: 22, item: ['mitten', 1] }, done: '이제 장식이 그대로구먼! 벙어리장갑 받게.' },
+  { id: 's_fish', vil: 'snow', who: 'sv_seal', t: '물범 할매의 저녁거리', ask: '끄응… 얼음 구멍에서 물고기 두 마리만 낚아다 주련?', k: 'icefish', n: 2, rw: { hearts: 20, item: ['hotpack', 3] }, done: '끄응~ 오늘 저녁은 든든하겠구나. 핫팩 가져가렴.' },
+  { id: 's_snowman', vil: 'snow', who: 'sv_kid', t: '눈사람 친구', ask: '펭펭! 광장에 눈사람 두 개 세워 줘! 눈뭉치는 언덕에 있어!', k: 'snowman', n: 2, rw: { hearts: 18, hat: 'beanie' }, done: '펭펭~ 눈사람 친구 생겼다! 이 비니 너 줄게!' },
+);
+TIPS.snow = { ico: '🐧', t: '반짝 눈꽃마을', l: () => ['얼음 호수 구멍에서 낚시 · 언덕에서 눈뭉치 줍기', '광장 눈사람 자리에 눈뭉치 3개면 눈사람!'] };
+{ let t = 0; updateTown = (o => dt => { o(dt); if ((t -= dt) > 0) return; t = 1; if (inSV()) tip('snow'); if (curRoom.id === 'cv' && svUnlocked() && Math.hypot(P.x - SVP.cloud.x, P.y - SVP.cloud.y) < 90) tip('balloon'); })(updateTown); }
+TIPS.balloon = { ico: '🎈', t: '열기구', l: () => ['구름언덕 열기구 아저씨에게 말을 걸면 눈꽃마을로 가요 (✦6)', '눈꽃마을에서는… 펭귄인 척! 뒤뚱뒤뚱'] };
+// 세이브
+townSave = (orig => () => Object.assign(orig(), { sv: { b: SNOWB, sm: SMCLR, w: SNW } }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.sv) { Object.assign(SNOWB, d.sv.b || {}); SMCLR = d.sv.sm || 0; Object.assign(SNW, d.sv.w || {}); } })(townLoad);
+
+// ---------- story.js: 시즌 2 메인 스토리 「병아리 정체 위기」 · 깍깍이 기자 · 삐약 신문 ----------
+// 흐름: 마을마다 깍깍이 기자가 "공룡 출몰?!" 기사를 내요 → 그 마을의 '~인 척' 목표 3개를 해내면 소문이 잠잠해져요
+//       → 깍깍이에게 가면 정정 기사 · 다음 마을로 → 4장(눈꽃마을) 끝에 피날레 · 엔딩 크레딧
+const MSTORY = { ch: 0, st: 'idle', base: {}, gd: {}, rumor: 0, issues: [], fin: 0, playT: 0 };
+const MSTORY_R = [0, 70, 80, 90, 99];
+function sNpc(id) { const n = npcById(id); return n ? n.name : id; }
+const CHAP = [null,
+  { vil: 'v1', vname: '🐣 삐약마을', who: '병아리', title: '1장 · 삐약마을에 공룡 출몰?!',
+    goals: [{ t: '오늘의 소동 해결하기', k: 'small', n: 1 }, { t: '친구에게 선물 두 번', k: 'gift', n: 2 }, { t: '버섯 대왕과 화해하기', f: () => !!bossDead }],
+    open: { head: '삐약마을에 공룡 출몰?!', sub: '주민 제보 "노란 병아리, 꼬리가 너무 길다"', body: '본지 기자가 포착한 이 \'병아리\'는 이빨이 하나 있고 꼬리가 땅에 끌렸다. 정말 병아리가 맞는가?', stamp: '특종' },
+    shut: { head: '[정정] 꼬리 긴 병아리도 있다', sub: '꼬꼬 아줌마 "우리 노랑이는 착한 병아리예요"', body: '버섯 동굴을 화해시키고 이웃에게 선물까지 돌린 노랑이. 본지는 지난 기사를 정정합니다… 일단은.', stamp: '정정' } },
+  { vil: 'wv', vname: '🦆 꽥꽥 물가마을', who: '오리', title: '2장 · 헤엄 못 치는 오리?',
+    goals: [{ t: '물고기 세 마리 낚기', k: 'fish', n: 3 }, { t: '습지 집게 가재 세 마리 혼내 주기', k: 'k_cray', n: 3 }, { t: '심술 메기 대장과 화해하기', f: () => typeof CATS !== 'undefined' && CATS.beaten }],
+    open: { head: '물가마을에 수상한 오리 등장', sub: '"물에 뜨는 대신 꼬리로 노를 젓더라" 목격담', body: '꽥꽥 합창에서 \'어흥\' 소리가 섞였다는 제보도 들어왔다. 본지는 이 노란 오리를 계속 지켜보고 있다.', stamp: '특종' },
+    shut: { head: '[정정] 꼬리로 노 젓는 오리도 오리다', sub: '꽥 촌장 "메기 대장을 달랜 우리 마을 영웅이오"', body: '낚시 실력, 가재 소탕, 메기 대장과의 화해까지. 본지는 이 오리를 \'조금 특이한 오리\'로 정정합니다.', stamp: '정정' } },
+  { vil: 'cloud', vname: '☁️ 몽글몽글 구름언덕', who: '양', title: '3장 · 털 대신 비늘?',
+    goals: [{ t: '바람 언덕 털뭉치 네 마리 놀래 주기', k: 'k_furball', n: 4 }, { t: '냄비 요리 두 번 만들기', k: 'cook', n: 2 }, { t: '먹구름 대장과 화해하기', f: () => typeof CLOUDS !== 'undefined' && CLOUDS.beaten }],
+    open: { head: '양 떼 속 수상한 \'납작 털\'', sub: '본지 단독 "털 대신 비늘이 보였다"', body: '털이 하나도 없는 양이 구름언덕을 돌아다닌다. 매에 소리도 어딘가 어흥에 가깝다는 증언이다.', stamp: '단독' },
+    shut: { head: '[정정] 털은 마음에서 자란다', sub: '몽글 촌장 인터뷰 "해를 돌려준 친구라네"', body: '…다음 호 예고: 북쪽 반짝 눈꽃마을 얼음 축제에서 본지가 \'결정적 증거\'를 공개한다!', stamp: '정정' } },
+  { vil: 'snow', vname: '🐧 반짝 눈꽃마을', who: '펭귄', title: '4장 · 결정적 증거',
+    goals: [{ t: '얼음 구멍 낚시 세 번', k: 'icefish', n: 3 }, { t: '눈사람 하나 만들기', k: 'snowman', n: 1 }, { t: '눈보라 대장과 화해하기', f: () => typeof SNOWB !== 'undefined' && SNOWB.beaten }],
+    open: { head: '결정적 증거 확보?!', sub: '펭귄 마을에 나타난 노란 그림자', body: '본지는 얼음 축제 날 \'그\'의 정체를 밝힐 사진을 공개한다. 뒤뚱뒤뚱 걸음으로도 감출 수 없는 그것은…', stamp: '특종' },
+    shut: null },
+];
+function sVal(g) { if (g.f) return g.f() ? 1 : 0; return Math.max(0, (STAT[g.k] || 0) - (MSTORY.base[g.k] || 0)); }
+function sDone(g) { return g.f ? !!g.f() : sVal(g) >= g.n; }
+function sGoals() { const c = CHAP[MSTORY.ch]; return c ? c.goals : []; }
+function storyHere() { return typeof hereV === 'function' ? (typeof inSV === 'function' && inSV() ? 'snow' : hereV()) : 'v1'; }
+function storyFree() { return state === 'play' && !dlg && !menu && !phone && !(typeof mini !== 'undefined' && mini) && !(typeof EP !== 'undefined' && EP) && !wipe && tut.done && !curRoom.dungeon && !(typeof CATB !== 'undefined' && CATB) && !(typeof CLB !== 'undefined' && CLB) && !(typeof SNB !== 'undefined' && SNB) && !MSTORY.cred && !(typeof WMAP !== 'undefined' && WMAP); }
+
+// ===== 깍깍이 기자 =====
+const MAGPIE_SPOT = { v1: () => nearFree(23.5, 15.5), wv: () => [(WVO.x + 16.5) * T, (WVO.y + 12.5) * T], cloud: () => [(CVO.x + 17.5) * T, (CVO.y + 14) * T], snow: () => typeof SVP !== "undefined" ? [SVP.plaza.x + 40, SVP.plaza.y] : nearFree(23.5, 15.5) };
+NPCS.push(npc({ id: 'magpie', name: '깍깍이 기자', spr: 'magpie', x: -999, y: -999, wander: 10 }));
+if (!SP.magpie) SP.magpie = SP.duck;
+function magpieTo(vil) { const n = npcById('magpie'); if (!n) return; const [x, y] = (MAGPIE_SPOT[vil] || MAGPIE_SPOT.v1)(); Object.assign(n, { x, y, hx: x, hy: y, tx: x, ty: y }); }
+function magpieNear(dx = 46) { const n = npcById('magpie'); if (!n) return; let x = P.x + dx, y = P.y - 6; if (!boxFree(x, y)) x = P.x - dx; Object.assign(n, { x, y, hx: x, hy: y, tx: x, ty: y, face: x > P.x ? -1 : 1 }); }
+animal = (o => kind => { if (kind !== 'magpie') return o(kind); const g = new THREE.Group(), b = new THREE.Group(); g.add(b); const m = mesh;
+  b.add(m('s', '#2b2328', .2, .2, .26, 0, .34, 0), m('s', '#ffffff', .14, .15, .14, 0, .28, .1), m('s', '#2b2328', .15, .15, .15, 0, .62, .1));
+  for (const s of [-1, 1]) { b.add(m('s', '#3a5ea8', .1, .16, .2, s * .19, .36, -.02)); b.add(m('s', '#ffffff', .04, .045, .02, s * .06, .66, .23), m('s', '#1d1418', .022, .028, .01, s * .06, .66, .245)); b.add(m('c', '#2b2328', .02, .14, .02, s * .06, .07, 0)); }
+  const bk = m('co', '#3b3236', .035, .12, .035, 0, .6, .3); bk.rotation.x = Math.PI / 2; b.add(bk);
+  const tl = m('b', '#2b2328', .1, .04, .32, 0, .3, -.32); tl.rotation.x = -.5; b.add(tl);
+  b.add(m('c', '#c98a5a', .17, .06, .17, 0, .76, .08), m('c', '#c98a5a', .2, .015, .2, 0, .73, .14), m('b', '#ffffff', .06, .07, .01, .1, .78, .14));
+  b.add(m('b', '#4a4048', .16, .11, .08, 0, .38, .26), m('c', '#1d1418', .04, .04, .04, 0, .38, .31));
+  g.userData = { b }; return g; })(animal);
+farmTalk = (orig => n => n.id === 'magpie' ? magpieTalk(n) : orig(n))(farmTalk);
+questMark = (o => n => { if (n.id !== 'magpie') return o(n); if (MSTORY.st === 'ready') return '★'; if (MSTORY.st === 'open') return '…'; return null; })(questMark);
+function magpieTalk(n) {
+  if (MSTORY.st === 'ready') { storyClear(); return true; }
+  if (MSTORY.st === 'open') { const left = sGoals().filter(g => !sDone(g)); say([L('깍깍이 기자', ['깍깍! 난 증거만 믿어. 이번 기사, 쉽게 안 내릴 거야!', '흠… 그 꼬리, 오늘도 길군. 수첩에 적어 둬야지.', '취재 중이야! 방해하지 마, 깍!'][Math.floor(Math.random() * 3)]), L('계획이', `노랑아, 소문을 잠재우려면… ${left.map(g => g.t).join(' · ') || '깍깍이를 다시 만나 봐!'}`)]); return true; }
+  if (MSTORY.fin) { say([L('깍깍이 기자', ['깍깍! 다음 호 주제는 \'공룡도 좋아하는 간식\'이야. 취재 좀 도와줘!', '특별호 반응 대박이야. 네 덕분이야, 노랑아. …아니 공룡아? 깍!', '오늘도 마을 소식 모으는 중! 재밌는 일 생기면 제보해 줘!'][Math.floor(Math.random() * 3)])]); return true; }
+  say([L('깍깍이 기자', '다음 취재지로 갈 준비 중이야. 깍깍! 새 마을에서 보자고!')]); return true; }
+
+// ===== 삐약 신문 (1080×1350 · 기사 사진은 지금 장면을 찍어요) =====
+function newsCanvas(no, a, photo) {
+  const C = document.createElement('canvas'); C.width = 1080; C.height = 1350; const g = C.getContext('2d');
+  g.fillStyle = '#f4ecd8'; g.fillRect(0, 0, 1080, 1350); g.fillStyle = 'rgba(160,130,90,.06)'; for (let i = 0; i < 260; i++) g.fillRect((i * 389) % 1080, (i * 577) % 1350, 3, 3);
+  g.fillStyle = '#33222a'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `120px ${FONT}`; g.fillText('삐약 신문', 540, 112);
+  g.lineWidth = 6; g.strokeStyle = '#33222a'; g.beginPath(); g.moveTo(50, 190); g.lineTo(1030, 190); g.stroke(); g.lineWidth = 2; g.beginPath(); g.moveTo(50, 202); g.lineTo(1030, 202); g.stroke();
+  const d = new Date(); g.font = `30px ${FONT}`; g.fillStyle = '#6a5a50'; g.fillText(`제 ${no}호 · ${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 · 발행인 깍깍이 기자`, 540, 232);
+  g.fillStyle = '#33222a'; g.font = `84px ${FONT}`; const hl = wrapLines(g, a.head, 960); hl.slice(0, 2).forEach((l, i) => g.fillText(l, 540, 320 + i * 92)); let y = 320 + Math.min(2, hl.length) * 92;
+  g.font = `40px ${FONT}`; g.fillStyle = '#b0306a'; g.fillText(a.sub, 540, y + 4); y += 52;
+  const ph = 431, pw = 980; g.save(); rrp(g, 50, y, pw, ph, 14); g.clip(); if (photo) g.drawImage(photo, 0, 0, 1000, 440, 50, y, pw, ph); else { g.fillStyle = '#e8dcc4'; g.fillRect(50, y, pw, ph); } g.fillStyle = 'rgba(244,236,216,.12)'; g.fillRect(50, y, pw, ph); g.restore();
+  g.strokeStyle = '#33222a'; g.lineWidth = 6; rrp(g, 50, y, pw, ph, 14); g.stroke();
+  g.font = `28px ${FONT}`; g.fillStyle = '#6a5a50'; g.textAlign = 'left'; g.fillText('▲ 본지 기자가 직접 찍은 사진 (찰칵!)', 60, y + ph + 30); y += ph + 74;
+  g.font = `40px ${FONT}`; g.fillStyle = '#33222a'; wrapLines(g, a.body, 960).slice(0, 4).forEach((l, i) => g.fillText(l, 60, y + i * 54));
+  if (a.stamp) { g.save(); g.translate(890, 1215); g.rotate(-.18); g.strokeStyle = '#d9363e'; g.fillStyle = 'rgba(217,54,62,.08)'; g.lineWidth = 10; rrp(g, -130, -62, 260, 124, 24); g.fill(); g.stroke(); g.fillStyle = '#d9363e'; g.textAlign = 'center'; g.font = `76px ${FONT}`; g.fillText(a.stamp, 0, 4); g.restore(); }
+  g.textAlign = 'center'; g.font = `34px ${FONT}`; g.fillStyle = '#33222a'; g.fillText('@an_norang', 540, 1310);
+  return C; }
+function storyPhoto(mode) { if (typeof USE3D !== 'undefined' && USE3D && R3) return epCapture(P.x, P.y, mode, 2.6);
+  const c = document.createElement('canvas'); c.width = 1000; c.height = 440; const g = c.getContext('2d'), src = ctx.canvas, W = src.width, H = src.height, ar = 1000 / 440;
+  try { const cw = Math.min(W, H * .4 * ar), ch = cw / ar; g.drawImage(src, (W - cw) / 2, Math.max(0, H * .48 - ch / 2), cw, ch, 0, 0, 1000, 440); } catch (e) { g.fillStyle = '#ffe9a8'; g.fillRect(0, 0, 1000, 440); } return c; }
+function storyIssue(a, title, mode = 'front', cb) {
+  const photo = storyPhoto(mode), no = MSTORY.issues.length + 1, C = newsCanvas(no, a, photo), key = `news_${dayKey()}_${Date.now() % 100000}`;
+  MSTORY.issues.unshift({ k: key, t: a.head, no, d: dayKey() });
+  toBlob(C).then(b => { if (!b) return; albPut(key, b); EPS.toons.unshift({ k: key, t: `삐약 신문 제${no}호`, ok: 1, d: dayKey() }); save(); });
+  sfx('star'); const go = (n = 0) => { if (typeof cardOpen !== 'undefined' && cardOpen && n < 40) return setTimeout(() => go(n + 1), 500); if (typeof cardOpen !== 'undefined' && cardOpen) { if (cb) cb(); return; } showComic(C, { title: title || `삐약 신문 제${no}호`, desc: a.sub, onClose: cb }); }; setTimeout(go, 300); }
+
+// ===== 장 시작 · 진행 · 정리 =====
+function storyStart(ch) { const c = CHAP[ch]; if (!c) return; MSTORY.ch = ch; MSTORY.st = 'open'; MSTORY.rumor = MSTORY_R[ch]; MSTORY.base = {}; for (const g of c.goals) if (g.k) MSTORY.base[g.k] = STAT[g.k] || 0;
+  magpieNear(); sfx('blip');
+  const intro = {
+    1: [L('???', '찰칵! 찰칵! 깍깍!'), L('깍깍이 기자', '삐약 신문 깍깍이 기자다! 방금 아주 수상한 걸 찍었거든?'), L('깍깍이 기자', '노란 병아리인데… 꼬리가 땅에 끌리고, 이빨이 하나 있고… 이건 특종이야!'), L('안노랑', '(드, 들켰나…?!)'), L('계획이', '노랑아 침착해. 병아리답게 지내면 소문은 잠잠해질 거야!')],
+    2: [L('깍깍이 기자', '깍깍! 여기까지 따라왔지! 물가마을 특파원 깍깍이다!'), L('깍깍이 기자', '오리라면서 왜 꼬리로 노를 젓지? 수첩에 다 적었어!'), L('안노랑', '(꽥… 꽥꽥…)')],
+    3: [L('깍깍이 기자', '구름 위까지 취재 왔다, 깍! 털 없는 양이라니 이번엔 진짜야!'), L('계획이', '이번엔 털이 없는 게 문제구나… 매에 소리 연습하자, 노랑아!')],
+    4: [L('깍깍이 기자', '드디어 마지막 취재지! 눈꽃마을 얼음 축제에서 결정적 사진을 공개하겠어!'), L('깍깍이 기자', '뒤뚱뒤뚱 걸어도 소용없어. 이번엔 진짜 끝이야, 깍깍!'), L('안노랑', '(펭귄인 척… 마지막까지 해 보자!)')],
+  }[ch];
+  say(intro, () => storyIssue(c.open, `${c.title}`, ch === 1 ? 'front' : 'left', () => { magpieTo(c.vil); banner(c.title, `소문 ${MSTORY.rumor}% · 노랑폰 > 삐약 신문에서 목표 확인`, '#33222a'); tip('story'); save(); })); }
+function storyTick() { if (MSTORY.st !== 'open') return; const c = CHAP[MSTORY.ch]; let all = true;
+  c.goals.forEach((g, i) => { const key = MSTORY.ch + '_' + i, d = sDone(g); if (!d) all = false; if (d && !MSTORY.gd[key]) { MSTORY.gd[key] = 1; MSTORY.rumor = Math.max(5, MSTORY.rumor - Math.round(MSTORY_R[MSTORY.ch] / 4)); sfx('pick'); toast(`📰 ${g.t} 완료! · 소문 ${MSTORY.rumor}%`); save(); } });
+  if (all) { MSTORY.st = 'ready'; setTimeout(() => banner('소문이 잠잠해지고 있어요!', '깍깍이 기자를 찾아가 봐요 (★)', '#ffd23f'), 600); save(); } }
+function storyClear() { const ch = MSTORY.ch, c = CHAP[ch];
+  if (ch === 4) { storyFinale(); return; }
+  const rw = [0, 30, 40, 50][ch], next = { 1: '꽥꽥 물가마을', 2: '몽글몽글 구름언덕', 3: '반짝 눈꽃마을' }[ch];
+  say([L('깍깍이 기자', ['끄응… 꼬리 긴 병아리라니, 증거가 부족해. 깍!', '꽥꽥… 아니 깍깍. 이번에도 증거 불충분이야!', '털은 없는데… 다들 너를 좋아하잖아. 이상해, 깍!'][ch - 1]), L('깍깍이 기자', '정정 기사 내 줄게. 하지만 다음엔 꼭 밝혀내겠어!'), L('안노랑', '(휴… 살았다!)')],
+    () => { MSTORY.st = 'cleared'; MSTORY.rumor = Math.round(MSTORY_R[ch] / 8); hearts += rw; storyIssue(c.shut, `${c.title} · 정정 기사`, 'front', () => { itemGet(SP.heartc, `${c.title} 완료!`, `✦+${rw} · 다음 취재지: ${next}`); magpieTo({ 1: 'wv', 2: 'cloud', 3: 'snow' }[ch]); save(); }); }); }
+function storyCheckStart() { if (!storyFree()) return; const here = storyHere();
+  if (MSTORY.ch === 0) { if (here === 'v1' && MSTORY.playT > 25) storyStart(1); return; }
+  if (MSTORY.st !== 'cleared' || MSTORY.ch >= 4) return; const n = MSTORY.ch + 1; if (CHAP[n] && here === CHAP[n].vil) storyStart(n); }
+{ let t = 0; updateTown = (o => dt => { o(dt); if (state !== 'play') return; if (tut.done) MSTORY.playT += dt; if ((t -= dt) > 0) return; t = .5; try { storyTick(); storyCheckStart(); } catch (e) { console.warn('story', e); } })(updateTown); }
+
+// ===== 피날레 · 엔딩 크레딧 =====
+function storyFinale() {
+  const nm = id => sNpc(id), snowChief = typeof SNOW_IDS !== 'undefined' ? nm('sv_chief') : '펭귄 촌장';
+  say([L('깍깍이 기자', '모두 모여! 얼음 축제 특별 발표! 깍깍!'), L('깍깍이 기자', '이 사진을 봐! 긴 꼬리! 이빨 하나! 커다란 발자국! 이건… 공룡이야!!'), L('안노랑', '(드디어… 들켰다…!)'),
+    L(nm('hen'), '어머, 그거 다 알고 있었는데?'), L(nm('wv_chief'), '꽥. 처음 배에서 내릴 때부터 알았소.'), L(nm('cv_chief'), '매에~ 털이 없는 양은 없지. 허허.'), L(snowChief, '뒤뚱뒤뚱 걸음이 너무 귀여워서 모른 척했지.'),
+    L('계획이', '사실 처음 만난 날부터 알았어. 병아리는 이빨이 없거든.'), L('깍깍이 기자', '뭐어?! 그럼 내 특종은…?'),
+    L(snowChief, '특종은 특종이지. \'공룡인데도 다들 좋아하는 친구\'. 그게 제일 놀라운 뉴스 아닌가?'), L('깍깍이 기자', '…! 좋아, 제목은 이걸로 간다. 깍깍!'),
+    L('안노랑', '(병아리인 척… 안 해도 됐던 거야?)'), L('계획이', '그래도 계속 해. 그게 제일 웃기니까!')],
+    () => { MSTORY.st = 'cleared'; MSTORY.fin = 1; MSTORY.rumor = 0; hearts += 100; if (!hatOwned.includes('press')) { hatOwned.push('press'); eqSync(); }
+      storyIssue({ head: '특별호 · 우리 마을 공룡, 안노랑', sub: '"모두 알고 있었다. 그래도 친구."', body: '병아리인 척, 오리인 척, 양인 척, 펭귄인 척. 그 모든 \'척\'보다 확실한 건 하나다. 이 공룡은 우리 모두의 친구다.', stamp: '특별호' }, '삐약 신문 특별호', 'front', () => { creditsStart(); save(); }); }); }
+const CREDITS = ['안노랑의 삐약 소동', '시즌 2 · 병아리 정체 위기', '', '— 출연 —', '안노랑 · 병아리인 척하는 공룡', '계획이 · 먹보 · 승부욕', '깍깍이 기자 · 삐약 신문', '꼬꼬 아줌마 · 꿀꿀이 · 깡총이 · 너구리 사장', '꽥 촌장 · 꽥순이 · 수달 사장 · 느릿 할배', '몽글 촌장 · 파카 아저씨 · 매애 할매 · 솜솜이', '펭귄 마을 친구들', '버섯 대왕 · 심술 메기 대장 · 먹구름 대장 · 눈보라 대장', '', '— 만든 사람 —', '기획 · 캐릭터 · 연출  Coi', '@an_norang', '', '플레이해 줘서 고마워요!', '', '삐약마을의 하루는 계속돼요'];
+function creditsStart() { MSTORY.cred = { t: 0 }; if (typeof MUS !== 'undefined') sfx('star'); }
+update = (o => dt => { if (MSTORY.cred) { MSTORY.cred.t += dt; if (MSTORY.cred.t > CREDITS.length * 1.6 + 8) creditsEnd(); return; } return o(dt); })(update);
+function creditsEnd() { MSTORY.cred = null; itemGet(SP.heartc, '시즌 2 엔딩!', '✦+100 · 깍깍 기자 모자 · 콘 작전 미니게임 열림'); save(); }
+drawOverlay4 = (o => () => { o(); const c = MSTORY.cred; if (!c) return; const a = Math.min(1, c.t / 1.5); ctx.fillStyle = `rgba(20,14,18,${.92 * a})`; ctx.fillRect(0, 0, CW, CH);
+  const u = Math.max(14 * DPR, Math.min(CW, CH) / 22), sp = u * 2.1, y0 = CH + u * 2 - c.t * u * 1.3;
+  CREDITS.forEach((l, i) => { const y = y0 + i * sp; if (y < -u * 2 || y > CH + u * 2) return; const big = i < 2; text(l, CW / 2, y, big ? u * (i === 0 ? 1.6 : 1.05) : u * .85, big ? '#ffd23f' : l.startsWith('—') ? '#bfe8ff' : '#fff', 'center', big); });
+  if (c.t > 2) text(TOUCH() ? '화면을 누르면 건너뛰어요' : '아무 키나 누르면 건너뛰어요', CW / 2, CH - SA.b - u * 1.2, u * .55, 'rgba(255,255,255,.55)', 'center'); })(drawOverlay4);
+addEventListener('pointerdown', e => { if (!MSTORY.cred) return; e.stopImmediatePropagation(); if (MSTORY.cred.t > 2) creditsEnd(); }, true);
+addEventListener('keydown', e => { if (!MSTORY.cred) return; e.stopImmediatePropagation(); if (MSTORY.cred.t > 2) creditsEnd(); }, true);
+
+// ===== 깍깍 기자 모자 (엔딩 보상 · 외형만) =====
+Object.assign(HATS, { press: { name: '깍깍 기자 모자', skill: '꼬리', price: 0, desc: '외형 · 시즌 2 엔딩 기념 · 용기 +3' } });
+HAT_STAT.press = { hp: 3 }; ITEMS.hat_press = { name: '깍깍 기자 모자', type: 'eq', slot: 'hat', hatK: 'press', hp: 3, sell: 0 }; try { eqDesc('hat_press'); } catch (e) { }
+buildHat = (o => kind => { if (kind !== 'press') return o(kind); const g = new THREE.Group(); g.add(mesh('hemi', '#c98a5a', .26, .16, .26, 0, 0, 0), mesh('c', '#a0703a', .27, .02, .27, 0, .005, 0), mesh('s', '#a0703a', .05, .03, .05, 0, .16, 0)); const brim = mesh('c', '#a0703a', .16, .02, .12, 0, .005, .22); g.add(brim); g.add(mesh('b', '#ffffff', .1, .12, .01, .16, .1, .12)); return g; })(buildHat);
+
+// ===== 노랑폰: 삐약 신문 앱 · 오늘 카드 · 첫 안내 =====
+{ const i = APPS.findIndex(a => a.id === 'quest' || a.id === 'epbook'); APPS.splice(Math.max(0, i + 1), 0, { id: 'news', name: '삐약 신문', ico: '📰', col: '#f4ecd8', go: () => { phone = null; menu = { kind: 'news', title: '삐약 신문', tabs: ['이번 호', '지난 신문'], tab: 0, sel: 0, page: 0 }; sfx('blip'); } }); }
+function rumorBar(v) { const n = Math.round(v / 10); return '■'.repeat(n) + '□'.repeat(10 - n); }
+function newsEntries(m) { const E = [], c = CHAP[MSTORY.ch];
+  if (m.tab === 0) {
+    if (!MSTORY.ch) { E.push({ name: '아직 기사가 없어요', desc: '삐약마을에서 지내다 보면 누군가 찰칵! 하고 나타날지도…', tag: '', col: '#efe2c8', act: () => { } }); return E; }
+    if (MSTORY.fin) E.push({ name: '🏆 시즌 2 완결!', desc: '모두 알고 있었지만, 그래도 친구. 지난 신문에서 특별호를 다시 볼 수 있어요', tag: '완결', col: '#9be37a', act: () => { } });
+    E.push({ name: c.title, desc: `${c.vname} · ${c.who}인 척 · 소문 ${rumorBar(MSTORY.rumor)} ${MSTORY.rumor}%`, tag: MSTORY.st === 'ready' ? '★ 깍깍이에게' : MSTORY.st === 'cleared' ? '정정 완료' : '취재 중', col: MSTORY.st === 'ready' ? '#ffd23f' : '#f4ecd8', act: () => { } });
+    if (MSTORY.st === 'open' || MSTORY.st === 'ready') c.goals.forEach(g => { const d = sDone(g); E.push({ name: `${d ? '✔ ' : '· '}${g.t}`, desc: g.f ? (d ? '완료!' : '보스와 화해하면 완료') : `${Math.min(g.n, sVal(g))}/${g.n}`, tag: d ? '완료' : '', col: d ? '#9be37a' : '#efe2c8', act: () => { } }); });
+    if (MSTORY.st === 'cleared' && !MSTORY.fin) { const n = CHAP[MSTORY.ch + 1]; if (n) E.push({ name: `다음 취재지: ${n.vname}`, desc: n.vil === 'snow' ? '구름언덕 열기구를 타고 가요 (먹구름 대장과 화해 후)' : '그 마을에 가면 깍깍이가 기다리고 있어요', tag: '다음 장', col: '#bfe8ff', act: () => { } }); }
+  } else { if (!MSTORY.issues.length) E.push({ name: '지난 신문이 없어요', desc: '', tag: '', col: '#efe2c8', act: () => { } });
+    MSTORY.issues.forEach(s => E.push({ name: `제${s.no}호 · ${s.t}`, desc: `${String(s.d).slice(4, 6)}/${String(s.d).slice(6)} 발행`, tag: '보기', col: '#f4ecd8', act: () => { menu = null; albGet(s.k).then(b => { if (!b) { toast('신문을 찾을 수 없어요'); return; } const img = new Image(); img.onload = () => { const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height; cv.getContext('2d').drawImage(img, 0, 0); showComic(cv, { title: `삐약 신문 제${s.no}호` }); }; img.src = URL.createObjectURL(b); }); } })); }
+  return E; }
+townEntries = (orig => m => m.kind === 'news' ? newsEntries(m) : orig(m))(townEntries);
+panelEntries = (orig => () => menu && menu.kind === 'news' ? newsEntries(menu) : orig())(panelEntries);
+TIPS.story = { ico: '📰', t: '삐약 신문', l: () => ['깍깍이 기자가 "공룡 출몰?!" 기사를 냈어요', '노랑폰 > 삐약 신문에서 목표를 확인하고 소문을 잠재워요'] };
+if (typeof todayRows === 'function') todayRows = (o => () => { const R = o(); if (MSTORY.ch && !MSTORY.fin) { const c = CHAP[MSTORY.ch], left = MSTORY.st === 'open' ? sGoals().filter(g => !sDone(g)).length : 0; R.unshift({ ico: '📰', t: MSTORY.st === 'ready' ? '깍깍이 기자에게 가기 ★' : MSTORY.st === 'cleared' ? '다음 마을에서 새 기사가 기다려요' : `${c.title.split(' · ')[0]} · 소문 ${MSTORY.rumor}% · 남은 목표 ${left}`, hot: MSTORY.st === 'ready' }); } return R; })(todayRows);
+// 세이브
+townSave = (orig => () => Object.assign(orig(), { story: Object.assign({}, MSTORY, { cred: null }) }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.story) Object.assign(MSTORY, d.story, { cred: null }); try { const c = CHAP[MSTORY.ch]; if (MSTORY.ch && MSTORY.st !== 'idle') magpieTo(MSTORY.st === 'cleared' && !MSTORY.fin ? ({ 1: 'wv', 2: 'cloud', 3: 'snow' }[MSTORY.ch] || c.vil) : c.vil); } catch (e) { } })(townLoad);
+
+// ---------- winter.js: 겨울 날씨(펑펑 눈 오는 날) · 삐약 크리스마스 꾸미기 · 산타 노랑 배달 ----------
+// 겨울엔 비 대신 눈! 눈 오는 날엔 삐약마을에도 눈뭉치가 쌓이고 광장에서 눈사람을 만들 수 있어요
+// 크리스마스(12/18~26): 광장 큰 트리 · 트리에서 선물 가방 받아 친구 5명에게 배달 → 루돌프 머리띠
+function snowDay() { if (state === 'title' || envSeason() !== 'winter') return false; if (CFG.weather === 'rain') return true; if (CFG.weather === 'clear') return false; return weatherOf() === 'rain'; }
+raining = (o => () => envSeason() === 'winter' ? false : o())(raining);
+// 날씨 표시 문구
+if (typeof dayPart === 'function') dayPart = (o => h => snowDay() ? o(h) + ' · 눈' : o(h))(dayPart);
+// ===== 눈 오는 날: 삐약마을 눈뭉치 · 눈사람 =====
+const V1_PILES = [[6.5, 16.5], [12.5, 20.5], [17.5, 25.5], [27.5, 26.5], [34.5, 22.5], [38.5, 12.5], [30.5, 4.5], [11.5, 6.5], [3.5, 10.5], [24.5, 22.5], [14.5, 15.5], [36.5, 6.5]];
+const WNT = { d: 0, got: {}, built: 0, bday: 0, ban: 0 }; let V1P_LIST = [];
+function v1Piles() { const d = dayKey(); if (WNT.d !== d) { WNT.d = d; WNT.got = {}; WNT.built = 0; } if (V1P_LIST.d === d) return V1P_LIST;
+  const pool = V1_PILES.map(([x, y]) => nearFree(x, y)), out = []; let s0 = d % 7919 + 3; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647;
+  while (out.length < 8 && pool.length) out.push(pool.splice(Math.floor(r() * pool.length), 1)[0]); V1P_LIST = out.map(([x, y], i) => ({ i, x, y })); V1P_LIST.d = d; return V1P_LIST; }
+let V1SM = null; function v1Snowman() { if (!V1SM) { const [x, y] = nearFree(17.5, 17.5); V1SM = { x, y }; } return V1SM; }
+function v1PileNear() { if (!snowDay() || curRoom.id !== 'v1') return null; for (const b of v1Piles()) if (!WNT.got[b.i] && Math.hypot(P.x - b.x, P.y - b.y) < 20) return b; return null; }
+function v1SnowmanNear() { if (!snowDay() || curRoom.id !== 'v1') return false; const s = v1Snowman(); return Math.hypot(P.x - s.x, P.y - s.y) < 24; }
+function v1BuildSnowman() { if ((inv.snowball || 0) < 3) { say([L('안노랑', `(눈뭉치가 세 개 필요해… 지금 ${inv.snowball || 0}개. 마을 곳곳에 쌓인 눈을 모아 보자!)`)]); return; }
+  inv.snowball -= 3; if (inv.snowball <= 0) delete inv.snowball; WNT.built++; stat('snowman'); sfx('star'); const s = v1Snowman(); burst(s.x, s.y - 10, '#ffffff', 20); shake(1.2, .2);
+  const first = WNT.bday !== dayKey(); if (first) { WNT.bday = dayKey(); hearts += 8; } itemGet(SP.heartc, `삐약마을 눈사람 ${WNT.built}호!`, first ? '✦+8 · 꼬꼬 아줌마가 당근 코를 달아 줬어요' : '광장이 하얘졌어요!'); save(); }
+// ===== 크리스마스 =====
+function xmOn() { const h = typeof holiday === 'function' && holiday(); return !!(h && h.id === 'xmas'); }
+let XTREE = null; function xTree() { if (!XTREE) { const [x, y] = nearFree(21.5, 11.6); XTREE = { x, y }; } return XTREE; }
+const XM = { d: 0, task: [], done: {}, fin: 0, hat: 0 };
+const XM_POOL = ['hen', 'cow', 'pig', 'rabbit', 'sheep', 'duck', 'fox', 'raccoon', 'captain', 'sheep2'];
+const XM_THANKS = { hen: '어머나, 선물이야? 꼬꼬… 고마워라! 산타가 꼭 노란 공룡처럼 생겼네?', cow: '음메~ 산타 노랑이구나! 꼬리가 아주 산타 같아…', pig: '꿀! 선물이다 선물! 노랑 산타 최고!', rabbit: '깡총! 루돌프는 어디 있어? 아, 노랑이가 루돌프 겸 산타야?', sheep: '매에~ 따뜻한 털실 선물이네. 고마워!', sheep2: '매애~ 내 것도 있어? 히히, 고마워!', duck: '꽥! 선물 상자에 리본까지! 꽥꽥 고마워!', fox: '흥, 선물 같은 거… 고, 고맙긴 하네.', raccoon: '어이쿠, 장사꾼한테도 선물을 주나? 이거 팔면 안 되겠지? 허허!', captain: '꽥선장에게 선물이라니! 배 위에서 잘 열어 보겠네!' };
+function xmNear() { if (!xmOn() || curRoom.id !== 'v1') return false; const t = xTree(); return Math.hypot(P.x - t.x, P.y - (t.y + 10)) < 30; }
+function xmDaily() { const d = dayKey(); if (XM.d !== d) { XM.d = d; XM.task = []; XM.done = {}; XM.fin = 0; } }
+function xmTreeTalk() { xmDaily();
+  if (XM.fin) { say([L('안노랑', '(오늘 배달은 끝! 트리 불빛이 반짝반짝… 내일 또 산타 해야지)')]); return; }
+  if (XM.task.length) { const left = XM.task.filter(id => !XM.done[id]).map(id => (npcById(id) || {}).name).filter(Boolean); say([L('안노랑', `(남은 배달: ${left.join(', ')})`)]); return; }
+  const ids = XM_POOL.filter(id => npcById(id)); let s0 = dayKey() % 8191 + 11; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; const pick = []; while (pick.length < 5 && ids.length) pick.push(ids.splice(Math.floor(r() * ids.length), 1)[0]);
+  XM.task = pick; say([L('안노랑', '(트리 밑에 선물 가방이 있다… 이름표가 붙어 있어!)'), L('안노랑', `(${pick.map(id => npcById(id).name).join(', ')}… 오늘은 내가 산타 노랑이다!)`)], () => { sfx('pick'); banner('산타 노랑 출동!', '선물 5개 배달 · 친구에게 말을 걸어 전해 줘요', '#e2443b'); save(); }); }
+farmTalk = (orig => n => { if (xmOn() && XM.task.includes(n.id) && !XM.done[n.id] && XM.d === dayKey()) { XM.done[n.id] = 1; hearts += 4; sfx('star'); burst(n.x, n.y - 16, '#ff6b6b', 14); const left = XM.task.filter(id => !XM.done[id]).length;
+    say([L('안노랑', '메리 크리스마스! 선물 배달 왔어요!'), L(n.name, XM_THANKS[n.id] || '고마워! 메리 크리스마스!')], () => { floaters.push({ x: n.x, y: n.y - 34, t: 1.2, text: `🎁 배달 ${5 - left}/5 · ✦+4`, col: '#ffd23f' }); if (!left) xmFinish(); save(); }); return true; }
+  return orig(n); })(farmTalk);
+function xmFinish() { XM.fin = 1; hearts += 20; const firstHat = !hatOwned.includes('rudolph'); if (firstHat) { hatOwned.push('rudolph'); eqSync(); }
+  itemGet(SP.heartc, '산타 노랑 배달 완료!', firstHat ? '✦+20 · 루돌프 머리띠 (가방 > 장비)' : '✦+20 · 내일도 배달이 기다려요'); }
+questMark = (o => n => (xmOn() && XM.d === dayKey() && XM.task.includes(n.id) && !XM.done[n.id]) ? '🎁' : o(n))(questMark);
+HATS.rudolph = { name: '루돌프 머리띠', skill: '꼬리', price: 0, desc: '크리스마스 산타 배달 보상 · 빨간 코 반짝' }; if (typeof HAT_ORDER !== 'undefined') HAT_ORDER.push('rudolph');
+HAT_STAT.rudolph = { spd: 1, hp: 1 }; ITEMS.hat_rudolph = { name: '루돌프 머리띠', type: 'eq', slot: 'hat', hatK: 'rudolph', spd: 1, hp: 1, sell: 0 }; try { eqDesc('hat_rudolph'); } catch (e) { }
+buildHat = (o => kind => { if (kind !== 'rudolph') return o(kind); const g = new THREE.Group(); const band = mesh('tor', '#8a5a3c', .24, .24, .05, 0, .02, 0); band.rotation.y = Math.PI / 2; g.add(band);
+  for (const s of [-1, 1]) { const a = mesh('c', '#a0703a', .025, .26, .025, s * .16, .16, 0); a.rotation.z = -s * .35; g.add(a); for (const k of [.12, .22]) { const t = mesh('c', '#a0703a', .02, .11, .02, s * (.2 + k * .25), .1 + k, 0); t.rotation.z = -s * 1.1; g.add(t); } }
+  g.add(mesh('s', M('#ff3b3b', { emissive: '#ff2020', emissiveIntensity: .8 }), .06, .06, .06, 0, -.1, .3)); return g; })(buildHat);
+// 크리스마스 대사
+{ const XL = { hen: '트리 봤니? 광장 한가운데 반짝반짝! 선물 가방도 놓여 있대.', cow: '음메~ 크리스마스엔 따뜻한 우유가 최고지.', pig: '꿀! 산타는 굴뚝으로 온대! 근데 우리 마을엔 굴뚝이 몇 개 없는데…', rabbit: '깡총! 트리 밑에 선물 가방이 있던데? 노랑이가 산타 해 봐!' };
+  for (const id in XL) { if (!CHAT[id]) CHAT[id] = []; CHAT[id].unshift([() => xmOn(), XL[id]]); }
+  const WL = { hen: '눈이 펑펑! 눈사람 만들기 딱 좋은 날이야. 광장 쪽에 자리 있어!', pig: '꿀꿀! 눈뭉치 던지기 하자! …나 맞히면 안 돼!', rabbit: '깡총! 하얀 눈 위에 발자국 콩콩!' };
+  for (const id in WL) { if (!CHAT[id]) CHAT[id] = []; CHAT[id].unshift([() => snowDay() && !xmOn(), WL[id]]); } }
+// ===== 상호작용 =====
+townInteract = (orig => () => { const b = v1PileNear(); if (b) { WNT.got[b.i] = 1; addItem('snowball', 1); sfx('pick'); burst(b.x, b.y - 6, '#ffffff', 10); floaters.push({ x: b.x, y: b.y - 22, t: 1, text: `눈뭉치 +1 (${inv.snowball})`, col: '#bfe8ff' }); save(); return true; }
+  if (v1SnowmanNear()) { v1BuildSnowman(); return true; } if (xmNear()) { xmTreeTalk(); return true; } return orig(); })(townInteract);
+townHint = (orig => () => { const b = v1PileNear(); if (b) return { x: b.x, y: b.y - 26, t: `${KA()} 눈뭉치 줍기` }; if (v1SnowmanNear()) { const s = v1Snowman(); return { x: s.x, y: s.y - 36, t: `${KA()} 눈사람 만들기 (눈뭉치 3)` }; }
+  if (xmNear()) { const t = xTree(); return { x: t.x, y: t.y - 60, t: `${KA()} ${XM.task.length && XM.d === dayKey() ? '배달 목록' : '선물 가방'}` }; } return orig(); })(townHint);
+// 하루 첫 입장 알림
+{ let t = 0; updateTown = (o => dt => { o(dt); if ((t -= dt) > 0 || state !== 'play' || dlg || menu || curRoom.id !== 'v1') return; t = 1;
+  if (snowDay() && WNT.ban !== dayKey() && tut.done) { WNT.ban = dayKey(); v1Piles(); banner('펑펑 눈 오는 날!', '마을에 눈뭉치가 쌓였어요 · 세 개면 광장 옆 눈사람!', '#7fcaf2'); }
+  if (xmOn()) tip('xmas'); })(updateTown); }
+TIPS.xmas = { ico: '🎄', t: '삐약 크리스마스', l: () => ['광장 트리에서 선물 가방을 받아 친구 5명에게 배달!', '다 배달하면 ✦20 · 처음엔 루돌프 머리띠'] };
+// ===== 3D =====
+function xtreeModel() { const g = new THREE.Group(); g.add(mesh('c', '#8a5a3c', .2, .6, .2, 0, .3, 0));
+  const lv = [[1.3, 1.1, .9], [1.0, 1.0, 1.6], [.72, .9, 2.25], [.45, .8, 2.85]]; for (const [r, h, y] of lv) { g.add(mesh('co', '#2f7a4a', r, h, r, 0, y, 0)); g.add(mesh('co', '#ffffff', r * .98, .08, r * .98, 0, y - h / 2 + .05, 0)); }
+  const cols = ['#e2443b', '#ffd23f', '#7fcaf2', '#ff8fa3', '#ffffff'], bulbs = []; let k = 0;
+  for (const [r, h, y] of lv) for (let i = 0; i < 7; i++) { const a = i / 7 * 6.28 + y, rr0 = r * .62, m0 = M(cols[k % 5], { emissive: cols[k % 5], emissiveIntensity: .2 }), b = mesh('s', m0, .08, .08, .08, Math.cos(a) * rr0, y - h * .18, Math.sin(a) * rr0); bulbs.push(b); g.add(b); k++; }
+  const star = mesh('oct', M('#ffd23f', { emissive: '#ffb020', emissiveIntensity: .9 }), .22, .22, .08, 0, 3.4, 0); g.add(star);
+  for (let i = 0; i < 4; i++) { const a = i * 1.7 + .4, c = cols[i]; g.add(mesh('b', c, .34, .3, .34, Math.cos(a) * 1.1, .15, Math.sin(a) * 1.1), mesh('b', '#ffffff', .36, .05, .08, Math.cos(a) * 1.1, .31, Math.sin(a) * 1.1)); }
+  g.add(mesh('s', '#c98a5a', .32, .26, .32, -.9, .2, .8), mesh('c', '#e2443b', .1, .08, .1, -.9, .48, .8)); g.userData = { bulbs, star }; return g; }
+window.__SYNC3D.push(() => { if (!R3 || curRoom.id !== 'v1') return;
+  if (xmOn()) { const t = xTree(), m = ent('xtree', xtreeModel); m.position.set(U(t.x), 0, ZU(t.y) - .3); const n = nightAmt(); m.userData.bulbs.forEach((b, i) => { b.material.emissiveIntensity = .2 + n * (Math.sin(time * 3 + i * 1.3) > 0 ? 1.3 : .2); }); m.userData.star.rotation.y = time * .8; }
+  if (snowDay()) { for (const b of v1Piles()) { if (WNT.got[b.i]) continue; const m = ent('v1sp' + b.i, () => grp(mesh('s', '#ffffff', .3, .18, .3, 0, .08, 0), mesh('s', '#f3f8ff', .16, .12, .16, .12, .16, .05))); m.position.set(U(b.x), 0, ZU(b.y) - .2); }
+    const s = v1Snowman(), sp = ent('v1smspot', () => mesh('c', '#dff4ff', .9, .05, .9, 0, .03, 0)); sp.position.set(U(s.x), 0, ZU(s.y) - .2);
+    const SPOT = [[0, 0], [-1.6, -.4], [1.6, -.4], [-.8, -1.4], [.8, -1.4]]; for (let i = 0; i < Math.min(WNT.built, SPOT.length); i++) { const m = ent('v1sm' + i, () => snowmanModel(.5)); m.position.set(U(s.x) + SPOT[i][0], 0, ZU(s.y) - .2 + SPOT[i][1]); }
+    // 굵은 눈송이
+    const F = R3.wFlakes || (R3.wFlakes = (() => { const n = 150, pm = new THREE.InstancedMesh(new THREE.SphereBufferGeometry(.06, 5, 4), new THREE.MeshBasicMaterial({ color: '#ffffff' }), n), d = new THREE.Object3D(), seeds = []; for (let i = 0; i < n; i++) seeds.push([Math.random(), Math.random(), Math.random(), .4 + Math.random() * .6]); return { pm, d, seeds }; })());
+    const fm = ent('wflakes', () => F.pm), pm0 = R3.ents.get(P), cx = pm0 ? pm0.position.x : 21, cz = pm0 ? pm0.position.z : 16;
+    F.seeds.forEach(([a, b, c, s0], i) => { const y = 6 - ((time * s0 * 1.1 + c * 6) % 6.5); F.d.position.set(cx - 10 + a * 20 + Math.sin(time * .8 + i) * .4, y, cz - 8 + b * 13); F.d.scale.setScalar(.8 + s0); F.d.updateMatrix(); F.pm.setMatrixAt(i, F.d.matrix); }); F.pm.instanceMatrix.needsUpdate = true; fm.position.set(0, 0, 0); } });
+{ applyEnv3D = (o => dt => { o(dt); const sc = R3 && R3.scene; if (!sc || !sc.fog || !snowDay() || curRoom.id !== 'v1' || state !== 'play') return; sc.fog.far = Math.min(sc.fog.far, 70); sc.fog.color.lerp(new THREE.Color('#e8eef4'), .5); })(applyEnv3D); }
+// 2D 화면: 트리 · 눈뭉치 · 눈사람 그리기
+drawOverlay4 = (o => () => { if (!((typeof USE3D !== 'undefined' && USE3D) || state !== 'play' || curRoom.id !== 'v1' || mini || (typeof MSTORY !== 'undefined' && MSTORY.cred))) drawWinter2D(); o(); })(drawOverlay4);
+function drawWinter2D() {
+  const sx = x => (x - cam.x) * SC, sy = y => (y - cam.y) * SC;
+  if (snowDay()) { for (const b of v1Piles()) if (!WNT.got[b.i]) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(sx(b.x), sy(b.y), 7 * SC, 4 * SC, 0, 0, 6.29); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; for (let i = 0; i < 60; i++) { const fx = ((i * 97.3 + time * 20 * (1 + i % 3)) % CW + CW) % CW, fy = ((i * 53.1 + time * 60 * (1 + i % 2)) % CH); ctx.fillRect(fx, fy, 2 * DPR, 2 * DPR); } }
+  if (xmOn()) { const t = xTree(), X = sx(t.x), Y = sy(t.y); ctx.fillStyle = '#2f7a4a'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(X, Y - (34 - i * 9) * SC); ctx.lineTo(X - (12 + i * 4) * SC, Y - (14 - i * 9) * SC); ctx.lineTo(X + (12 + i * 4) * SC, Y - (14 - i * 9) * SC); ctx.fill(); } star5(X, Y - 36 * SC, 4 * SC, '#ffd23f'); } }
+// 세이브
+townSave = (orig => () => Object.assign(orig(), { wnt: WNT, xm: XM }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.wnt) Object.assign(WNT, d.wnt); if (d && d.xm) Object.assign(XM, d.xm); })(townLoad);
+
+// ---------- cone.js: 보너스 미니게임 「콘 작전」 (메인 스토리 엔딩 후 열림) ----------
+// 꼬리 숨기는 고깔콘을 쓰고 마을 길 건너기! 수레·트랙터·오리 자전거를 피해 맨 위 친구들에게 도착하면 1점
+// 조작: 위/아래/좌/우(화면 누르기: 위쪽=앞으로, 아래쪽=뒤로, 왼쪽·오른쪽 끝=옆으로) · C 또는 🚧 버튼 = 콘 변신(2초 동안 다들 천천히)
+const CONE = { best: 0, d: 0, paid: 0, plays: 0 };
+const CONE_ROWS = 8, CONE_COLS = 9;
+const CONE_CARS = [{ k: 'cart', w: 1.6, col: '#c98a5a', sp: 1.6 }, { k: 'tractor', w: 1.9, col: '#e2443b', sp: 1.1 }, { k: 'bike', w: 1.0, col: '#7fcaf2', sp: 2.4 }, { k: 'wagon', w: 2.4, col: '#9be37a', sp: 1.3 }];
+function coneOpen() { return (typeof MSTORY !== 'undefined' && MSTORY.fin) || window.__coneOpen; }
+function coneLanes(lv) { const L = []; for (let r = 1; r < CONE_ROWS - 1; r++) { if (r === 4) { L.push({ r, safe: 1, cars: [] }); continue; } const def = CONE_CARS[(r * 3 + lv) % CONE_CARS.length], dir = r % 2 ? 1 : -1, sp = def.sp * (1 + lv * .14) * (.85 + ((r * 7) % 5) * .08), n = def.w > 2 ? 2 : 3, cars = [];
+    for (let i = 0; i < n; i++) cars.push({ x: (i / n) * (CONE_COLS + 3) - 1.5 + (r % 3) * .7, w: def.w, col: def.col, k: def.k }); L.push({ r, dir, sp, cars }); } return L; }
+function coneReset(m) { m.px = Math.floor(CONE_COLS / 2); m.py = CONE_ROWS - 1; m.hop = 0; }
+MINIS.cone = { create() { const m = { st: 'intro', score: 0, lives: 3, lv: 0, cone: 0, cd: 0, hurt: 0, msg: '', t: 0, update: coneUpdate, draw: coneDraw, tap: coneTap, key: coneKey, exit() { coneEnd(this, true); } }; m.lanes = coneLanes(0); coneReset(m); return m; } };
+function coneMove(m, dx, dy) { if (m.st === 'intro') { m.st = 'play'; return; } if (m.st === 'end') { Object.assign(m, MINIS.cone.create()); m.st = 'play'; return; } if (m.st !== 'play' || m.hurt > 0) return;
+  const nx = Math.max(0, Math.min(CONE_COLS - 1, m.px + dx)), ny = Math.max(0, Math.min(CONE_ROWS - 1, m.py + dy)); if (nx === m.px && ny === m.py) return; m.px = nx; m.py = ny; m.hop = .14; sfx('blip');
+  if (m.py === 0) { m.score++; m.lv++; sfx('star'); m.msg = ['도착! 아무도 몰랐다!', '콘인 줄 알았대!', '삐약~ 무사 통과!', '꼬리 안 들켰다!'][m.score % 4]; m.mt = 1.2; m.lanes = coneLanes(m.lv); coneReset(m); } }
+function coneCone(m) { if (m.st !== 'play' || m.cd > 0) return; m.cone = 2; m.cd = 5; sfx('pick'); m.msg = '나는… 그냥 고깔콘이다…'; m.mt = 1.4; }
+function coneKey(k) { const m = mini; if (['arrowup', 'w'].includes(k)) coneMove(m, 0, -1); else if (['arrowdown', 's'].includes(k)) coneMove(m, 0, 1); else if (['arrowleft', 'a'].includes(k)) coneMove(m, -1, 0); else if (['arrowright', 'd'].includes(k)) coneMove(m, 1, 0); else if (k === 'c') coneCone(m); }
+function coneTap(x, y) { const m = mini, B = miniBox(), cb = m.coneBtn; if (cb && Math.hypot(x - cb.x, y - cb.y) < cb.r * 1.3) { coneCone(m); return; }
+  const G = m.grid; if (!G) { m.press = 1; return; } const rx = (x - G.x) / G.w; if (rx < .2) coneMove(m, -1, 0); else if (rx > .8) coneMove(m, 1, 0); else if (y < G.y + (m.py + .5) * G.ch) coneMove(m, 0, -1); else coneMove(m, 0, 1); }
+function coneUpdate(dt) { const m = mini; if (m.press) { m.press = 0; coneMove(m, 0, -1); } m.t += dt; if (m.hop > 0) m.hop -= dt; if (m.mt > 0) m.mt -= dt; if (m.st !== 'play') return;
+  if (m.cone > 0) m.cone -= dt; if (m.cd > 0) m.cd -= dt; if (m.hurt > 0) { m.hurt -= dt; if (m.hurt <= 0) coneReset(m); return; }
+  const slow = m.cone > 0 ? .3 : 1;
+  for (const L of m.lanes) { if (L.safe) continue; for (const c of L.cars) { c.x += L.dir * L.sp * slow * dt; const span = CONE_COLS + 3; if (L.dir > 0 && c.x > CONE_COLS + 1.5) c.x -= span; if (L.dir < 0 && c.x + c.w < -1.5) c.x += span; }
+    if (L.r === m.py) for (const c of L.cars) if (m.px + .78 > c.x && m.px + .22 < c.x + c.w) { m.lives--; m.hurt = .9; sfx('bonk'); m.msg = ['앗! 콘이 날아갔다!', '빵빵! 꼬리 들켰다!', '으앗 미끄러졌다!'][m.lives % 3]; m.mt = 1.2; if (m.lives <= 0) { m.st = 'end'; m.hurt = 0; coneEnd(m, false); } break; } } }
+function coneEnd(m, quit) { if (m.ended) { if (quit) endMini(); return; } m.ended = 1; CONE.plays++; const d = dayKey(); if (CONE.d !== d) { CONE.d = d; CONE.paid = 0; }
+  const rew = Math.min(m.score * 2, Math.max(0, 30 - CONE.paid)); if (rew > 0) { CONE.paid += rew; hearts += rew; } m.rew = rew; const nb = m.score > CONE.best; if (nb) CONE.best = m.score; m.nb = nb && m.score > 0; stat('cone');
+  if (quit) endMini(); else save(); }
+function coneDraw() { const m = mini, B = miniFrame('콘 작전', '#ffe9a8'), u = B.u;
+  const top = B.y + u * 3, bot = B.y + B.h - u * 2.6, availH = bot - top, cw = Math.min((B.w - u * 2) / CONE_COLS, availH / CONE_ROWS), ch = cw, gw = cw * CONE_COLS, gh = ch * CONE_ROWS, gx = B.x + (B.w - gw) / 2, gy = top + (availH - gh) / 2; m.grid = { x: gx, y: gy, w: gw, h: gh, ch };
+  ctx.save(); rr(gx, gy, gw, gh, u * .6); ctx.clip();
+  for (let r = 0; r < CONE_ROWS; r++) { const y = gy + r * ch, L = m.lanes.find(q => q.r === r); ctx.fillStyle = r === 0 ? '#9be37a' : r === CONE_ROWS - 1 ? '#bfe08a' : L && L.safe ? '#d9c8a4' : '#6b6670'; ctx.fillRect(gx, y, gw, ch);
+    if (L && !L.safe) { ctx.fillStyle = 'rgba(255,255,255,.55)'; for (let i = 0; i < CONE_COLS; i++) ctx.fillRect(gx + i * cw + cw * .3, y + ch - 2 * DPR, cw * .4, 2 * DPR); } }
+  // 횡단보도 줄무늬 (가운데)
+  ctx.fillStyle = 'rgba(255,255,255,.2)'; for (let r = 1; r < CONE_ROWS - 1; r++) ctx.fillRect(gx + gw / 2 - cw * .5, gy + r * ch + ch * .15, cw, ch * .7);
+  // 위쪽 친구들
+  for (let i = 0; i < 3; i++) { const fx = gx + gw * (.25 + i * .25), fy = gy + ch * .8; ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(fx, fy - ch * .3, ch * .26, 0, 6.29); ctx.fill(); ctx.fillStyle = '#f08a24'; ctx.beginPath(); ctx.moveTo(fx - ch * .06, fy - ch * .3); ctx.lineTo(fx + ch * .08, fy - ch * .26); ctx.lineTo(fx - ch * .06, fy - ch * .22); ctx.fill(); ctx.fillStyle = '#33222a'; ctx.fillRect(fx - ch * .1, fy - ch * .38, 2 * DPR, 2 * DPR); }
+  // 탈것
+  for (const L of m.lanes) { if (L.safe) continue; const y = gy + L.r * ch; for (const c of L.cars) { const x = gx + c.x * cw, w = c.w * cw; ctx.fillStyle = 'rgba(0,0,0,.2)'; rr(x + 2 * DPR, y + ch * .2 + 3 * DPR, w, ch * .6, ch * .15); ctx.fill(); ctx.fillStyle = c.col; rr(x, y + ch * .18, w, ch * .58, ch * .15); ctx.fill();
+      ctx.fillStyle = '#33222a'; for (const wx of [.2, .8]) { ctx.beginPath(); ctx.arc(x + w * wx, y + ch * .78, ch * .12, 0, 6.29); ctx.fill(); }
+      ctx.fillStyle = 'rgba(255,255,255,.7)'; const fx = L.dir > 0 ? x + w - ch * .22 : x + ch * .08; ctx.fillRect(fx, y + ch * .28, ch * .14, ch * .16);
+      if (c.k === 'bike') { ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x + w * .5, y + ch * .2, ch * .16, 0, 6.29); ctx.fill(); } if (c.k === 'tractor') { ctx.fillStyle = '#33222a'; ctx.fillRect(x + w * (L.dir > 0 ? .15 : .7), y + ch * .02, ch * .1, ch * .2); } } }
+  // 안노랑 + 콘
+  { const x = gx + (m.px + .5) * cw, y = gy + (m.py + 1) * ch - ch * .12 - (m.hop > 0 ? Math.sin(m.hop / .14 * Math.PI) * ch * .25 : 0); if (!(m.hurt > 0 && Math.floor(m.hurt * 12) % 2)) {
+      if (m.cone > 0) { ctx.fillStyle = '#ff8a2a'; ctx.beginPath(); ctx.moveTo(x, y - ch * .95); ctx.lineTo(x - ch * .36, y); ctx.lineTo(x + ch * .36, y); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(x - ch * .2, y - ch * .5, ch * .4, ch * .1); ctx.fillRect(x - ch * .28, y - ch * .25, ch * .56, ch * .1); ctx.fillStyle = '#ff8a2a'; ctx.fillRect(x - ch * .42, y - ch * .06, ch * .84, ch * .08); }
+      else { try { sprImg(annoImg(m.py < CONE_ROWS - 1 ? 'back' : 'front'), x, y, Math.max(2, ch / 18)); } catch (e) { ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x, y - ch * .4, ch * .32, 0, 6.29); ctx.fill(); }
+        ctx.fillStyle = '#ff8a2a'; ctx.beginPath(); ctx.moveTo(x, y - ch * 1.12); ctx.lineTo(x - ch * .18, y - ch * .72); ctx.lineTo(x + ch * .18, y - ch * .72); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillRect(x - ch * .1, y - ch * .92, ch * .2, ch * .06); } } }
+  ctx.restore();
+  // 상단 정보
+  text(`점수 ${m.score} · 최고 ${CONE.best}`, B.x + u * 1.2, B.y + u * 2.4, u * .7, '#5a3a26'); text('♥'.repeat(Math.max(0, m.lives)) + '♡'.repeat(Math.max(0, 3 - m.lives)), B.x + B.w - u * 4.2, B.y + u * 2.4, u * .8, '#e2443b', 'right');
+  // 콘 변신 버튼
+  { const r = u * 1.3, x = B.x + B.w - u * 2, y = B.y + B.h - u * 1.6; m.coneBtn = { x, y, r }; ctx.fillStyle = m.cd > 0 ? '#c8c0c8' : '#ff8a2a'; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.29); ctx.fill(); ctx.strokeStyle = '#33222a'; ctx.lineWidth = 2 * DPR; ctx.stroke(); text('🚧', x, y + 1, r * .9, '#33222a', 'center'); if (m.cd > 0) text(Math.ceil(m.cd) + '', x, y - r * 1.3, u * .6, '#5a3a26', 'center'); }
+  const hint = TOUCH() ? '위쪽 누르면 앞으로 · 양옆 끝은 옆으로 · 🚧 콘 변신' : '방향키 이동 · C 콘 변신(다들 천천히!)'; fitText(m.mt > 0 && m.msg ? m.msg : hint, B.x + u * 1.2, B.y + B.h - u * 1.4, u * .66, m.mt > 0 ? '#e2443b' : '#5a3a26', B.w - u * 5.5, 'left');
+  if (m.st === 'intro' || m.st === 'end') { ctx.fillStyle = 'rgba(255,249,236,.94)'; rr(B.x + u * 2, B.y + B.h * .3, B.w - u * 4, B.h * .38, u); ctx.fill(); const cx = B.x + B.w / 2; let y = B.y + B.h * .3 + u * 1.8;
+    if (m.st === 'intro') { text('콘 작전!', cx, y, u * 1.4, '#e2443b', 'center', true); y += u * 1.8; fitText('고깔콘으로 꼬리를 숨기고 길을 건너자', cx, y, u * .75, '#5a3a26', B.w - u * 5, 'center'); y += u * 1.2; fitText('콘 변신하면 2초 동안 다들 천천히 지나가요', cx, y, u * .7, '#8a6a5a', B.w - u * 5, 'center'); y += u * 1.6; text(TOUCH() ? '눌러서 시작' : 'Z로 시작', cx, y, u * .8, '#2f6e9e', 'center', true); }
+    else { text(m.nb ? '최고 기록!' : '작전 끝!', cx, y, u * 1.3, m.nb ? '#e2443b' : '#33222a', 'center', true); y += u * 1.7; text(`건넌 횟수 ${m.score}`, cx, y, u * .85, '#5a3a26', 'center'); y += u * 1.2; text(m.rew ? `별사탕 ✦+${m.rew}` : '오늘 받을 별사탕은 다 받았어요', cx, y, u * .7, '#8a6a5a', 'center'); y += u * 1.5; text(TOUCH() ? '눌러서 다시' : 'Z로 다시', cx, y, u * .8, '#2f6e9e', 'center', true); } } }
+// 노랑폰 앱
+{ const i = APPS.findIndex(a => a.id === 'photo'); APPS.splice(Math.max(0, i), 0, { id: 'cone', name: '콘 작전', ico: '🚧', col: '#ffb347', go: () => { if (!coneOpen()) { toast('🔒 메인 스토리를 끝까지 보면 열려요'); sfx('bonk'); return; } phone = null; startMini('cone'); } }); }
+townSave = (orig => () => Object.assign(orig(), { cone: CONE }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.cone) Object.assign(CONE, d.cone); })(townLoad);
 
 // ================= 3D DIORAMA RENDERER (Link's Awakening remake style) =================
 // Game logic stays 2D (pixels, 16px per tile). World: X = px/16, Z = py/16, Y = up.
