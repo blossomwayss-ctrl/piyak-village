@@ -1240,16 +1240,16 @@ function update(dt) {
     if (n.homeX === undefined) { n.homeX = n.hx; n.homeY = n.hy; n.tripT = 12 + Math.random() * 30; }
     n.tripT -= dt;
     if (n.tripT <= 0 && !curRoom.dungeon) {
-      if (n.onTrip) { n.hx = n.homeX; n.hy = n.homeY; n.onTrip = false; n.tripT = 25 + Math.random() * 35; n.wait = 0; }
+      if (n.onTrip) { n.hx = n.homeX; n.hy = n.homeY; n.onTrip = false; n.tripT = 12 + Math.random() * 18; n.wait = 0; }
       else { const HG = typeof hangouts === 'function' ? hangouts() : HANGOUTS, sp = HG[Math.floor(Math.random() * HG.length)], tx = sp[0] * T, ty = sp[1] * T, d0 = Math.hypot(tx - n.x, ty - n.y); let ok = d0 > 40 && d0 < 22 * T;
         for (let k = 1; ok && k < 24; k++) { const f = k / 24; if (!boxFree(n.x + (tx - n.x) * f, n.y + (ty - n.y) * f, 5, 2)) ok = false; }
         if (ok) { n.hx = tx; n.hy = ty; n.onTrip = true; n.tripT = 14 + Math.random() * 16; n.tx = tx; n.ty = ty; n.wait = 6; } else n.tripT = 6 + Math.random() * 8; }
     }
     n.wait -= dt;
-    if (n.wait <= 0) { n.wait = 2 + Math.random() * 4; const a = Math.random() * 6.28; const rr = n.wander * 2.6 * (.35 + Math.random() * .65); n.tx = n.hx + Math.cos(a) * rr; n.ty = n.hy + Math.sin(a) * rr * .75; }
+    if (n.wait <= 0) { n.wait = 1.2 + Math.random() * 2.6; const a = Math.random() * 6.28; const rr = n.wander * 3.4 * (.35 + Math.random() * .65); n.tx = n.hx + Math.cos(a) * rr; n.ty = n.hy + Math.sin(a) * rr * .75; }
     const dx = n.tx - n.x, dy = n.ty - n.y, d = Math.hypot(dx, dy);
     const near = Math.hypot(P.x - n.x, P.y - n.y) < 30;
-    if (d > 1 && !near) { const s = 19 * dt / d; const nx = n.x + dx * s, ny = n.y + dy * s; if (boxFree(nx, ny, 5, 2)) { n.x = nx; n.y = ny; n.face = dx > 0 ? 1 : -1; n.walking = true; } else { n.tx = n.x; n.ty = n.y; } }
+    if (d > 1 && !near) { const s = 25 * dt / d; const nx = n.x + dx * s, ny = n.y + dy * s; if (boxFree(nx, ny, 5, 2)) { n.x = nx; n.y = ny; n.face = dx > 0 ? 1 : -1; n.walking = true; } else { n.tx = n.x; n.ty = n.y; } }
     else n.walking = false;
     if (near) n.face = P.x < n.x ? -1 : 1;
   }
@@ -8818,6 +8818,282 @@ drawEnemy = (o => e => { const D = ENEMY[e.kind]; if (!['seedflower', 'boarlet',
 // 도감·팁
 TIPS.mobs2 = { ico: '⚔️', t: '새 장난꾸러기!', l: () => ['씨앗 쏘는 녀석: 근거리는 꼬리로 튕겨내기, 원거리는 멀리서 쏘기', '돌진하는 녀석: 붉은 줄을 피하면 헥헥(약점 1.5배) · 방패 게는 뒤나 멀리서!'] };
 { let t = 0; updateTown = (o => dt => { o(dt); if ((t -= dt) > 0) return; t = 1; if (enemies.some(e => ENEMY[e.kind] && (ENEMY[e.kind].ai || ENEMY[e.kind].shield) && (!e.room || e.room === curRoom.id) && Math.hypot(e.x - P.x, e.y - P.y) < 200)) tip('mobs2'); })(updateTown); }
+
+// ---------- skills.js: 레벨별 스킬 트리 ----------
+// 레벨 업마다 스킬 포인트 1개 (Lv.N이면 총 N−1개). 공통 트리는 항상 적용, 직업 트리는 그 직업일 때만 적용.
+// 각 스킬은 '배울 수 있는 레벨'이 있고, 같은 트리의 앞 단계를 1개 이상 배워야 다음 단계가 열려요.
+// 초기화: ✦30 (포인트 전부 돌려받기)
+const SK_RESET = 30;
+const SKT = {
+  common: { name: '공통', ico: '🦖', col: '#ffd23f', list: [
+    { id: 'c_hp', name: '튼튼한 몸', lv: 2, max: 3, d: r => `최대 용기 +${r}` },
+    { id: 'c_dodge', name: '날쌘 구르기', lv: 4, max: 2, d: r => `구르기 대기 시간 −${r * 15}%` },
+    { id: 'c_crit', name: '급소 찾기', lv: 6, max: 3, d: r => `치명타 확률 +${r * 4}%` },
+    { id: 'c_luck', name: '행운의 꼬리', lv: 9, max: 2, d: r => `재료·하트 드롭 +${r * 8}%` },
+    { id: 'c_heal', name: '회복 체질', lv: 12, max: 2, d: r => `장난꾸러기를 놀래 주면 ${r * 12}% 확률로 용기 +1` },
+  ] },
+  warrior: { name: '전사', ico: '⚔️', col: '#ff8f6b', list: [
+    { id: 'w_power', name: '꼬리 근육', lv: 3, max: 3, d: r => `근거리 데미지 +${r * 8}%` },
+    { id: 'w_combo', name: '연타 달인', lv: 5, max: 2, d: r => `3타 회전 베기 데미지 +${r * 2}` },
+    { id: 'w_parry', name: '튕겨내기 반격', lv: 9, max: 1, d: () => '튕겨낸 씨앗이 가까운 적에게 되돌아가요' },
+    { id: 'w_roar', name: '우렁찬 어흥', lv: 14, max: 2, d: r => `어흥 대기 시간 −${r * 1.5}초` },
+    { id: 'w_ult', name: '공룡의 분노', lv: 20, max: 1, d: () => '용기가 절반 이하면 데미지 +30%' },
+  ] },
+  archer: { name: '궁수', ico: '🏹', col: '#c98a5a', list: [
+    { id: 'a_power', name: '정조준', lv: 3, max: 3, d: r => `화살 데미지 +${r * 8}%` },
+    { id: 'a_rapid', name: '속사', lv: 5, max: 3, d: r => `연사 속도 +${r * 8}%` },
+    { id: 'a_range', name: '매의 눈', lv: 9, max: 2, d: r => `사거리 +${r * 30}` },
+    { id: 'a_multi', name: '두 번 쏘기', lv: 14, max: 2, d: r => `${r * 25}% 확률로 화살 한 발 더` },
+    { id: 'a_ult', name: '관통 화살', lv: 20, max: 1, d: () => '모든 화살이 꿰뚫고 지나가요' },
+  ] },
+  mage: { name: '마법사', ico: '🪄', col: '#c9b6ff', list: [
+    { id: 'm_power', name: '별가루 농축', lv: 3, max: 3, d: r => `마법 데미지 +${r * 8}%` },
+    { id: 'm_boom', name: '큰 폭발', lv: 5, max: 3, d: r => `폭발 범위 +${r * 6}` },
+    { id: 'm_slow', name: '얼음 별', lv: 9, max: 1, d: () => '마법에 맞은 적이 1.5초 느릿느릿' },
+    { id: 'm_cd', name: '별비 연습', lv: 14, max: 2, d: r => `별비 대기 시간 −${r * 1.5}초` },
+    { id: 'm_ult', name: '유성우', lv: 20, max: 1, d: () => '별비를 쓰면 주변에 유성 6개가 쾅쾅' },
+  ] },
+  cook: { name: '요리사', ico: '🍳', col: '#ffab2e', list: [
+    { id: 'k_power', name: '국자 휘두르기', lv: 3, max: 3, d: r => `근거리 데미지 +${r * 8}%` },
+    { id: 'k_stun', name: '콩! 콩!', lv: 5, max: 3, d: r => `국자 멈칫 시간 +${(r * .2).toFixed(1)}초` },
+    { id: 'k_snack', name: '든든한 간식', lv: 9, max: 2, d: r => `간식 던지기 회복 +${r}` },
+    { id: 'k_taste', name: '맛보기', lv: 14, max: 2, d: r => `근거리로 맞히면 ${r * 6}% 확률로 용기 +1` },
+    { id: 'k_ult', name: '만찬', lv: 20, max: 1, d: () => '간식 던지기 때 주변 적 2초 기절 · 힘 버프 2배' },
+  ] },
+};
+const SK = { r: {} };
+const SK_BY = {}; for (const t in SKT) SKT[t].list.forEach((s, i) => SK_BY[s.id] = Object.assign(s, { tree: t, i }));
+function skR(id) { return SK.r[id] || 0; }
+function skOn(id) { const s = SK_BY[id]; return s.tree === 'common' || s.tree === jobOf() ? skR(id) : 0; }  // 지금 적용되는 랭크
+function skSpent() { let n = 0; for (const k in SK.r) n += SK.r[k]; return n; }
+function skPoints() { return Math.max(0, (LVL.lv - 1) - skSpent()); }
+function skState(s) { const r = skR(s.id); if (r >= s.max) return 'max'; if (LVL.lv < s.lv) return 'lv'; if (s.i > 0 && !skR(SKT[s.tree].list[s.i - 1].id)) return 'prev'; if (!skPoints()) return 'pt'; return 'ok'; }
+function skLearn(s) { const st = skState(s); if (st !== 'ok') { pmsg(st === 'max' ? '이미 다 배웠어요' : st === 'lv' ? `Lv.${s.lv}부터 배울 수 있어요` : st === 'prev' ? '앞 단계를 먼저 배워요' : '스킬 포인트가 없어요 · 레벨 업하면 +1', 1); return; }
+  SK.r[s.id] = skR(s.id) + 1; sfx('star'); burst(P.x, P.y - 20, SKT[s.tree].col, 14); pmsg(`${s.name} ${SK.r[s.id]}단계!`); if (s.id === 'c_hp') hp = Math.min(maxHp(), hp + 1); save(); }
+function skReset() { if (!skSpent()) return pmsg('배운 스킬이 없어요', 1); if (hearts < SK_RESET) return pmsg(`초기화는 ✦${SK_RESET}이 필요해요`, 1); hearts -= SK_RESET; SK.r = {}; hp = Math.min(hp, maxHp()); sfx('blip'); pmsg('스킬을 모두 돌려받았어요'); save(); }
+
+// ===== 효과 연결 =====
+maxHp = (o => () => o() + skR('c_hp'))(maxHp);
+dodge = (o => () => { const ok = o(); if (ok && skR('c_dodge')) HUNT.dodgeCD *= 1 - .15 * skR('c_dodge'); return ok; })(dodge);
+{ const base = { crit: CB.crit, dropK: CB.dropK, heartK: CB.heartK, mw: CB.melee.warrior, mc: CB.melee.cook, ak: CB.archer.k, ac: CB.archer.cool, ar: CB.archer.range, mk: CB.mage.k, mb: CB.mage.boom };
+  const def = (o, k, f) => Object.defineProperty(o, k, { get: f, configurable: true });
+  def(CB, 'crit', () => base.crit + .04 * skR('c_crit'));
+  def(CB, 'dropK', () => base.dropK * (1 + .08 * 2 * skR('c_luck')));   // 0.5 기준이라 +8%p ≈ ×(1+0.16)
+  def(CB, 'heartK', () => base.heartK * (1 + .08 * 2 * skR('c_luck')));
+  const rage = () => skOn('w_ult') && hp <= maxHp() / 2 ? 1.3 : 1;
+  def(CB.melee, 'warrior', () => base.mw * (1 + .08 * skOn('w_power')) * rage());
+  def(CB.melee, 'cook', () => base.mc * (1 + .08 * skOn('k_power')));
+  def(CB.archer, 'k', () => base.ak * (1 + .08 * skOn('a_power')));
+  def(CB.archer, 'cool', () => base.ac / (1 + .08 * skOn('a_rapid')));
+  def(CB.archer, 'range', () => base.ar + 30 * skOn('a_range'));
+  def(CB.mage, 'k', () => base.mk * (1 + .08 * skOn('m_power')));
+  def(CB.mage, 'boom', () => base.mb + 6 * skOn('m_boom')); }
+// 회전 베기 · 얼음 별 · 국자 · 맛보기
+hitEnemy = (o => (e, dmg) => { const j = jobOf(), shot = !!SHOT_HIT;
+  if (j === 'warrior' && !shot && HUNT.combo === 0 && P.spin > .5 && skOn('w_combo')) dmg += 2 * skOn('w_combo');
+  o(e, dmg); if (!enemies.includes(e)) return;
+  if (j === 'mage' && shot && skOn('m_slow')) { e.slow = Math.max(e.slow || 0, 1.5); }
+  if (j === 'cook' && !shot) { if (skOn('k_stun')) e.stun = (e.stun || 0) + .2 * skOn('k_stun'); if (skOn('k_taste') && Math.random() < .06 * skOn('k_taste') && hp < maxHp()) healP(1); } })(hitEnemy);
+killEnemy = (o => e => { o(e); if (skR('c_heal') && hp < maxHp() && Math.random() < .12 * skR('c_heal')) healP(1); })(killEnemy);
+// 튕겨내기 반격
+swipe = (o => () => { if (!skOn('w_parry')) return o(); const before = EBUL.slice(); o(); for (const b of before) { if (EBUL.includes(b)) continue; const t = nearestShot(220); if (!t) continue; const a = Math.atan2(t.y - b.y, t.x - b.x);
+    SHOTS.push({ x: b.x, y: b.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, spd: 300, left: 220, dmg: atkOf(), col: b.col, kind: 'arrow' }); } })(swipe);
+// 두 번 쏘기 · 관통
+fire = (o => opt => { if (jobOf() === 'archer' && opt.kind === 'arrow' && !opt.pierce && skOn('a_ult')) opt = Object.assign({}, opt, { pierce: true });
+  o(opt); if (jobOf() === 'archer' && opt.kind === 'arrow' && !opt._x && Math.random() < .25 * skOn('a_multi')) { const o2 = Object.assign({}, opt, { _x: 1 }); setTimeout(() => { if (state === 'play') { o(o2); sfx('blip'); } }, 110); } })(fire);
+// 직업 기술 강화
+roar = (o => () => { o(); if (skOn('w_roar')) HUNT.roarCD = Math.max(1, HUNT.roarCD - 1.5 * skOn('w_roar')); })(roar);
+jobSkill = (o => () => { const j = jobOf(), cd0 = HUNT.roarCD; o(); const used = HUNT.roarCD > cd0 + .01; if (!used) return;
+  if (j === 'mage') { if (skOn('m_cd')) HUNT.roarCD = Math.max(1, HUNT.roarCD - 1.5 * skOn('m_cd'));
+    if (skOn('m_ult')) for (let i = 0; i < 6; i++) setTimeout(() => { if (state !== 'play') return; const a = Math.random() * 6.28, d = 30 + Math.random() * 70, x = P.x + Math.cos(a) * d, y = P.y + Math.sin(a) * d * .7; SHOT_HIT = 1; try { smack(x, y, 26, 0, atkOf() + 1); } finally { SHOT_HIT = 0; } fx({ k: 'boom', x, y, r: 30, col: ['#ffe066', '#c9b6ff', '#ff8fb5'][i % 3], d: .4 }); shake(1.5, .1); sfx('pop'); }, 250 + i * 140); }
+  if (j === 'cook') { if (skOn('k_snack')) healP(skOn('k_snack')); if (skOn('k_ult')) { buffs.atk = Math.max(buffs.atk || 0, 16); for (const e of enemies) if ((!e.room || e.room === curRoom.id) && Math.hypot(e.x - P.x, e.y - P.y) < 100) { e.stun = Math.max(e.stun || 0, 2); floaters.push({ x: e.x, y: e.y - 26, t: 1, text: '냠?', col: '#ffab2e' }); } fx({ k: 'circle', x: P.x, y: P.y, d: .5, col: '#ffab2e' }); } } })(jobSkill);
+
+// ===== 레벨 업 알림 =====
+gainXp = (o => (n, x, y, silent) => { const lv0 = LVL.lv; o(n, x, y, silent); if (!silent && LVL.lv > lv0) setTimeout(() => { toast(`🌳 스킬 포인트 +${LVL.lv - lv0} · 노랑폰 > 스킬`); tip('skills'); }, 1600);
+  const nw = Object.values(SK_BY).filter(s => s.lv > lv0 && s.lv <= LVL.lv); if (!silent && nw.length) setTimeout(() => toast(`새 스킬 열림: ${nw.map(s => s.name).join(', ')}`), 3400); })(gainXp);
+TIPS.skills = { ico: '🌳', t: '스킬 트리', l: () => ['레벨 업마다 스킬 포인트 1개 · 노랑폰 > 스킬', '공통은 항상, 직업 스킬은 그 꼬리 무기를 낄 때 적용'] };
+
+// ===== 화면: 노랑폰 > 스킬 =====
+const SK_TABS = ['common', 'warrior', 'archer', 'mage', 'cook'];
+function openSkills(tree) { const t = tree || jobOf(); menu = { kind: 'skills', title: '스킬 트리', tabs: SK_TABS.map(k => `${SKT[k].ico} ${SKT[k].name}`), tab: Math.max(0, SK_TABS.indexOf(t)), sel: 0, page: 0 }; sfx('blip'); }
+function skEntries(m) { const t = SK_TABS[m.tab] || 'common', T0 = SKT[t], E = [], pt = skPoints(), cur = t === 'common' || t === jobOf();
+  E.push({ name: `남은 스킬 포인트 ${pt}  ·  Lv.${LVL.lv}`, desc: t === 'common' ? '공통 스킬은 어떤 직업이든 항상 적용돼요' : cur ? `지금 ${T0.name}! 이 트리가 적용 중이에요` : `${T0.name} 꼬리 무기를 끼면 적용돼요 (지금은 ${JOBS[jobOf()].name})`, tag: pt ? `${pt}P` : '', col: pt ? '#ffd23f' : '#d9cbb5', act: () => { } });
+  for (const s of T0.list) { const r = skR(s.id), st = skState(s), bar = '●'.repeat(r) + '○'.repeat(s.max - r);
+    E.push({ name: `${s.i ? '└ ' : ''}${s.name}  ${bar}`, desc: `${s.d(Math.max(1, r + (r < s.max ? 1 : 0)))}${r && r < s.max ? `  (지금: ${s.d(r)})` : ''} · Lv.${s.lv}`,
+      tag: st === 'max' ? '완료' : st === 'lv' ? `🔒 Lv.${s.lv}` : st === 'prev' ? '🔒 앞 단계' : st === 'pt' ? '포인트 부족' : '배우기 1P', col: st === 'max' ? '#9be37a' : st === 'ok' ? T0.col : '#d9cbb5', act: () => skLearn(s) }); }
+  if (t === 'common') E.push({ name: '스킬 초기화', desc: `배운 스킬을 모두 돌려받아요 (사용한 포인트 ${skSpent()})`, tag: `✦ ${SK_RESET}`, col: skSpent() && hearts >= SK_RESET ? '#ff8fa3' : '#d9cbb5', act: () => skReset() });
+  return E; }
+townEntries = (orig => m => m.kind === 'skills' ? skEntries(m) : orig(m))(townEntries);
+panelEntries = (orig => () => menu && menu.kind === 'skills' ? skEntries(menu) : orig())(panelEntries);
+{ const i = APPS.findIndex(a => a.id === 'bag'); APPS.splice(i + 1, 0, { id: 'skills', name: '스킬', ico: '🌳', col: '#9be37a', go: () => { phone = null; openSkills(); } }); }
+// 폰 아이콘 빨간 점: 남은 포인트가 있으면
+if (typeof appBadge === 'function') appBadge = (o => id => id === 'skills' ? skPoints() > 0 : o(id))(appBadge);
+// 세이브
+townSave = (orig => () => Object.assign(orig(), { sk: SK.r }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.sk) SK.r = Object.assign({}, d.sk); })(townLoad);
+
+// ---------- shop.js: 상점 디테일 · 팔기/모두 팔기 정리 ----------
+// · 모든 상점 '팔기' 탭 통일: 종류별 정렬 · 1개씩/몽땅 팔기 전환 · 모두 팔기(두 번 눌러 확인)
+// · 모두 팔기에서 빠지는 것: 장비 · 소모품 · 인형 · 박물관에 아직 기증 안 한 생물 · 지금 낀 장비
+// · 오늘 비싸게 사요: 날마다 한 종류 +30%
+// · 오늘의 특가: 상점마다 하루 한 품목 30% 할인 (하루 3개까지)
+// · 주인 인사말(시간대별) · 사면 주인이 하트
+const SHOPS = {
+  shop: { keeper: '너구리 사장', id: 'raccoon', sellTab: 4, pool: () => ['pot_red', 'bread', 'tomato', 'feather', 'seed_carrot'], col: '#c98a5a',
+    hi: { m: ['아침부터 왔구나! 오늘 물건 싱싱해~', '일찍 일어난 공룡이 특가를 잡는 법이지!'], d: ['어서 와! 천천히 구경해~', '꼬리로 물건 쓸지 않게 조심! 헤헤'], e: ['저녁이네~ 오늘 마지막 손님이야!', '문 닫기 전에 떨이 할까?'], n: ['쉿… 야간 영업이야. 몰래 왔지?'] } },
+  wvshop: { keeper: '수달 사장', sellTab: 3, vil: 'water', col: '#7fcaf2', hi: { m: ['꽥~ 아침 물안개 좋지? 어서 와!'], d: ['물가 특산품 구경해! 조개는 오늘 아침에 캔 거야'], e: ['노을 질 땐 물총이 반짝반짝해~'], n: ['밤엔 반딧불이가 손님이지 뭐~'] } },
+  cvshop: { keeper: '파카 아저씨', sellTab: 3, vil: 'cloud', col: '#c9b6ff', hi: { m: ['음머~ 구름 위 아침은 상쾌하지!'], d: ['털실은 내 털로 짰어. 진짜야, 음머~'], e: ['노을빛 구름 솜사탕 먹어 봤니?'], n: ['밤엔 별이 가까워서 장사가 잘 돼~'] } },
+  svshop: { keeper: '뒤뚱 사장', sellTab: 3, vil: 'snow', col: '#bfe8ff', hi: { m: ['뒤뚱~ 아침 눈은 뽀드득!'], d: ['핫팩 하나 사 가! 덜덜 떨잖아!'], e: ['저녁엔 오로라 보러 가야 해~'], n: ['펭귄은 밤에도 영업한다, 뒤뚱!'] } },
+};
+const SHOPX = { d: 0, deal: {}, dealN: {}, mode: 'one', confirm: 0, sold: 0, earned: 0 };
+function shopDaily() { const d = dayKey(); if (SHOPX.d !== d) { SHOPX.d = d; SHOPX.deal = {}; SHOPX.dealN = {}; SHOPX.sold = 0; SHOPX.earned = 0; } }
+function shopKey(m) { return m && SHOPS[m.kind] ? m.kind : null; }
+function shopHi(k) { const H = SHOPS[k].hi, h = envHour(), p = h >= 5 && h < 11 ? H.m : h < 17 ? H.d : h < 21 ? H.e : H.n; return p[(dayKey() + Math.floor(time / 20)) % p.length]; }
+// 종류
+const SELL_CATS = ['요리', '작물', '물고기', '곤충', '재료', '소모품', '장비', '기타'];
+const FARM_GOODS = ['egg', 'milk', 'wool', 'honey', 'goldegg', 'gold_egg', 'apple', 'acorn', 'mushroom'];
+function sellCat(id) { const it = ITEMS[id]; if (!it) return '기타'; if (it.dish || (typeof COOK !== 'undefined' && COOK.some(r => r.out === id))) return '요리'; if (it.type === 'crit') { const c = CRIT[id]; return c && c.kind === 'fish' ? '물고기' : '곤충'; }
+  if (it.type === 'eq') return '장비'; if ((typeof SEEDS !== 'undefined' && SEEDS[id]) || FARM_GOODS.includes(id)) return '작물'; if (it.type === 'use') return '소모품'; if (it.type === 'mat' || it.type === 'crop' || !it.type) return '재료'; return '기타'; }
+// 작물: 상점에서 파는 값이 파는 값보다 싸면 올려요 (사서 되팔기 방지)
+for (const id in ITEMS) { const it = ITEMS[id]; if (it.price > 0 && it.sell > 0 && typeof SEEDS !== 'undefined' && SEEDS[id] && it.price <= it.sell * 1.3) it.price = Math.ceil(it.sell * 1.3) + 2; }
+// 팔 값이 없던 재료·장비에도 값 매기기 (팔기 탭에 다 보이게)
+for (const id in ITEMS) { const it = ITEMS[id]; if (it.sell > 0 || it.type === 'doll' || it.type === 'tool' || id.startsWith('seed_') || id.startsWith('hat_') || it.noSell) continue; if (it.type === 'mat') it.sell = it.price ? Math.max(1, Math.floor(it.price / 2)) : 2; else if (it.type === 'use' && it.price) it.sell = Math.max(1, Math.floor(it.price / 3)); else if (it.type === 'eq') it.sell = it.price ? Math.max(2, Math.floor(it.price * .35)) : 5; }
+function sellBonusCat() { return ['작물', '물고기', '곤충', '요리', '재료'][dayKey() % 5]; }
+function sellPrice(id) { const it = ITEMS[id]; let v = Math.max(1, Math.round(it.sell * (sellCat(id) === sellBonusCat() ? 1.3 : 1))); if (it.price > 0 && sellCat(id) !== '작물') v = Math.min(v, Math.max(1, it.price - 1)); return v; }  // 산 값보다 비싸게는 안 사요
+function isEquipped(id) { if (typeof equip === 'undefined') return false; for (const k in equip) if (equip[k] === id) return true; return false; }
+function sellable(id) { const it = ITEMS[id]; return it && it.sell > 0 && inv[id] > 0 && it.type !== 'doll' && !isEquipped(id); }
+function sellAllSafe(id) { const it = ITEMS[id], c = sellCat(id); if (c === '장비' || c === '소모품' || c === '기타') return false; if (it.type === 'crit' && typeof DON !== 'undefined' && !DON[id]) return false; return true; }
+function sellAllList() { return Object.keys(inv).filter(id => sellable(id) && sellAllSafe(id)); }
+function keeperNpc(k) { const S = SHOPS[k]; return (S.id && npcById(S.id)) || NPCS.find(n => n.name === S.keeper); }
+function shopThanks(k, big) { const n = keeperNpc(k); if (n) { emote(n, big ? 'heart' : 'note', 1.6); n.react = .5; } }
+function doSell(id, n, k) { n = Math.min(n, inv[id] || 0); if (!n) return 0; const p = sellPrice(id) * n; inv[id] -= n; if (!inv[id]) delete inv[id]; hearts += p; for (let i = 0; i < n; i++) stat('sell'); SHOPX.sold += n; SHOPX.earned += p; return p; }
+function sellEntries(m) { const k = shopKey(m), S = SHOPS[k], E = [], bc = sellBonusCat(), list = Object.keys(inv).filter(sellable);
+  E.push({ name: `${S.keeper}: "${list.length ? '뭘 팔아 줄 거야?' : '빈손이네? 헤헤'}"`, desc: `📈 오늘 비싸게 사요: ${bc} +30%`, tag: '', col: S.col, act: () => { } });
+  E.push({ name: `누르면 팔기: ${SHOPX.mode === 'one' ? '1개씩' : '몽땅'}`, desc: '눌러서 바꾸기 · 몽땅은 그 물건을 전부 팔아요', tag: SHOPX.mode === 'one' ? '1개' : '전부', col: '#f3e6cf', act: () => { SHOPX.mode = SHOPX.mode === 'one' ? 'all' : 'one'; sfx('blip'); } });
+  const all = sellAllList(), tot = all.reduce((a, id) => a + sellPrice(id) * inv[id], 0), cnt = all.reduce((a, id) => a + inv[id], 0), arm = SHOPX.confirm > time;
+  E.push({ name: arm ? `정말 팔까요? 한 번 더 누르면 판매!` : `모두 팔기 (${cnt}개)`, desc: '장비·소모품·인형·아직 기증 안 한 생물은 빼고 팔아요', tag: cnt ? `✦ ${tot}` : '없음', col: cnt ? (arm ? '#ff8fa3' : '#ffd23f') : '#d9cbb5',
+    act: () => { if (!cnt) return pmsg('모두 팔기로 팔 물건이 없어요', 1); if (!arm) { SHOPX.confirm = time + 3; sfx('blip'); return; } SHOPX.confirm = 0; let got = 0; for (const id of all) got += doSell(id, inv[id], k); sfx('star'); shopThanks(k, true); pmsg(`${cnt}개 몽땅 판매! ✦+${got}`); burst(P.x, P.y - 20, '#ffd23f', 18); save(); } });
+  list.sort((a, b) => SELL_CATS.indexOf(sellCat(a)) - SELL_CATS.indexOf(sellCat(b)) || sellPrice(b) - sellPrice(a));
+  let last = null; for (const id of list) { const it = ITEMS[id], c = sellCat(id), p = sellPrice(id), hot = c === bc, n = inv[id];
+    const note = c === '장비' ? '장비 · 모두 팔기에서 빠져요' : c === '소모품' ? '소모품 · 모두 팔기에서 빠져요' : it.type === 'crit' && typeof DON !== 'undefined' && !DON[id] ? '🏛️ 아직 기증 안 했어요 · 모두 팔기에서 빠져요' : it.dish ? '정성 가득 요리' : '';
+    E.push({ img: itemImg(id), name: `${c !== last ? `[${c}] ` : ''}${it.name} ×${n}${hot ? ' 📈' : ''}`, desc: `하나 ✦${p}${n > 1 ? ` · 전부 ✦${p * n}` : ''}${note ? ' · ' + note : ''}`, tag: SHOPX.mode === 'one' ? `✦ ${p}` : `✦ ${p * n}`, col: hot ? '#ffd23f' : '#9be37a',
+      act: () => { if (!(inv[id] > 0)) return pmsg('다 팔았어!'); const q = SHOPX.mode === 'one' ? 1 : inv[id]; const got = doSell(id, q, k); sfx('heart'); shopThanks(k, q > 2); pmsg(`${it.name}${q > 1 ? ` ${q}개` : ''} 판매! ✦+${got}`); save(); } }); last = c; }
+  if (!list.length) E.push({ name: '팔 물건이 없어요', desc: '작물, 달걀, 양털, 물고기, 요리를 가져와 봐', tag: '', act: () => { } });
+  return E; }
+// 오늘의 특가 (첫 탭 맨 위)
+function dealPool(k) { const S = SHOPS[k]; let p = S.pool ? S.pool() : Object.keys(ITEMS).filter(id => ITEMS[id].vil === S.vil && ITEMS[id].price > 0 && ITEMS[id].type !== 'eq'); p = p.filter(id => ITEMS[id] && ITEMS[id].price > 0); return p.length ? p : ['bread', 'pot_red'].filter(id => ITEMS[id] && ITEMS[id].price > 0); }
+function dealOf(k) { shopDaily(); if (!SHOPX.deal[k]) { const p = dealPool(k); SHOPX.deal[k] = p[(dayKey() * 7 + k.length * 3) % p.length]; } return SHOPX.deal[k]; }
+function dealRows(k) { const S = SHOPS[k], id = dealOf(k), it = ITEMS[id], rows = [{ name: `${S.keeper}: "${shopHi(k)}"`, desc: `오늘 판 수 ${SHOPX.sold}개 · 번 별사탕 ✦${SHOPX.earned}`, tag: '', col: S.col, act: () => { const n = keeperNpc(k); if (n) { emote(n, 'note'); n.react = .5; } sfx('blip'); } }];
+  if (it) { const price = Math.max(1, Math.round(it.price * .7), it.sell ? sellPrice(id) + 1 : 1), left = 3 - (SHOPX.dealN[k] || 0);
+    rows.push({ img: itemImg(id), name: `⭐ 오늘의 특가 · ${it.name}`, desc: `원래 ✦${it.price} → ✦${price} · 오늘 ${Math.max(0, left)}개 남음 (보유 ${inv[id] || 0})`, tag: left > 0 ? `✦ ${price}` : '품절', col: left > 0 && hearts >= price ? '#ff8fa3' : '#d9cbb5',
+      act: () => { if (left <= 0) return pmsg('오늘 특가는 품절! 내일 또 와~', 1); if (hearts < price) return pmsg('별사탕이 모자라요', 1); hearts -= price; addItem(id, 1); SHOPX.dealN[k] = (SHOPX.dealN[k] || 0) + 1; sfx('pick'); shopThanks(k); pmsg(`특가로 ${it.name} 샀어요!`); save(); } }); }
+  return rows; }
+panelEntries = (o => () => { const m = menu, k = shopKey(m); if (!k) return o(); if (m.tab === SHOPS[k].sellTab) return sellEntries(m); const E = o(); if (m.tab === 0) return dealRows(k).concat(E); return E; })(panelEntries);
+// 사면 주인이 반응
+pmsg = (o => (s, bad) => { o(s, bad); const k = shopKey(menu); if (k && !bad && /샀어요|구매|샀다/.test(s)) shopThanks(k); })(pmsg);
+townSave = (orig => () => Object.assign(orig(), { shopx: { d: SHOPX.d, deal: SHOPX.deal, dealN: SHOPX.dealN, mode: SHOPX.mode, sold: SHOPX.sold, earned: SHOPX.earned } }))(townSave);
+townLoad = (orig => d => { orig(d); if (d && d.shopx) Object.assign(SHOPX, d.shopx); shopDaily(); })(townLoad);
+
+// ---------- village.js: 삐약마을 디테일 · 활발한 주민 ----------
+// 1) 주민끼리 수다: 가까이 서 있으면 서로 마주 보고 말풍선 대화 (2~3줄)
+// 2) 노랑이가 다가가면 인사 (오랜만이면 폴짝 + 말풍선)
+// 3) 혼자 있을 때 행동: 폴짝 · 빙글 · 콧노래 · 하트
+// 4) 참새 떼: 땅에서 콕콕, 뛰어오면 푸드덕 날아가요 (30초 뒤 다시)
+// 5) 마을 소품(3D): 광장 가로등(밤에 켜짐) · 깃발 줄 · 화분 · 빨랫줄 · 우체통 · 너구리 상점 좌판 · 둥지집 굴뚝 연기
+const VL = { chat: [], bub: [], greet: {}, actT: 3, chatT: 4 };
+const V1_IDS = () => NPCS.filter(n => roomAt(n.x, n.y) && roomAt(n.x, n.y).id === 'v1' && !n.follow && !n.swim && n.wander !== undefined);
+const DUO = [
+  ['오늘 날씨 좋다~', '빨래 널기 딱 좋은 날이야!'], ['노랑이 꼬리 봤어?', '응… 병아리치고 길긴 하더라', '쉿! 들리겠다'],
+  ['어제 밤에 별똥별 봤어!', '소원 빌었어?', '응! 비밀이야~'], ['배고프다…', '너구리 상점 빵 맛있대', '가 볼까?'],
+  ['요즘 숲이 시끄럽대', '장난꾸러기들 때문이지 뭐', '노랑이가 혼내 주겠지!'], ['축제 언제 해?', '광장 게시판 봐 봐!'],
+  ['너 오늘 머리 예쁘다', '헤헤, 아침에 깃털 다듬었어'], ['연못에 큰 물고기 있대', '진짜? 노랑이한테 낚아 달라 하자'],
+  ['어제 노랑이가 어흥 했대', '병아리는 삐약 하지 않아?', '…그러게?'], ['밭에 당근 잘 자라?', '응! 이번엔 엄청 커'],
+  ['낮잠 자고 싶다…', '나도… 벤치로 갈까?'], ['깍깍이 기자 또 왔더라', '신문 재밌어! 다음 호 언제야?'],
+  ['오늘 노랑이 봤어?', '아까 나비 쫓아가던데', '귀여워~'], ['비 오면 뭐 해?', '창밖 보면서 코코아!'],
+  ['내 모자 어때?', '음… 독특해!', '칭찬이지?'], ['나 오늘 달리기 했어!', '몇 바퀴?', '반 바퀴…'],
+];
+const DUO_SP = { 'hen|pig': ['꿀꿀아, 진흙 묻히고 다니지 마!', '꿀! 진흙은 피부에 좋아요~'], 'cow|sheep': ['음메~ 오늘 우유 잘 나왔어', '매에~ 나는 털이 잘 자랐어!'], 'fox|rabbit': ['깡총아 같이 놀래?', '…여우랑? 음, 좋아! 대신 술래는 너!'], 'duck|hen': ['꽥! 연못 물 시원해!', '꼬꼬, 나는 물 싫어~'], 'raccoon|fox': ['오늘 장사 잘 돼?', '쉿, 비밀이야. 헤헤'] };
+const GREET = { m: ['좋은 아침, 노랑아!', '일찍 일어났네~', '아침 먹었어?'], d: ['안녕 노랑아!', '오늘도 씩씩하네!', '어디 가?', '헤헤 반가워!'], e: ['저녁이네~ 오늘 재밌었어?', '노을 예쁘다, 그치?'], n: ['아직 안 자?', '밤엔 조심해~', '하암… 졸려'] };
+function vlSay(n, s, t = 2.2) { VL.nSay = (VL.nSay || 0) + 1; VL.bub = VL.bub.filter(b => b.n !== n); VL.bub.push({ n, s, t, t0: t }); }
+function dayKind() { const h = envHour(); return h >= 5 && h < 11 ? 'm' : h < 17 ? 'd' : h < 21 ? 'e' : 'n'; }
+function vlFree(n) { return !n.walking && !(typeof asleep === 'function' && asleep(n)) && !VL.chat.some(c => c.a === n || c.b === n) && !(dlg && dlg.lines && dlg.lines.some(l => l.who === n.name)); }
+function vlTick(dt) { if (state !== 'play' || curRoom.id !== 'v1' || curRoom.dungeon) { VL.bub.length = 0; VL.chat.length = 0; return; }
+  for (let i = VL.bub.length - 1; i >= 0; i--) if ((VL.bub[i].t -= dt) <= 0) VL.bub.splice(i, 1);
+  // 진행 중인 수다
+  for (let i = VL.chat.length - 1; i >= 0; i--) { const c = VL.chat[i]; c.t -= dt; c.a.wait = Math.max(c.a.wait, 1); c.b.wait = Math.max(c.b.wait, 1); c.a.tx = c.a.x; c.a.ty = c.a.y; c.b.tx = c.b.x; c.b.ty = c.b.y; c.a.face = c.b.x > c.a.x ? 1 : -1; c.b.face = -c.a.face;
+    if (c.t <= 0) { if (c.i >= c.lines.length) { if (Math.random() < .5) { emote(c.a, Math.random() < .5 ? 'note' : 'heart', 1.4); c.b.react = .5; } VL.chat.splice(i, 1); continue; } const sp = c.i % 2 ? c.b : c.a; vlSay(sp, c.lines[c.i], 2.1); sp.react = .3; c.i++; c.t = 2.2; } }
+  if (dlg || menu) return; const ns = V1_IDS();
+  // 새 수다 시작
+  if ((VL.chatT -= dt) <= 0) { VL.chatT = 3 + Math.random() * 4; if (VL.chat.length < 2) { const fr = ns.filter(vlFree); let pair = null;
+      for (const a of fr) { for (const b of fr) { if (a === b) continue; const d = Math.hypot(a.x - b.x, a.y - b.y); if (d > 20 && d < 70) { pair = [a, b]; break; } } if (pair) break; }
+      // 가까이 없으면 한 명이 다른 한 명에게 걸어가서 말 걸기
+      if (!pair && fr.length > 1 && Math.random() < .5) { const a = fr[Math.floor(Math.random() * fr.length)], b = fr.filter(q => q !== a && q.wander && Math.hypot(q.x - a.x, q.y - a.y) < 8 * T)[0]; if (b && a.wander) { const sx = b.x + (a.x < b.x ? -26 : 26); if (boxFree(sx, b.y, 5, 2)) { a.tx = sx; a.ty = b.y; a.wait = 6; a.goTalk = b; } } }
+      if (pair) { const key = [pair[0].id, pair[1].id].sort().join('|'), sp = DUO_SP[key], lines = sp && Math.random() < .6 ? sp : DUO[Math.floor(Math.random() * DUO.length)], a = sp && pair[0].id !== key.split('|')[0] ? pair[1] : pair[0], b = a === pair[0] ? pair[1] : pair[0]; VL.chat.push({ a, b, lines, i: 0, t: .2 }); VL.nChat = (VL.nChat || 0) + 1; } } }
+  // 걸어가서 말 걸기 도착
+  for (const a of ns) if (a.goTalk && Math.hypot(a.x - a.tx, a.y - a.ty) < 6) { const b = a.goTalk; a.goTalk = null; if (vlFree(b) && VL.chat.length < 3) VL.chat.push({ a, b, lines: DUO[Math.floor(Math.random() * DUO.length)], i: 0, t: .2 }); }
+  // 인사
+  for (const n of ns) { const d = Math.hypot(P.x - n.x, P.y - n.y); if (d < 46 && (!VL.greet[n.id] || time - VL.greet[n.id] > 70) && vlFree(n)) { VL.greet[n.id] = time; const pool = GREET[dayKind()]; vlSay(n, pool[Math.floor(Math.random() * pool.length)], 2); n.react = .5; if (Math.random() < .4) emote(n, 'heart', 1.4); } else if (d > 120 && VL.greet[n.id] && time - VL.greet[n.id] > 20) VL.greet[n.id] = time - 50; }
+  // 혼자 놀기
+  if ((VL.actT -= dt) <= 0) { VL.actT = 1.8 + Math.random() * 2.2; const fr = ns.filter(n => vlFree(n) && Math.hypot(n.x - P.x, n.y - P.y) < 14 * T); const n = fr[Math.floor(Math.random() * fr.length)];
+    if (n) { const r = Math.random(); if (r < .35) { n.react = .5; } else if (r < .5) { n.spin = .6; } else if (r < .75) { emote(n, 'note', 1.6); n.react = .3; } else if (r < .85) emote(n, 'heart', 1.4); else { const self = { hen: '꼬꼬꼬~', cow: '음메~', pig: '꿀꿀!', rabbit: '깡총깡총', sheep: '매에~', sheep2: '매애~', duck: '꽥꽥!', fox: '흥흥~♪', raccoon: '오늘 장사 잘 되려나~', captain: '바람이 좋구먼!' }[n.id]; if (self) vlSay(n, self, 1.6); } } }
+  birdTick(dt); }
+updateTown = (o => dt => { o(dt); try { vlTick(dt); } catch (e) { console.warn('vl', e); } })(updateTown);
+// 말풍선 그리기
+function vlBubble(n, s, a) { let x, y; if (typeof USE3D !== 'undefined' && USE3D && R3) [x, y] = project3D(n.x, n.y + 14, 1.55); else { x = (n.x - cam.x) * SC; y = (n.y - 30 - cam.y) * SC; }
+  const fs = 11 * DPR * TXS(); ctx.save(); ctx.globalAlpha = a; ctx.font = `${Math.round(fs)}px ${FONT}`; const w = Math.min(CW * .6, ctx.measureText(s).width + fs * 1.2), h = fs * 1.7; ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = 'rgba(51,34,42,.8)'; ctx.lineWidth = 1.5 * DPR;
+  rr(x - w / 2, y - h, w, h, h / 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 4 * DPR, y - 1); ctx.lineTo(x, y + 5 * DPR); ctx.lineTo(x + 4 * DPR, y - 1); ctx.fill(); ctx.restore(); fitText(s, x, y - h / 2, fs, '#33222a', w - fs * .6, 'center'); }
+function drawVL() { if (state !== 'play' || curRoom.id !== 'v1' || dlg || menu || (typeof mini !== 'undefined' && mini)) return;
+  for (const b of VL.bub) { if (Math.hypot(b.n.x - P.x, b.n.y - P.y) > 230) continue; const k = b.t0 - b.t, a = Math.min(1, k / .15, b.t / .3); vlBubble(b.n, b.s, Math.max(0, a)); }
+  if (!(typeof USE3D !== 'undefined' && USE3D)) for (const f of BIRDS) for (const s of f.b) { if (!s.on) continue; const x = (s.x - cam.x) * SC, y = (s.y - s.z - cam.y) * SC; ctx.fillStyle = '#8a5a3c'; ctx.beginPath(); ctx.arc(x, y, 2.4 * SC / 2, 0, 6.29); ctx.fill(); } }
+drawOverlay4 = (o => () => { try { drawVL(); } catch (e) { } o(); })(drawOverlay4);
+
+// ===== 참새 떼 =====
+const BIRD_SPOTS = [[15.5, 13.5], [27.5, 16.5], [21.5, 20.5], [10.5, 17.5], [30.5, 11.5]];
+const BIRDS = BIRD_SPOTS.map(([x, y]) => ({ x, y, b: [], back: 0, init: 0 }));
+function birdInit(f) { const [cx, cy] = nearFree(f.x, f.y); f.cx = cx; f.cy = cy; f.b = []; for (let i = 0; i < 4; i++) f.b.push({ x: cx + (Math.random() - .5) * 30, y: cy + (Math.random() - .5) * 18, z: 0, vx: 0, vy: 0, vz: 0, on: true, fly: false, pk: Math.random() * 3, face: Math.random() < .5 ? 1 : -1 }); f.init = 1; }
+function birdTick(dt) { const fast = P.moving && (P.run || P.roll > 0 || Math.hypot(P.vx || 0, P.vy || 0) > 60);
+  for (const f of BIRDS) { if (!f.init) birdInit(f); if (f.back > 0) { f.back -= dt; if (f.back <= 0) birdInit(f); continue; }
+    let flee = false; for (const s of f.b) if (s.on && !s.fly && Math.hypot(P.x - s.x, P.y - s.y) < (fast ? 60 : 34)) flee = true;
+    if (flee) { for (const s of f.b) if (!s.fly) { s.fly = true; const a = Math.atan2(s.y - P.y, s.x - P.x) + (Math.random() - .5); s.vx = Math.cos(a) * 110; s.vy = Math.sin(a) * 60; s.vz = 70 + Math.random() * 30; s.face = s.vx > 0 ? 1 : -1; } if (curRoom.id === 'v1') sfx("swipe"); }
+    let any = false; for (const s of f.b) { if (!s.on) continue; any = true;
+      if (s.fly) { s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt; s.vz += 20 * dt; if (s.z > 140) s.on = false; }
+      else { s.pk -= dt; if (s.pk <= 0) { s.pk = .4 + Math.random() * 1.6; if (Math.random() < .4) { s.hop = .2; const a = Math.random() * 6.28; s.tx = s.x + Math.cos(a) * 8; s.ty = s.y + Math.sin(a) * 5; s.face = Math.cos(a) > 0 ? 1 : -1; } else s.peck = .25; }
+        if (s.hop > 0) { s.hop -= dt; s.x += (s.tx - s.x) * Math.min(1, dt * 10); s.y += (s.ty - s.y) * Math.min(1, dt * 10); s.z = Math.sin(Math.max(0, s.hop) / .2 * Math.PI) * 3; } else s.z = 0; if (s.peck > 0) s.peck -= dt; } }
+    if (!any) f.back = 25 + Math.random() * 15; } }
+function sparrowModel() { const g = new THREE.Group(), b = new THREE.Group(); g.add(b); const m = mesh; b.add(m('s', '#a0705a', .07, .06, .09, 0, .07, 0), m('s', '#8a5a3c', .05, .05, .05, 0, .12, .06), m('s', '#f3e6cf', .05, .04, .05, 0, .06, .03)); const bk = m('co', '#ffb347', .015, .04, .015, 0, .12, .11); bk.rotation.x = Math.PI / 2; b.add(bk, m('b', '#6b4a2a', .03, .01, .06, 0, .09, -.09));
+  const wl = m('s', '#7a4f36', .02, .04, .07, -.06, .08, -.01), wr = m('s', '#7a4f36', .02, .04, .07, .06, .08, -.01); b.add(wl, wr); g.userData = { b, wings: [wl, wr] }; g.scale.setScalar(1.3); return g; }
+// ===== 소품 (3D, 삐약마을) =====
+function lampModel() { const g = grp(mesh('c', '#5a4a50', .05, 1.5, .05, 0, .75, 0), mesh('c', '#5a4a50', .14, .05, .14, 0, .03, 0), mesh('b', '#5a4a50', .26, .04, .26, 0, 1.52, 0)); const glow = M('#fff1c2', { emissive: '#ffcf6b', emissiveIntensity: 0 }); g.add(mesh('b', glow, .2, .22, .2, 0, 1.38, 0), mesh('co', '#5a4a50', .2, .14, .2, 0, 1.6, 0)); g.userData.glow = glow; return g; }
+function planterModel(c) { const g = grp(mesh('b', '#a8743c', .5, .22, .22, 0, .11, 0), mesh('b', '#5a3f2a', .46, .03, .18, 0, .22, 0)); for (let i = 0; i < 5; i++) g.add(mesh('c', '#3b8f5a', .012, .14, .012, -.2 + i * .1, .3, 0), mesh('s', c[i % c.length], .045, .04, .045, -.2 + i * .1, .38, 0)); return g; }
+function laundryModel() { const g = grp(mesh('c', '#8a5a3c', .03, .9, .03, -1.1, .45, 0), mesh('c', '#8a5a3c', .03, .9, .03, 1.1, .45, 0), mesh('c', '#f3e6cf', .008, 2.2, .008, 0, .86, 0)); g.children[2].rotation.z = Math.PI / 2; const cl = [];
+  [['#ff8fa3', .3, .26], ['#7fcaf2', .22, .34], ['#ffd23f', .28, .22], ['#9be37a', .2, .3]].forEach(([c, w, h], i) => { const p = new THREE.Group(); p.position.set(-.75 + i * .5, .86, 0); const cloth = mesh('b', c, w, h, .02, 0, -h / 2, 0); cloth.castShadow = true; p.add(cloth); g.add(p); cl.push(p); }); g.userData.cl = cl; return g; }
+function mailboxModel() { const g = grp(mesh('c', '#8a5a3c', .04, .5, .04, 0, .25, 0), mesh('b', '#e2443b', .22, .18, .3, 0, .58, 0), mesh('c', '#e2443b', .11, .3, .11, 0, .67, 0)); g.children[2].rotation.x = Math.PI / 2; g.children[2].scale.set(.11, .3, .11); const flag = mesh('b', '#ffd23f', .02, .12, .06, .12, .66, -.08); g.add(flag); return g; }
+function stallModel() { const g = new THREE.Group(); g.add(mesh('b', '#a8743c', .5, .32, .4, -.4, .16, 0), mesh('b', '#a8743c', .4, .28, .36, .25, .14, .1), mesh('c', '#8a5a3c', .17, .34, .17, .75, .17, -.1));
+  for (let i = 0; i < 6; i++) g.add(mesh('s', i % 2 ? '#e2443b' : '#ff8f6b', .07, .07, .07, -.55 + (i % 3) * .14, .36, -.08 + Math.floor(i / 3) * .14)); for (let i = 0; i < 4; i++) g.add(mesh('s', '#ffd23f', .06, .05, .06, .15 + (i % 2) * .14, .32, .02 + Math.floor(i / 2) * .14));
+  const board = mesh('b', '#33463a', .5, .36, .03, 0, .5, 0), legs = mesh('b', '#8a5a3c', .04, .5, .04, -.2, .25, -.02); const sb = grp(board, legs, mesh('b', '#8a5a3c', .04, .5, .04, .2, .25, -.02)); sb.position.set(-.1, 0, .55); g.add(sb);
+  const tx = new THREE.Mesh(new THREE.PlaneBufferGeometry(.44, .3), new THREE.MeshBasicMaterial({ map: farmText('오늘의 특가!', 220, 150, '#33463a', '#ffffff'), transparent: true })); tx.position.set(-.1, .5, .572); g.add(tx); return g; }
+let VPROP = null;
+function buildVProps() { const g = new THREE.Group(); R3.scene.add(g); VPROP = { g, lamps: [], flags: [], cl: null, smoke: [] }; const at = (x, y) => { const [px, py] = nearFree(x, y); return [px / T, zt(py / T)]; };
+  // 광장 가로등 + 깃발 줄
+  const LP = [[17.4, 13.6], [25.8, 13.6], [17.4, 18.0], [25.8, 18.0]].map(([x, y]) => at(x, y)); for (const [x, z] of LP) { const l = lampModel(); l.position.set(x, 0, z); g.add(l); VPROP.lamps.push(l); }
+  const COLS = ['#ff6b6b', '#ffd23f', '#7fcaf2', '#9be37a', '#ff8fb5', '#c9b6ff'];
+  for (const [i, j] of [[0, 1], [2, 3]]) { const [x1, z1] = LP[i], [x2, z2] = LP[j], n = 12; for (let k = 1; k < n; k++) { const f = k / n, sag = Math.sin(f * Math.PI) * .25, fl = mesh('co', COLS[k % COLS.length], .07, .14, .02, x1 + (x2 - x1) * f, 1.45 - sag, z1 + (z2 - z1) * f); fl.rotation.x = Math.PI; fl.castShadow = false; g.add(fl); VPROP.flags.push(fl); } }
+  // 화분
+  for (const [x, y, c] of [[19.6, 11.2, ['#ff8fb5', '#ffd23f']], [23.6, 11.2, ['#c9b6ff', '#ffffff']], [16.2, 16.0, ['#ff6b6b', '#ffd23f']], [27.0, 16.0, ['#7fcaf2', '#ff8fb5']]]) { const [px, pz] = at(x, y), p = planterModel(c); p.position.set(px, 0, pz); g.add(p); }
+  // 빨랫줄 (꼬꼬 아줌마 집 근처) · 우체통
+  { const [x, z] = at(6.5, 11.8), l = laundryModel(); l.position.set(x, 0, z); g.add(l); VPROP.cl = l.userData.cl; }
+  { const [x, z] = at(23.2, 9.4), mb = mailboxModel(); mb.position.set(x, 0, z); mb.rotation.y = .3; g.add(mb); }
+  // 너구리 상점 좌판
+  { const r = npcById('raccoon'); if (r) { const [x, z] = at((r.homeX || r.x) / T + 1.6, (r.homeY || r.y) / T + .6), s = stallModel(); s.position.set(x, 0, z); s.rotation.y = -.2; g.add(s); } }
+  // 굴뚝 연기 (둥지집)
+  if (R3.house) { const hp = new THREE.Vector3(); R3.house.getWorldPosition(hp); for (let i = 0; i < 6; i++) { const p = mesh('s', M('#ffffff', { transparent: true, opacity: .5 }), .12, .12, .12, 0, 0, 0); p.castShadow = false; g.add(p); VPROP.smoke.push({ m: p, ph: i / 6, base: hp }); } } }
+window.__SYNC3D.push(() => { if (!R3 || !R3.scene) return; const on = curRoom.id === 'v1' && state !== 'title';
+  if (on && !VPROP) { try { buildVProps(); } catch (e) { console.warn('vprop', e); VPROP = { g: new THREE.Group(), lamps: [], flags: [], smoke: [] }; } }
+  if (VPROP) { VPROP.g.visible = on; if (on) { const n = nightAmt(); for (const l of VPROP.lamps) l.userData.glow.emissiveIntensity = n * 1.6; VPROP.flags.forEach((f, i) => f.rotation.z = Math.sin(time * 2.4 + i) * .25); if (VPROP.cl) VPROP.cl.forEach((c, i) => c.rotation.x = Math.sin(time * 1.8 + i * .9) * .25);
+      for (const s of VPROP.smoke) { const k = (time * .25 + s.ph) % 1; s.m.position.set(s.base.x + 1.1 + Math.sin(k * 6 + s.ph * 9) * .15, 3.1 + k * 1.6, s.base.z - .6); s.m.scale.setScalar(.08 + k * .22); s.m.material.opacity = .45 * (1 - k); } } }
+  // 참새
+  BIRDS.forEach((f, fi) => f.b.forEach((s, i) => { const key = 'bird' + fi + '_' + i; if (!on || !s.on || f.back > 0) return; const m = ent(key, sparrowModel); m.position.set(U(s.x), U(s.z) * 1.2, ZU(s.y) - .2); m.rotation.y = s.fly ? Math.atan2(s.vx, s.vy) : s.face > 0 ? Math.PI / 2 : -Math.PI / 2;
+    m.userData.b.rotation.x = s.peck > 0 ? .6 : 0; m.userData.wings.forEach((w, j) => w.rotation.z = s.fly ? Math.sin(time * 40 + j * Math.PI) * .9 : 0); })); });
 
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
