@@ -9657,7 +9657,7 @@ if (typeof regionArea === 'function') regionArea = (o => () => { const D = curDi
 drawMinimap = (o => () => { if (curDist()) return; return o(); })(drawMinimap);
 updateTown = (o => dt => { o(dt); if (typeof mapOpen !== 'undefined' && mapOpen && curDist()) { mapOpen = false; if (typeof WMAP !== 'undefined') WMAP = true; } })(updateTown);
 // 화석 자리도 구역마다 2곳
-if (typeof lfMakeDig === 'function') { lfMakeDig = (o => () => { o(); for (const D of DIST) { let n = DCFG.digPer, tries = 0; while (n > 0 && tries++ < 200) { const [x, y] = D.land[Math.floor(Math.random() * D.land.length)], c = ground[D.y + y][D.x + x]; if (c !== G_FL && c !== G_SAND) continue; LF.dig.push({ k: `${dayKey()}_${D.id}_${x}_${y}`, x: D.x + x, y: D.y + y }); n--; } } })(lfMakeDig); }
+if (typeof lfMakeDig === 'function') { lfMakeDig = (o => () => { o(); LF.dig = LF.dig.filter(q => !DIST.some(D => Math.hypot((q.x + .5) * T - D.gx, (q.y + .5) * T - D.gy) < 5 * T)); for (const D of DIST) { let n = DCFG.digPer, tries = 0; while (n > 0 && tries++ < 200) { const [x, y] = D.land[Math.floor(Math.random() * D.land.length)], c = ground[D.y + y][D.x + x]; if (c !== G_FL && c !== G_SAND) continue; if (Math.hypot(x - D.ent[0], y - D.ent[1]) < 6) continue; LF.dig.push({ k: `${dayKey()}_${D.id}_${x}_${y}`, x: D.x + x, y: D.y + y }); n--; } } })(lfMakeDig); }
 digNear = (o => () => { const D = curDist(); if (!D) return o(); for (const s of LF.dig) if (!LF.dug[s.k] && s.k.includes(`_${D.id}_`) && Math.hypot(P.x - (s.x + .5) * T, P.y - (s.y + .5) * T) < 16) return s; return null; })(digNear);
 
 // ---- 2D 그리기 ----
@@ -9717,6 +9717,120 @@ if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncDist3D());
 townSave = (o => () => Object.assign(o(), { dist: { d: DS.d, shook: DS.shook, shells: DS.shells, got: DS.got } }))(townSave);
 townLoad = (o => d => { o(d); if (d && d.dist) Object.assign(DS, d.dist); })(townLoad);
 if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('삐약마을 북·남·서쪽 길 끝으로 걸어가면 해바라기 들판·노을 바닷가·반딧불 호수공원으로 이어져요');
+
+// ===== districts2.js : 새 구역 디벨롭 — 주민 6명(집·대사·매일 부탁), 바다·호수 물고기, 해바라기 따기, 유리병 편지, 나비·반딧불·파도 =====
+const D2CFG = {
+  reqReward: [10, 22], reqXp: 6, reqFriend: 2,   // 부탁 보상 (별사탕 범위, EXP, 친구 점수)
+  sunPerDay: 8,                                  // 하루 해바라기 따기 횟수
+  bottle: { hearts: [10, 30], rare: .2 },        // 유리병 편지 보상
+};
+// ---- 아이템 ----
+ITEMS.sunflower = { name: '해바라기', type: 'mat', desc: '해바라기 들판에서 땄어요 · 양봉가 윙윙이 좋아해요', sell: 6, spr: 'cap' };
+{ let cv = null; Object.defineProperty(ITEMS.sunflower, 'icon', { get() { if (this._ic) return this._ic; if (!cv) { cv = document.createElement('canvas'); cv.width = cv.height = 16; const g = cv.getContext('2d'), px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); }; px(7, 9, 2, 7, '#4f9a45'); px(4, 1, 8, 8, '#ffd23f'); px(3, 3, 10, 4, '#ffd23f'); px(6, 3, 4, 4, '#7a4a2a'); px(9, 11, 3, 2, '#5fae52'); } return cv; }, set(v) { this._ic = v; }, configurable: true }); }
+// ---- 물고기: 바다(노을 바닷가) · 호수(반딧불 호수공원) ----
+const S4 = ['spring', 'summer', 'autumn', 'winter'];
+const SEA_FISH = [
+  { id: 'fish_jack', name: '전갱이', sea: S4, time: 'any', loc: 'sea', c1: '#9fb4c8', w: 10, sell: 6, sz: .8 },
+  { id: 'fish_mackerel', name: '고등어', sea: S4, time: 'day', loc: 'sea', c1: '#5a8ab0', w: 8, sell: 9, sz: .9 },
+  { id: 'fish_flounder', name: '넙치', sea: S4, time: 'any', loc: 'sea', c1: '#b8a080', w: 5, sell: 12, sz: 1.0 },
+  { id: 'fish_puffer', name: '복어', sea: ['summer', 'autumn'], time: 'any', loc: 'sea', c1: '#e8d07a', w: 4, sell: 16, sz: .7 },
+  { id: 'fish_octopus', name: '문어', sea: S4, time: 'night', loc: 'sea', c1: '#d0605a', w: 3, sell: 18, sz: .9 },
+  { id: 'fish_seabream', name: '참돔', sea: ['spring', 'autumn'], time: 'any', loc: 'sea', c1: '#ff8fa3', w: 2, sell: 28, sz: 1.1 },
+];
+const LAKE_FISH = [
+  { id: 'fish_bitterling', name: '각시붕어', sea: S4, time: 'any', loc: 'lake', c1: '#c9b6ff', w: 10, sell: 5, sz: .6 },
+  { id: 'fish_shiri', name: '쉬리', sea: ['spring', 'summer', 'autumn'], time: 'day', loc: 'lake', c1: '#e8b878', w: 6, sell: 12, sz: .7 },
+  { id: 'fish_mandarin', name: '쏘가리', sea: S4, time: 'night', loc: 'lake', c1: '#c9a03a', w: 3, sell: 20, sz: 1.0 },
+  { id: 'fish_goldcarp', name: '황금 잉어', sea: S4, time: 'any', loc: 'lake', c1: '#ffd23f', w: 1, sell: 40, sz: 1.2 },
+];
+for (const f of SEA_FISH.concat(LAKE_FISH)) { FISH.push(f); CRIT[f.id] = Object.assign(f, { kind: 'fish' }); ITEMS[f.id] = { name: f.name, type: 'crit', icon: critterIcon(f), desc: `물고기 · ${f.loc === 'sea' ? '노을 바닷가 바다' : '반딧불 호수공원 호수'}에 살아요 · 박물관에 기증하거나 팔 수 있어요`, sell: f.sell }; }
+waterAhead = (o => () => { const w = o(); const D = typeof curDist === 'function' && curDist(); if (w && D) { if (D.id === 'd2') w.loc = 'sea'; else if (D.id === 'd3') w.loc = 'lake'; else w.loc = 'pond'; } return w; })(waterAhead);
+if (typeof whenStr === 'function') whenStr = (o => c => c.loc === 'sea' || c.loc === 'lake' ? o(c).replace(/ · (연못|개울|물가마을|구름 바다)/, '') + (c.loc === 'sea' ? ' · 노을 바닷가' : ' · 반딧불 호수') : o(c))(whenStr);
+// 박물관 세트 + 보상 가구
+FURN.shell_lamp = { name: '소라 조명', t: [[45, 41]], desc: '박물관: 노을 바닷가 물고기 6종 기증 보상' };
+FURN.firefly_jar = { name: '반딧불 유리병', t: [[39, 41]], desc: '박물관: 반딧불 호수 물고기 4종 기증 보상' };
+if (FURN.snowglobe) FURN.snowglobe.t = [[46, 44]]; if (FURN.rexfossil) FURN.rexfossil.t = [[41, 41]];   // 원래 45,44에 셋이 겹쳐 있던 것 정리
+for (const k of ['shell_lamp', 'firefly_jar', 'snowglobe', 'rexfossil']) if (typeof FB !== 'undefined' && FURN[k] && FURN[k].t.length) FB[k] = { w: 1, h: 1, ry: 0 };
+if (typeof MUS_SETS !== 'undefined') MUS_SETS.push({ k: 'd2', name: '노을 바닷가', ids: () => SEA_FISH.map(c => c.id), furn: 'shell_lamp' }, { k: 'd3', name: '반딧불 호수공원', ids: () => LAKE_FISH.map(c => c.id), furn: 'firefly_jar' });
+if (typeof furnModel === 'function') furnModel = (o => k => { if (k === 'shell_lamp') { const g = grp(mesh('c', '#c9a27a', .12, .5, .12, 0, .25, 0), mesh('co', M('#ffd6e4', { emissive: '#ffb3c6', emissiveIntensity: .5 }), .3, .4, .3, 0, .7, 0)); g.children[1].rotation.x = Math.PI; return g; }
+  if (k === 'firefly_jar') { const g = grp(mesh('c', M('#dff4ff', { transparent: true, opacity: .45, roughness: .1 }), .22, .45, .22, 0, .23, 0), mesh('c', '#c98a5a', .18, .06, .18, 0, .48, 0)); for (let i = 0; i < 5; i++) g.add(mesh('s', M('#e8ff7a', { emissive: '#e8ff7a', emissiveIntensity: 1 }), .03, .03, .03, Math.cos(i * 2.5) * .1, .12 + i * .06, Math.sin(i * 2.5) * .1)); return g; } return o(k); })(furnModel);
+
+// ---- 주민 6명 ----
+const DRES = [
+  { id: 'd1_farmer', name: '다람 농부', spr: 'squirrel', d: 'd1', at: [22, 22], fav: 'sandwich', gift: 'apple',
+    lines: ['과수원 나무는 하루에 한 번만 흔들어야 해. 욕심내면 나무가 삐진다구!', '사과는 아삭, 감은 달콤. 둘 다 출하 상자에 넣으면 꽤 쏠쏠해.', '해바라기는 해를 따라 고개를 돌린대. 노랑이처럼 반짝반짝하지?', '도시락 싸 들고 저 벤치에 앉아 있으면 바람이 진짜 좋아.'],
+    req: [['apple', 3, '사과 3개만 가져다줄래? 잼을 만들 거야'], ['persimmon', 3, '감 3개가 필요해. 곶감 말리려고!'], ['wood', 5, '울타리 고치게 목재 5개만!'], ['f_berry', 2, '산딸기 2개! 디저트에 올릴 거야']] },
+  { id: 'd1_bee', name: '양봉가 윙윙', spr: 'bee', d: 'd1', at: [50, 34], fav: 'honey', gift: 'honey',
+    lines: ['윙윙~ 해바라기 꿀은 고소한 맛이 나!', '벌들이 오늘 기분이 좋아. 노랑이도 꿀 냄새 나는 것 같은데?', '꽃밭에서 해바라기를 따도 돼. 너무 많이만 따지 마!', '풍차 연못 근처에 나비가 잔뜩 날아다녀.'],
+    req: [['sunflower', 4, '해바라기 4송이만! 벌들 간식이야'], ['f_berry', 3, '산딸기 3개 부탁해. 꿀이랑 섞을 거야'], ['honey', 1, '꿀단지 하나 빌려줄래? 우리 벌들 응원용이야']] },
+  { id: 'd2_turtle', name: '거북 선장', spr: 'turtle', d: 'd2', at: [44, 21], fav: 'soup', gift: 'shell_p',
+    lines: ['허허, 바다는 넓고 물고기는 많지. 밤에는 문어가 나온단다.', '저 배? 젊을 적 세계일주를 했던 배란다. 거북이 걸음으로 말이지.', '참돔은 봄가을에만 와. 귀한 손님이지.', '유리병 편지가 떠밀려 오면 꼭 열어 보렴. 바다의 선물이야.'],
+    req: [['fish_jack', 2, '전갱이 2마리 잡아 줄래? 저녁 찬거리야'], ['shell_w', 4, '조개껍데기 4개! 배를 꾸미려고'], ['starfish', 1, '불가사리 하나만 구해 줘. 행운의 별이거든'], ['fish_mackerel', 1, '고등어 한 마리면 충분해!']] },
+  { id: 'd2_cat', name: '냥 어부', spr: 'cat', d: 'd2', at: [20, 14], fav: 'fondue', gift: 'fish_jack',
+    lines: ['냐옹~ 부두 끝에서 낚싯대를 드리우면 큰 놈이 와.', '파라솔 밑에서 낮잠 자는 게 내 특기야.', '복어는 화나면 빵빵해진다냥. 귀엽지?', '노을 질 때 바다 색깔 봤어? 냐아~ 최고야.'],
+    req: [['fish_flounder', 1, '넙치 한 마리 잡아다 줘냥!'], ['shell_p', 1, '분홍 소라가 갖고 싶다냥'], ['fish_jack', 3, '전갱이 3마리! 친구들 나눠 줄 거다냥']] },
+  { id: 'd3_goat', name: '염소 캠퍼', spr: 'goat', d: 'd3', at: [58, 26], fav: 'pizza', gift: 'bread',
+    lines: ['메에~ 호숫가 캠핑은 최고야. 밤에 반딧불이 진짜 많아.', '정자 섬까지 다리로 건너가 봐. 호수 한가운데라 경치가 끝내줘.', '들꽃 언덕에서 낮잠 자다가 나비가 코에 앉았어!', '황금 잉어를 봤다는 소문이 있어. 진짜일까?'],
+    req: [['wood', 6, '모닥불용 목재 6개만 줄래?'], ['bread', 2, '빵 2개! 캠핑 아침밥이야'], ['fish_bitterling', 2, '각시붕어 2마리 잡아 줘. 구경만 하고 놓아줄 거야']] },
+  { id: 'd3_duck', name: '오리 뱃사공', spr: 'duck', d: 'd3', at: [44, 24], fav: 'eggsalad', gift: 'fish_bitterling',
+    lines: ['꽥! 호수공원 뱃사공이야. 언젠가 보트 투어를 열 거야!', '쉬리는 낮에, 쏘가리는 밤에 잡혀. 기억해 둬!', '정자 섬 그늘에서 쉬면 꽥꽥 노래가 절로 나와.', '호수 물이 맑아서 물고기 그림자가 다 보여!'],
+    req: [['fish_shiri', 1, '쉬리 한 마리! 친구한테 보여 주고 싶어'], ['herb', 2, '향긋 허브 2개만. 차 끓이려고'], ['shell_w', 2, '바닷가 조개껍데기 2개! 호수엔 없거든']] },
+];
+const DQ = { d: 0, done: {}, pick: {} };
+function dqDaily() { const k = dayKey(); if (DQ.d === k) return; DQ.d = k; DQ.done = {}; DQ.pick = {}; for (const R of DRES) { let s = (k + R.id.length * 97) % 9973 + 1; s = (s * 16807) % 2147483647; DQ.pick[R.id] = s % R.req.filter(q => ITEMS[q[0]]).length; } }
+for (const R of DRES) { const D = dById(R.d);
+  { const okT = (lx, ly) => { const c = ground[D.y + ly] && ground[D.y + ly][D.x + lx]; return (c === G_FL || c === G_SAND || c === G_FLW) && !solid[D.y + ly][D.x + lx]; }; let best = null;
+    for (let r0 = 0; r0 < 8 && !best; r0++) for (let dy = -r0; dy <= r0 && !best; dy++) for (let dx = -r0; dx <= r0 && !best; dx++) { const ax = R.at[0] + dx, ay = R.at[1] + dy; if (okT(ax, ay) && okT(ax - 1, ay - 3) && okT(ax, ay - 3) && okT(ax - 1, ay - 2) && okT(ax, ay - 2) && okT(ax, ay - 1)) best = [ax, ay]; }
+    if (best) R.at = best; }
+  const [x, y] = dPx(D, R.at[0] + .5, R.at[1] + .6); R.hx = x; R.hy = y; if (typeof FAVE !== 'undefined') FAVE[R.id] = R.fav; if (typeof FR_GIFT !== 'undefined') FR_GIFT[R.id] = R.gift;
+  // 작은 집 (주민 위쪽 2×2)
+  const hx = R.at[0] - 1, hy = R.at[1] - 3; R.house = [hx, hy]; for (let yy = hy; yy < hy + 2; yy++) for (let xx = hx; xx < hx + 2; xx++) { const gy = D.y + yy, gx = D.x + xx; if (ground[gy] && ground[gy][gx] !== G_WATER && ground[gy][gx] !== G_FV) { solid[gy][gx] = true; } }
+  NPCS.push(npc({ id: R.id, name: R.name, spr: R.spr, x, y, wander: 26 })); if (!SP[R.spr]) SP[R.spr] = SP.duck || SP.pig; }
+for (const D of DIST) D.land = D.land.filter(([x, y]) => !solid[D.y + y][D.x + x]);
+function dresTalk(n) { const R = DRES.find(q => q.id === n.id); if (!R) return false; dqDaily(); const list = R.req.filter(q => ITEMS[q[0]]), [id, cnt, ask] = list[DQ.pick[R.id] % list.length];
+  if (!DQ.done[R.id]) { if ((inv[id] || 0) >= cnt) { inv[id] -= cnt; DQ.done[R.id] = 1; const rw = D2CFG.reqReward[0] + Math.floor(Math.random() * (D2CFG.reqReward[1] - D2CFG.reqReward[0] + 1)); hearts += rw; gainXp(D2CFG.reqXp); addFriend(R.id, D2CFG.reqFriend); say([L('안노랑', `(${ITEMS[id].name} ${cnt}개를 건넸다!)`), L(R.name, '고마워!! 역시 노랑이야. 이거 받아!')], () => { toast(`부탁 완료! ✦+${rw} · EXP +${D2CFG.reqXp} · 친구 +${D2CFG.reqFriend}`); burst(P.x, P.y - 20, '#ffd23f', 14); save(); }); return true; }
+    say([L(R.name, R.lines[Math.floor(Math.random() * R.lines.length)]), L(R.name, `📝 오늘의 부탁: ${ask} (${ITEMS[id].name} ${inv[id] || 0}/${cnt})`)]); return true; }
+  say([L(R.name, R.lines[Math.floor(Math.random() * R.lines.length)])]); return true; }
+farmTalk = (o => n => dresTalk(n) || o(n))(farmTalk);
+
+// ---- 해바라기 따기 (들판) · 유리병 편지 (바닷가) ----
+const D2S = { d: 0, sun: 0, bottle: null, bottleGot: 0 };
+function d2Daily() { const k = dayKey(); if (D2S.d === k) return; D2S.d = k; D2S.sun = 0; D2S.bottleGot = 0; const D = dById('d2'), shore = D.land.filter(([x, y]) => ground[D.y + y + 1] && ground[D.y + y + 1][D.x + x] === G_WATER && ground[D.y + y][D.x + x] === G_SAND); D2S.bottle = shore.length ? shore[Math.floor(Math.random() * shore.length)] : null; }
+function sunNear() { if (!curRoom || curRoom.id !== 'd1') return false; const tx = Math.floor(P.x / T), ty = Math.floor((P.y - 4) / T); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (ground[ty + dy] && ground[ty + dy][tx + dx] === G_FLW) return true; return false; }
+function bottleNear() { if (!curRoom || curRoom.id !== 'd2' || !D2S.bottle || D2S.bottleGot) return null; const [x, y] = dPx(dById('d2'), D2S.bottle[0] + .5, D2S.bottle[1] + .8); return Math.hypot(P.x - x, P.y - y) < 20 ? [x, y] : null; }
+const BOTTLE_MSG = ['"이 편지를 주운 친구에게. 바다는 오늘도 반짝여요." — 어느 갈매기', '"보물은 바닷가 ✕ 표시 아래에 있을지도…" — 해적 펭귄', '"노을이 질 때 소원을 빌면 이뤄진대요!" — 익명의 게', '"거북 선장님, 그때 빌린 우산 돌려드릴게요." — 고래', '"여기까지 떠내려왔다면, 당신은 운이 좋은 친구!"'];
+townInteract = (o => () => { if (!dlg && !menu) {
+  const b = bottleNear(); if (b) { D2S.bottleGot = 1; dqDaily(); const C = D2CFG.bottle, n = C.hearts[0] + Math.floor(Math.random() * (C.hearts[1] - C.hearts[0] + 1)), rare = Math.random() < C.rare; hearts += n; if (rare) addItem(Math.random() < .5 ? 'coral' : 'fossil_q'); sfx('quest'); say([L('유리병 편지', BOTTLE_MSG[Math.floor(Math.random() * BOTTLE_MSG.length)])], () => toast(`병 안에 ✦${n}${rare ? ' + 선물' : ''}이(가) 들어 있었다!`)); save(); return true; }
+  if (sunNear()) { if (D2S.sun >= D2CFG.sunPerDay) { toast('오늘은 해바라기를 충분히 땄어. 내일 또!'); return true; } D2S.sun++; addItem('sunflower'); sfx('pick'); burst(P.x, P.y - 10, '#ffd23f', 8); stat('harvest', 1); save(); return true; } }
+  return o(); })(townInteract);
+townHint = (o => () => { const b = bottleNear(); if (b) return { x: b[0], y: b[1] - 30, t: `${KA()} 유리병 편지` }; const h = o(); if (h) return h; if (sunNear()) return { x: P.x, y: P.y - 44, t: D2S.sun >= D2CFG.sunPerDay ? '오늘은 다 땄어' : `${KA()} 해바라기 따기 (${D2CFG.sunPerDay - D2S.sun})` }; return null; })(townHint);
+update = (o => dt => { o(dt); if (state === 'play') try { dqDaily(); d2Daily(); } catch (e) { } })(update);
+
+// ---- 그리기: 2D (집·유리병) ----
+prerenderGround = (o => () => { o(); if (typeof USE3D !== 'undefined' && USE3D) return; const g = groundC.getContext('2d'); for (const R of DRES) { const D = dById(R.d), X = (D.x + R.house[0]) * T, Y = (D.y + R.house[1]) * T; g.fillStyle = '#f3e6cf'; g.fillRect(X + 2, Y + 8, 28, 22); g.fillStyle = { d1: '#e2543b', d2: '#4fa8e8', d3: '#5fae52' }[R.d]; g.beginPath(); g.moveTo(X - 2, Y + 10); g.lineTo(X + 16, Y - 2); g.lineTo(X + 34, Y + 10); g.fill(); g.fillStyle = '#8a5a3c'; g.fillRect(X + 13, Y + 20, 6, 10); } })(prerenderGround);
+drawOverlay4 = (o => () => { o(); try { if (state !== 'play' || menu || dlg || !curRoom || curRoom.id !== 'd2' || !D2S.bottle || D2S.bottleGot) return; const [x, y] = fxScr(...dPx(dById('d2'), D2S.bottle[0] + .5, D2S.bottle[1] + .8), .2), s0 = DPR, bob = Math.sin(time * 3) * 2 * s0; if (!(typeof USE3D !== 'undefined' && USE3D)) { ctx.fillStyle = '#bfe8ff'; ctx.fillRect(x - 3 * s0, y - 8 * s0 + bob, 6 * s0, 10 * s0); ctx.fillStyle = '#c98a5a'; ctx.fillRect(x - 2 * s0, y - 11 * s0 + bob, 4 * s0, 3 * s0); } text('✉', x, y - 22 * s0 + bob, 12 * s0, '#fff8e7', 'center', true); } catch (e) { } })(drawOverlay4);
+// ---- 3D: 집 · 유리병 · 나비(낮 들판) · 반딧불(밤 호수) · 파도 거품(바닷가) ----
+function hutModel(roof) { return grp(mesh('b', '#f3e6cf', 1.7, 1.1, 1.5, 0, .55, 0), mesh('co', roof, 1.5, .9, 1.5, 0, 1.55, 0), mesh('b', '#8a5a3c', .4, .65, .06, 0, .33, .76), mesh('b', '#8fc4e0', .3, .3, .05, .5, .7, .76), mesh('c', '#c98a5a', .12, .5, .12, .5, 1.8, -.3)); }
+function syncD2(dt) { if (!R3) return; const D = typeof curDist === 'function' && curDist();
+  for (const R of DRES) { if (!R.hm) { const DD = dById(R.d); R.hm = hutModel({ d1: '#e2543b', d2: '#4fa8e8', d3: '#5fae52' }[R.d]); R.hm.children[1].rotation.y = Math.PI / 4; R.hm.position.set(DD.x + R.house[0] + 1, 0, zt(DD.y + R.house[1]) + 1); R.hm.traverse(q => { if (q.isMesh) q.castShadow = true; }); R3.scene.add(R.hm); } R.hm.visible = !!D && D.id === R.d; }
+  if (!R3.bottle) { R3.bottle = grp(mesh('c', M('#bfe8ff', { transparent: true, opacity: .7, roughness: .1 }), .1, .3, .1, 0, 0, 0), mesh('c', '#c98a5a', .06, .08, .06, 0, .19, 0), mesh('b', '#fff8e7', .06, .14, .02, 0, 0, 0)); R3.bottle.rotation.z = 1.2; R3.scene.add(R3.bottle); }
+  const showB = D && D.id === 'd2' && D2S.bottle && !D2S.bottleGot; R3.bottle.visible = !!showB; if (showB) { const [x, y] = dPx(D, D2S.bottle[0] + .5, D2S.bottle[1] + .8); R3.bottle.position.set(U(x), .08 + Math.sin(time * 2.5) * .03, ZU(y) - .2); }
+  const night = typeof nightAmt === 'function' ? nightAmt() : 0;
+  // 나비 (들판, 낮)
+  if (!R3.bfly) { const g = new THREE.Group(); for (let i = 0; i < 14; i++) { const b = new THREE.Group(), c = ['#ffd23f', '#ffffff', '#ff8fb5', '#9be3ff'][i % 4]; for (const s of [-1, 1]) { const w = mesh('b', c, .14, .01, .1, s * .07, 0, 0); b.add(w); } b.userData.s = Math.random() * 100; g.add(b); } R3.scene.add(g); R3.bfly = g; }
+  const bOn = D && D.id === 'd1' && night < .5; R3.bfly.visible = !!bOn; if (bOn) { const dd = dById('d1'); R3.bfly.children.forEach((b, i) => { const s = b.userData.s, t = time * .3 + s, cx = dd.x + 10 + (i * 37 % 50), cz = zt(dd.y) + 8 + (i * 23 % 30); b.position.set(cx + Math.sin(t) * 3, .6 + Math.sin(t * 3.1) * .2, cz + Math.cos(t * .8) * 2.5); b.rotation.y = t * 2; const f = Math.sin(time * 18 + s) * .9; b.children[0].rotation.z = f; b.children[1].rotation.z = -f; }); }
+  // 반딧불 (호수, 밤)
+  if (!R3.ffly) { const g = new THREE.Group(), m = M('#e8ff7a', { emissive: '#e8ff7a', emissiveIntensity: 1.2 }); for (let i = 0; i < 40; i++) { const f = mesh('s', m, .05, .05, .05, 0, 0, 0); f.userData.s = Math.random() * 100; g.add(f); } R3.scene.add(g); R3.ffly = g; }
+  const fOn = D && D.id === 'd3' && night > .35; R3.ffly.visible = !!fOn; if (fOn) { const dd = dById('d3'); R3.ffly.children.forEach((f, i) => { const s = f.userData.s, t = time * .25 + s, ang = i / 40 * 6.283; f.position.set(dd.x + 30 + Math.cos(ang) * (15 + Math.sin(t) * 4), .5 + Math.sin(t * 2.3) * .35, zt(dd.y) + 22 + Math.sin(ang) * (10 + Math.cos(t) * 3)); f.scale.setScalar(.6 + Math.abs(Math.sin(time * 2 + s)) * .8); }); }
+  // 파도 거품 (바닷가)
+  if (D && D.id === 'd2' && !D.foam) { const pts = []; for (let x = 0; x < DW; x++) for (let y = 0; y < DH - 1; y++) if (ground[D.y + y][D.x + x] !== G_WATER && ground[D.y + y + 1][D.x + x] === G_WATER && y > 15) pts.push([D.x + x + .5, zt(D.y + y + 1) + .1]); const im = new THREE.InstancedMesh(new THREE.BoxBufferGeometry(1, 1, 1), M('#ffffff', { transparent: true, opacity: .75 }), pts.length); D.foamPts = pts; D.foam = im; D.root && D.root.add(im); }
+  if (D && D.id === 'd2' && D.foam) { const d = new THREE.Object3D(); D.foamPts.forEach(([x, z], i) => { const k = Math.sin(time * 1.6 + x * .4); d.position.set(x, -.12, z + .15 + k * .18); d.scale.set(1.02, .02, .22 + Math.max(0, k) * .15); d.updateMatrix(); D.foam.setMatrixAt(i, d.matrix); }); D.foam.instanceMatrix.needsUpdate = true; } }
+if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncD2());
+
+// ---- 저장 ----
+townSave = (o => () => Object.assign(o(), { d2: { dq: DQ, s: D2S } }))(townSave);
+townLoad = (o => d => { o(d); if (d && d.d2) { if (d.d2.dq) Object.assign(DQ, d.d2.dq); if (d.d2.s) Object.assign(D2S, d.d2.s); } })(townLoad);
+if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('새 구역 주민들은 매일 부탁을 하나씩 해요. 들어주면 별사탕·EXP·친구 점수!', '노을 바닷가에는 매일 유리병 편지가 하나 떠밀려 와요');
 
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
