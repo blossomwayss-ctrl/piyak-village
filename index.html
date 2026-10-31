@@ -7289,7 +7289,7 @@ function sync3D(dt) {
     m.position.set(U(n.x), (n.swim ? -.18 : 0) + bob + jump + (kind === 'bee' ? .25 + Math.sin(time * 3 + n.x) * .08 : 0), ZU(n.y) - .2);
     if (m.userData.b) m.userData.b.rotation.z = asleep(n) ? Math.sin(time * 1.2 + n.x) * .06 + .12 : 0;
     let ang = n.face > 0 ? Math.PI / 2 : -Math.PI / 2; if (Math.hypot(P.x - n.x, P.y - n.y) < 40 && !n.walking && !n.swim) ang = faceAngle(P.x - n.x, P.y - n.y); if (n.spin > 0) ang += n.spin * 12;
-    m.rotation.y = lerpAng(m.rotation.y, ang, Math.min(1, dt * 8)); m.userData.b.scale.y = 1 + Math.sin(n.bob * 2) * .02; }
+    m.rotation.y = lerpAng(m.rotation.y, ang, Math.min(1, dt * 8)); { const bs = n.bumpT > 0 ? Math.sin(n.bumpT / .3 * Math.PI) * .2 : 0; m.userData.b.scale.set(1 + bs, 1 + Math.sin(n.bob * 2) * .02 - bs, 1 + bs); if (bs) m.userData.b.rotation.z += Math.sin(n.bumpT * 45) * .1; } }
   // enemies
   for (const e of enemies) { const m = ent(e, () => buildMob(e.kind)); const D = ENEMY[e.kind];
     if (D.fly) { m.position.set(U(e.x), .7 + Math.sin(e.t * 5) * .1, ZU(e.y) - .2); m.userData.wings.forEach((w, i) => w.rotation.z = Math.sin(time * 40 + i * Math.PI) * .6); }
@@ -9831,6 +9831,52 @@ if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => syncD2());
 townSave = (o => () => Object.assign(o(), { d2: { dq: DQ, s: D2S } }))(townSave);
 townLoad = (o => d => { o(d); if (d && d.d2) { if (d.d2.dq) Object.assign(DQ, d.d2.dq); if (d.d2.s) Object.assign(D2S, d.d2.s); } })(townLoad);
 if (typeof TIPS !== 'undefined' && Array.isArray(TIPS)) TIPS.push('새 구역 주민들은 매일 부탁을 하나씩 해요. 들어주면 별사탕·EXP·친구 점수!', '노을 바닷가에는 매일 유리병 편지가 하나 떠밀려 와요');
+
+// ===== NPC 몸통 충돌 (부딪히면 서로 밀리고 툭 튕김) =====
+const BUMP_CFG = {
+  r: 11,            // 기본 충돌 반지름(px). 플레이어+NPC 몸통 합
+  rk: { cow: 14, sheep: 13, sheep2: 13, goat: 13, turtle: 13, rabbit: 9, squirrel: 9, hedgehog: 9, d1_bee: 9, owl: 10 },
+  ry: 1.5,          // 세로(앞뒤) 거리 가중치 — 위에서 비스듬히 보는 시점이라 세로는 얇게
+  share: .45,       // 돌아다니는 NPC가 겹침을 나눠 받는 비율 (0=안 밀림, 1=NPC만 밀림)
+  shareStill: .22,  // 제자리 NPC(상점 등)가 밀리는 비율 — 밀려도 스프링으로 제자리 복귀
+  spring: 3,        // 제자리 NPC 복귀 속도
+  walkKb: 55, walkKbT: .1,   // 걷다 부딪힐 때 플레이어 반동 속도·시간
+  rollKb: 130, rollKbT: .18, // 구르다 부딪힐 때 반동
+  slide: 60,        // NPC가 밀려나는 미끄러짐 속도 (구르면 ×2.2)
+  cd: .5,           // 같은 NPC 연속 '툭' 효과 쿨타임(초)
+  rollLines: ['앗!', '아야!', '어이쿠!', '조심해~'],
+};
+npcBlock = () => false;  // 기존 '딱 멈춤' 판정 대신 아래 소프트 충돌을 씀
+function bumpR(n) { return BUMP_CFG.rk[n.id] || BUMP_CFG.rk[n.spr] || BUMP_CFG.r; }
+function bumpTick(dt) {
+  const C = BUMP_CFG;
+  for (const n of NPCS) {
+    if (n.bumpT > 0) n.bumpT -= dt; if (n.bcd > 0) n.bcd -= dt;
+    if (n.follow || n.swim) continue;
+    if (!n.wander && n.ax === undefined) { n.ax = n.x; n.ay = n.y; }
+    if (n.svx || n.svy) { const nx = n.x + n.svx * dt, ny = n.y + n.svy * dt; if (boxFree(nx, ny, 5, 2)) { n.x = nx; n.y = ny; } else n.svx = n.svy = 0; const k = Math.exp(-dt * 9); n.svx *= k; n.svy *= k; if (Math.abs(n.svx) + Math.abs(n.svy) < 1) n.svx = n.svy = 0; }
+    if (!n.wander && n.ax !== undefined) { const k = Math.min(1, dt * C.spring); n.x += (n.ax - n.x) * k; n.y += (n.ay - n.y) * k; }
+    if (state !== 'play' || dlg) continue;
+    const dx = P.x - n.x, dy = (P.y - n.y) * C.ry, d = Math.hypot(dx, dy), R = bumpR(n);
+    if (d >= R) continue;
+    const ux = d > .01 ? dx / d : (P.face || 1), uy = d > .01 ? dy / d : 0, ov = R - d;
+    const mob = n.wander > 0 && !asleep(n) ? C.share : C.shareStill;
+    const px = P.x + ux * ov * (1 - mob), py = P.y + uy * ov * (1 - mob) / C.ry;
+    if (boxFree(px, P.y)) P.x = px; if (boxFree(P.x, py)) P.y = py;
+    const qx = n.x - ux * ov * mob, qy = n.y - uy * ov * mob / C.ry; if (boxFree(qx, qy, 5, 2)) { n.x = qx; n.y = qy; }
+    if (n.bcd > 0) continue;
+    const rolling = P.roll > 0; n.bcd = C.cd; n.bumpT = .3;
+    const kb = rolling ? C.rollKb : C.walkKb; P.kb = rolling ? C.rollKbT : C.walkKbT; P.kbx = ux * kb; P.kby = uy * kb / C.ry;
+    const sl = C.slide * (rolling ? 2.2 : 1) * (mob / C.share); n.svx = -ux * sl; n.svy = -uy * sl / C.ry;
+    const cx = (P.x + n.x) / 2, cy = (P.y + n.y) / 2 - 3;
+    for (let i = 0; i < (rolling ? 8 : 4); i++) parts.push({ x: cx, y: cy, vx: (Math.random() - .5) * 50, vy: -10 - Math.random() * 25, t: .35, c: '#fff6dc', g: 40, sz: 2, round: 1 });
+    if (rolling) { P.roll = Math.min(P.roll, .04); n.react = .5; floaters.push({ x: n.x, y: n.y - 26, t: .9, text: C.rollLines[Math.floor(Math.random() * C.rollLines.length)] }); shake(1.6, .12); tone(160, .09, 'square', .07, 0, -70); }
+    else tone(240 + Math.random() * 40, .06, 'triangle', .05, 0, -90);
+    if (Math.abs(ux) > .3) n.face = ux > 0 ? 1 : -1;
+  }
+}
+update = (o => dt => { o(dt); bumpTick(dt); })(update);
+drawNPC = (o => n => { if (!(n.bumpT > 0)) return o(n); const s = Math.sin(n.bumpT / .3 * Math.PI) * .18; ctx.save(); ctx.translate(n.x, n.y); ctx.scale(1 + s, 1 - s); ctx.translate(-n.x, -n.y); o(n); ctx.restore(); })(drawNPC);
 
 tilesImg.onload = () => { prerenderGround(); prerenderMinimap(); prerenderMinimap2(); init3D(); if (USE3D) loadAnnoModel(); loaded = load(); if (loaded && partyDone) { partyReady = true; } requestAnimationFrame(frame); };
 window.__game = { P, Q, NPCS, eggs, bucket, moles, plots, keys, pressed, chicks, get state() { return state; }, set state(v) { state = v; }, startGame, talk, byId, advanceDlg, get dlg() { return dlg; }, get stars() { return stars; }, startParty, interact, swipe, action, openShop, makeCard, setHat, cycleHat, save, get menu() { return menu; }, get hat() { return hat; }, get hatOwned() { return hatOwned; }, get hearts() { return hearts; }, set hearts(v) { hearts = v; }, get playT() { return playT; }, pickups, get tut() { return tut; }, get acorns() { return acorns; }, statics, ACORN_TREES, encodeSave, decodeSave, openSaveUI, get mapOpen() { return mapOpen; }, set mapOpen(v) { mapOpen = v; }, guideTarget, enemies, get inv() { return inv; }, get equip() { return equip; }, get hp() { return hp; }, set hp(v) { hp = v; }, LOTS, FR, STAT, farmTick, get mini() { return mini; }, startMini, MREC, miniKey, miniTap, LIVE, PEND, HIVES, ORCHARD, feedHome, petAnimal, ranchEntries, chopTree, get CAP() { return CAP; }, critters, CAUGHT, DON, get fishing() { return fishing; }, startFishing, reelIn, catchBugs, gotCritter, openMuseum, BUGS, FISH, FARMD, dailyEggs, openShop, get inv2() { return inv; }, get DAILY() { return DAILY; }, get phone() { return phone; }, openPhone, phoneKey, addFriend, frLv, frTotal, CFG, spawnVisitor, habFinishHit, stat, openBag, useItem, equipItem, addItem, spawnEnemy, quickUse, panelAct, get chestOpen() { return chestOpen; }, get curRoom() { return curRoom; }, get boss() { return boss; }, get dkeys() { return dkeys; }, get bossKey() { return bossKey; }, get bossDead() { return bossDead; }, SWITCHES, DOORS, DCHESTS, warpTo, roomAt, get wipe() { return wipe; }, get trans() { return trans; } };
