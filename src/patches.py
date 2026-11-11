@@ -13,4 +13,10 @@ PATCHES = [
     # --- 큰 지도: 없어진 마을의 나룻배·케이블카 표시 지우기 ---
     ("  mark('🛶', '나룻배', WVP.home.x / T, WVP.home.y / T + 1, wvUnlocked()); if (CVP.home) mark('🚡', '케이블카', CVP.home.x / T, CVP.home.y / T, cvUnlocked());\n", "\n"),
     (" 닫혀요 · ●노랑 나 · ●분홍 부탁 · 🛶🚡 다른 마을'", " 닫혀요 · ●노랑 나 · ●분홍 부탁'"),
+    # --- v62: 설원 전용 차가운 색 보정 (화면 후처리에 cool 값 추가 · 평소엔 0이라 다른 곳은 그대로) ---
+    ("night: { value: 0 }, bloom: { value: 1 } },", "night: { value: 0 }, bloom: { value: 1 }, cool: { value: 0 } },"),
+    ("uniform float bloom; varying vec2 vUv;", "uniform float bloom; uniform float cool; varying vec2 vUv;"),
+    ("gl * vec3(1.0, .9, .72) * .55 * bloom", "gl * mix(vec3(1.0, .9, .72), vec3(.8, .92, 1.0), cool) * .55 * bloom"),
+    ("c.rgb *= mix(vec3(1.03, 1.0, .95), vec3(1.0), bgm);", "c.rgb *= mix(mix(vec3(1.03, 1.0, .95), vec3(1.0), bgm), vec3(.98, 1.0, 1.04), cool);"),
+    ("hiT = mix(vec3(1.04, 1.0, .9), vec3(1.1, .96, .78), warm);", "hiT = mix(mix(vec3(1.04, 1.0, .9), vec3(1.1, .96, .78), warm), vec3(.95, 1.0, 1.1), cool);"),
 ]

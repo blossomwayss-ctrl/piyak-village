@@ -5,7 +5,7 @@
    - MODULES   : 맨 뒤(게임 시작 직전)에 차례로 끼워 넣는 새 모듈"""
 import hashlib, re, sys, os
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODULES = ['cal.js', 'southdeco.js', 'uses.js', 'hunt3.js']
+MODULES = ['cal.js', 'southdeco.js', 'uses.js', 'hunt3.js', 'wintercrop.js', 'propuse.js', 'small2.js', 'bosslook.js']
 MARK = "tilesImg.onload = () => {"
 PWA_ONLY = ['<script>window.__PWA=1;</script>', '<link rel="manifest" href="./manifest.webmanifest">', '<link rel="apple-touch-icon" href="./apple-touch-icon.png">',
             '<meta name="apple-mobile-web-app-capable" content="yes">', '<meta name="mobile-web-app-capable" content="yes">',

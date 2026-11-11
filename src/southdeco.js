@@ -89,7 +89,7 @@ if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => { if (!R3 || !R3.southG
     g.add(fl); g.userData = { anim, fl, sea: '' }; R3.scene.add(g); R3.sdecoG = g; }
   const g = R3.sdecoG, on = curRoom.id === 'v1'; g.visible = on; if (!on) return; const A = g.userData.anim, sk = envSeason();
   if (g.userData.sea !== sk) { g.userData.sea = sk; SD_FLOWER[sk].forEach((c, i) => SD_FM[i].color.set(c)); g.userData.fl.visible = sk !== 'winter'; }
-  for (const b of A.spin) b.rotation.z = -time * (raining() ? 1.6 : .7); A.sway.forEach((m, i) => { m.rotation.z = Math.sin(time * 1.3 + i * 2) * .05; });
+  for (const b of A.spin) b.rotation.z -= (typeof lastDt === 'number' ? Math.min(.1, lastDt) : .016) * (typeof millBusy === 'function' && millBusy() ? 2.6 : raining() ? 1.6 : .7);   /* 방앗간이 돌아가는 동안은 날개가 빨라져요 */ A.sway.forEach((m, i) => { m.rotation.z = Math.sin(time * 1.3 + i * 2) * .05; });
   { const P0 = SDECO_CFG.pond; for (const d of A.bob) { const a = time * .25 + d.userData.ph; d.position.set(P0.cx + Math.cos(a) * P0.rx * .5, -.1 + Math.sin(time * 2.2 + d.userData.ph) * .012, zt(P0.cy) + Math.sin(a) * P0.ry * .45); d.rotation.y = -a + Math.PI; } }
   { const h = envHour(), [a, b] = SDECO_CFG.lampOn, lit = h >= a || h < b; SD_GLOW.emissiveIntensity += ((lit ? 2.2 : 0) - SD_GLOW.emissiveIntensity) * .08; SD_HALO.opacity = SD_GLOW.emissiveIntensity * .12; } });
 // ---- 땅 칠하기: 큰 밭 이랑 · 입구 흙길 · 공방 마당 · 헛간 앞 ----

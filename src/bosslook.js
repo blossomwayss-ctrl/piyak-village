@@ -1,0 +1,37 @@
+// ===== bosslook.js : 보스 3마리 전용 모형 · 6단계 오로라 설원 눈 색과 오로라 빛 =====
+const BL_CFG = {
+  boss: { fa2: ['b_ghost', '버섯골 유령'], fa4: ['b_mud', '늪 가재'], fa6: ['b_aurora', '설원 펭귄'] },   // 사냥터 → [보스 종류, 이름표]
+  snow: { land: '#e6f0ff', glow: '#9fc0f0', glowK: .1, mounds: 46, cool: 1, coolNight: .45, coolSpd: 2.5 },   // 설원 땅 색 · 푸른 기운 · 눈 더미 수 · 화면 차가운 보정 세기(낮/밤, 0~1) · 바뀌는 빠르기
+  aurora: { n: 6, cols: ['#3fe0a8', '#a98cff', '#4fc8ff'], op: .26, opNight: .8, size: [9, 2.6] },        // 오로라 빛 띠: 개수 · 색 · 진하기(낮/밤) · 크기(칸)
+};
+// ---- 보스 종류 등록: 능력치는 전용 몬스터(v_*)와 같고 생김새만 달라요 ----
+for (const fid in BL_CFG.boss) { const [bk, name] = BL_CFG.boss[fid], B = H3_CFG.boss[fid]; if (!B || !ENEMY[B.kind]) continue; const on = ENEMY[B.kind].name; ENEMY[bk] = Object.assign({}, ENEMY[B.kind]); Object.defineProperty(ENEMY[bk], 'name', { enumerable: true, get: () => (typeof USE3D !== 'undefined' && USE3D ? name : on) }); B.kind = bk; }   /* 2D 화면에서는 그림이 그대로라 이름도 예전 그대로 */
+const BL_MODEL = {
+  b_ghost() { const g = new THREE.Group(), b = new THREE.Group(), m = mesh; g.add(b); const sk = M('#d9ccff', { transparent: true, opacity: .9, roughness: .25, emissive: '#a88cff', emissiveIntensity: .28 });
+    b.add(m('s', sk, .24, .26, .22, 0, .3, 0)); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; b.add(m('s', sk, .09, .1, .09, Math.cos(a) * .17, .09, Math.sin(a) * .15)); }
+    for (const s of [-1, 1]) b.add(m('s', '#2b1d3a', .045, .07, .03, s * .09, .34, .19), m('s', '#ffffff', .016, .02, .01, s * .09 + .012, .37, .215), m('s', '#ffb7e0', .04, .025, .02, s * .16, .27, .16), m('s', sk, .07, .06, .06, s * .27, .3, .05));
+    b.add(m('s', '#5a3a7a', .05, .035, .02, 0, .24, .205), m('c', '#f3e6cf', .06, .05, .06, 0, .5, 0), m('hemi', '#8a4fd0', .22, .15, .22, 0, .51, 0));
+    for (let i = 0; i < 5; i++) { const a = i * 1.26; b.add(m('s', '#ffffff', .035, .02, .035, Math.cos(a) * .13, .61 - (i % 2) * .03, Math.sin(a) * .13)); } g.userData.b = b; return g; },
+  b_mud() { const g = new THREE.Group(), b = new THREE.Group(), m = mesh; g.add(b); const sh = '#a35a3c', dk = '#8a4630', mud = M('#5e4630', { roughness: .25 });
+    b.add(m('s', sh, .22, .17, .26, 0, .2, 0), m('s', '#b86a48', .17, .13, .16, 0, .24, .2), m('s', dk, .16, .1, .1, 0, .17, -.24), m('s', sh, .13, .085, .09, 0, .15, -.35), m('s', dk, .1, .07, .08, 0, .13, -.44), m('s', '#b86a48', .14, .03, .09, 0, .1, -.54));
+    for (const s of [-1, 1]) { const arm = m('c', sh, .035, .22, .035, s * .25, .27, .22); arm.rotation.z = -s * 1.0; arm.rotation.x = .5; b.add(arm, m('s', '#b86a48', .12, .1, .15, s * .37, .36, .32), m('s', '#c98060', .045, .035, .1, s * .35, .43, .45), m('s', '#c98060', .045, .03, .1, s * .4, .33, .45));
+      b.add(m('c', '#b86a48', .014, .1, .014, s * .07, .37, .3), m('s', '#1d1418', .035, .035, .035, s * .07, .43, .3), m('s', '#ffffff', .012, .012, .012, s * .075, .445, .328)); const an = m('c', dk, .008, .34, .008, s * .1, .36, .46); an.rotation.x = 1.1; an.rotation.z = -s * .35; b.add(an);
+      for (let i = 0; i < 3; i++) { const lg = m('c', dk, .018, .16, .018, s * .24, .09, .08 - i * .12); lg.rotation.z = -s * .9; b.add(lg); } }
+    b.add(m('s', mud, .13, .06, .12, .05, .36, -.02), m('s', mud, .09, .05, .08, -.11, .33, .08), m('s', mud, .07, .04, .07, 0, .26, -.26), m('s', mud, .03, .06, .03, .16, .25, .1)); g.userData.b = b; return g; },
+  b_aurora() { const g = new THREE.Group(), b = new THREE.Group(), m = mesh; g.add(b); const au = M('#7fe8c8', { emissive: '#7fe8c8', emissiveIntensity: .55, roughness: .4 }), au2 = M('#c9b6ff', { emissive: '#c9b6ff', emissiveIntensity: .5, roughness: .4 }), ice = M('#cfefff', { emissive: '#9fdcff', emissiveIntensity: .45, roughness: .15 });
+    b.add(m('s', '#2f5f78', .2, .27, .19, 0, .28, 0), m('s', '#f4fbff', .15, .21, .12, 0, .25, .1), m('s', '#2f5f78', .15, .14, .15, 0, .56, 0), m('s', '#f4fbff', .1, .09, .07, 0, .54, .1));
+    const bk = m('co', '#ffab2e', .04, .09, .04, 0, .52, .19); bk.rotation.x = Math.PI / 2; b.add(bk);
+    for (const s of [-1, 1]) { const fl = m('s', '#2f5f78', .04, .14, .09, s * .22, .3, 0); fl.rotation.z = s * .35; b.add(fl, m('s', '#1d1418', .022, .026, .015, s * .05, .58, .14), m('s', '#ffab2e', .07, .025, .1, s * .08, .02, .08), m('s', '#ffb7c8', .028, .018, .012, s * .09, .53, .135)); }
+    const sc = m('tor', au, .15, .15, .22, 0, .44, 0); sc.rotation.x = Math.PI / 2; const tl = m('b', au2, .06, .18, .025, .13, .34, .14); tl.rotation.z = -.25; b.add(sc, tl, m('b', au, .05, .12, .025, .17, .32, .12));
+    for (let i = -1; i <= 1; i++) b.add(m('co', ice, .03, i ? .1 : .15, .03, i * .07, .7 + (i ? 0 : .02), 0)); b.add(m('c', ice, .11, .03, .11, 0, .66, 0)); g.userData.b = b; return g; },
+};
+buildMob = (o => kind => { if (BL_MODEL[kind]) { try { return BL_MODEL[kind](); } catch (e) { console.warn('bossmodel', e); } } return o(kind); })(buildMob);
+// ---- 6단계 설원: 눈 색 보정 + 눈 더미 + 오로라 빛 ----
+function blGlowTex() { const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(128, 32, 2, 128, 32, 128); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.5, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.save(); g.translate(128, 32); g.scale(1, .25); g.translate(-128, -32); g.fillStyle = gr; g.fillRect(0, -200, 256, 464); g.restore(); return new THREE.CanvasTexture(c); }
+buildField3D = (o => F => { o(F); try { if (!F.root || !F.th || F.th.indexOf('snow') !== 0) return; const S = BL_CFG.snow, old = M(F.pal.l, { roughness: .95 }), snow = new THREE.MeshStandardMaterial({ color: S.land, roughness: .9, emissive: S.glow, emissiveIntensity: S.glowK });
+  F.root.traverse(q => { if (q.isMesh && q.material === old) q.material = snow; });
+  let s0 = 9001 + F.tier; const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647; for (let i = 0; i < S.mounds && F.land.length; i++) { const [x, y] = F.land[Math.floor(r() * F.land.length)], w = .3 + r() * .35, md = mesh('hemi', snow, w, .1 + r() * .1, w * .8, x + r(), -.02, zt(y) + r()); md.castShadow = false; F.root.add(md); }
+  const A = BL_CFG.aurora, tex = blGlowTex(), list = []; for (let i = 0; i < A.n; i++) { const pl = new THREE.Mesh(new THREE.PlaneBufferGeometry(A.size[0], A.size[1]), new THREE.MeshBasicMaterial({ map: tex, color: A.cols[i % A.cols.length], transparent: true, opacity: A.op, blending: THREE.AdditiveBlending, depthWrite: false })); pl.rotation.x = -Math.PI / 2; pl.position.y = .04 + i * .004; pl.renderOrder = 2; F.root.add(pl); list.push(pl); }
+  F.aurora = list; } catch (e) { console.warn('snowlook', e); } })(buildField3D);
+if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => { const F = typeof curField === 'function' && curField(), cu = R3 && R3.postMat && R3.postMat.uniforms.cool; const ngt = typeof nightAmt === 'function' ? nightAmt() : 0; if (cu) cu.value += ((F && F.aurora ? BL_CFG.snow.cool + (BL_CFG.snow.coolNight - BL_CFG.snow.cool) * ngt : 0) - cu.value) * Math.min(1, lastDt * BL_CFG.snow.coolSpd); if (!F || !F.aurora) return; const A = BL_CFG.aurora, px = U(P.x), pz = ZU(P.y);
+  F.aurora.forEach((pl, i) => { const t = time * .12 + i * 1.7; pl.position.x = px + Math.sin(t) * 7 + (i - (A.n - 1) / 2) * 2.2; pl.position.z = pz - 1 + Math.cos(t * .8 + i) * 4.5; pl.rotation.z = Math.sin(t * .6 + i) * .5; pl.scale.x = 1 + Math.sin(t * 1.3) * .25; pl.material.opacity = (A.op + (A.opNight - A.op) * ngt) * (.65 + .35 * Math.sin(time * .5 + i * 2.1)); }); });

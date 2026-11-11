@@ -22,10 +22,11 @@ const USES_CFG = {
   fav2Pts: 5,
   // 공방 '만들기': [결과, 재료, 별사탕] — 세트 장비는 하나씩만
   make: [
-    ['hat_lotus', { mud_shell: 2, lotusleaf: 3 }, 20], ['webglove', { crab_shell: 4, cloth: 1 }, 25], ['lifevest', { bark_chip: 4, cloth: 2 }, 40], ['raincape', { mud_shell: 3, cloth: 1 }, 30], ['shellbell', { crab_shell: 5, bark_chip: 2 }, 35],
-    ['hat_cloud', { storm_wool: 2, cloth: 1 }, 30], ['woolglove', { storm_wool: 2, fur: 2 }, 30], ['woolsuit', { storm_wool: 4, cloth: 2 }, 50], ['cloudcape', { spark_orb: 4, cloth: 1 }, 40], ['windmill', { spark_orb: 5, storm_wool: 1 }, 45],
+    ['hat_lotus', { mud_shell: 2, lotusleaf: 3 }, 20], ['webglove', { crab_shell: 4, cloth: 1 }, 25], ['lifevest', { bark_chip: 4, cloth: 2 }, 40], ['raincape', { mud_shell: 3, cloth: 1 }, 30], ['shellbell', { crab_shell: 5, bark_chip: 2 }, 35], ['bubblewand', { jelly: 4, mud_shell: 1 }, 35], ['scoopnet', { crab_shell: 3, wood: 4 }, 30],
+    ['hat_cloud', { storm_wool: 2, cloth: 1 }, 30], ['woolglove', { storm_wool: 2, fur: 2 }, 30], ['woolsuit', { storm_wool: 4, cloth: 2 }, 50], ['cloudcape', { spark_orb: 4, cloth: 1 }, 40], ['windmill', { spark_orb: 5, storm_wool: 1 }, 45], ['rainbowwand', { spark_orb: 3, storm_wool: 2 }, 50], ['cottontail', { storm_wool: 3, honey: 1 }, 40],
     ['hat_beanie', { aurora_feather: 2, cloth: 1 }, 40], ['mitten', { aurora_feather: 2, fur: 2 }, 40], ['padding', { aurora_feather: 4, cloth: 2 }, 65], ['snowcape', { aurora_feather: 3, cloth: 2 }, 50], ['icicle', { aurora_feather: 4, snowball: 5 }, 55],
     ['furn:cushion2', { cloth: 2, fur: 1 }, 15], ['furn:teddy', { cloth: 3, fur: 2, moss_cap: 1 }, 25],
+    ['furn:lotuslamp', { lotusleaf: 3, spark_orb: 1 }, 20], ['furn:cloudcushion', { storm_wool: 2, cloth: 1 }, 25], ['furn:snowglobe', { aurora_feather: 1, snowball: 5 }, 30],   // 없어진 마을의 박물관 보상이라 얻을 길이 없던 가구 3종
   ],
   setName: { water: '안개 늪 세트', cloud: '번개 구름 세트', snow: '오로라 설원 세트' },   // 다른 마을과 함께 사라졌던 세트 3개의 새 이름
   alch: [{ out: 'pot_guard', need: { bark_chip: 1, moss_cap: 1 } }, { out: 'pot_sneak', need: { ghost_gel: 2 } }, { out: 'pot_luck', need: { spark_orb: 2, f_berry: 1 } }, { out: 'pot_xp', need: { aurora_feather: 1, storm_wool: 1 } }],
@@ -56,6 +57,7 @@ for (const [out] of USES_CFG.make) if (ITEMS[out] && ITEMS[out].type === 'eq') {
 for (const h of ['lotus', 'cloud', 'beanie']) if (HATS[h] && ITEMS['hat_' + h]) HATS[h].desc = `외형 · ${VIL[ITEMS['hat_' + h].vil].name} · 삐약 공방에서 만들어요`;
 if (typeof FURN !== 'undefined') { FURN.cushion2 = FURN.cushion2 || { name: '포근한 방석', t: [[42, 326]], price: 0, desc: '포근한 천으로 만든 방석 · 삐약 공방에서 만들어요' }; FURN.teddy = FURN.teddy || { name: '병아리 인형', t: [[43, 322]], price: 0, desc: '천과 토끼털로 만든 인형 · 삐약 공방에서 만들어요' };
   if (typeof FB !== 'undefined') { FB.cushion2 = { w: 1, h: 1, ry: 0 }; FB.teddy = { w: 1, h: 1, ry: 0 }; } }
+for (const k of ['lotuslamp', 'cloudcushion', 'snowglobe']) if (typeof FURN !== 'undefined' && FURN[k]) FURN[k].desc = '삐약 공방 > 만들기에서 만들어요';
 if (typeof furnModel === 'function') furnModel = (o => k => k === 'cushion2' ? grp(mesh('s', '#ffb7cf', .3, .1, .3, 0, .1, 0), mesh('s', '#fff3e0', .08, .03, .08, 0, .19, 0), mesh('s', '#ff8fb5', .31, .04, .31, 0, .08, 0))
   : k === 'teddy' ? grp(mesh('s', '#ffe066', .2, .2, .18, 0, .2, 0), mesh('s', '#ffe066', .15, .15, .14, 0, .46, 0), mesh('co', '#ff9a3a', .04, .08, .04, 0, .44, .15).rotateX(Math.PI / 2), mesh('s', '#3b2a2f', .02, .02, .02, -.06, .5, .12), mesh('s', '#3b2a2f', .02, .02, .02, .06, .5, .12), mesh('s', '#ffd23f', .07, .05, .1, -.2, .2, 0), mesh('s', '#ffd23f', .07, .05, .1, .2, .2, 0), mesh('s', '#ff8fb5', .06, .03, .03, 0, .34, .12)) : o(k))(furnModel);
 function mkOwned(out) { if (out.indexOf('furn:') === 0) return !!FOWN[out.slice(5)]; const it = ITEMS[out]; if (it.hatK) return hatOwned.includes(it.hatK); return inv[out] > 0 || eqOn(it.slot) === out; }

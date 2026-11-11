@@ -1,6 +1,7 @@
 // ===== hunt3.js : 사냥터 6단계 개성 — 단계별 지형 기믹 · 보스 3마리 고유 패턴 · 세트 꼬리 무기 드롭 =====
 const H3_CFG = {
-  haz: {   // 단계별 지형 기믹 (1단계는 연습용이라 없어요). r = 범위(px, 16px = 1칸)
+  haz: {   // 단계별 지형 기믹. r = 범위(px, 16px = 1칸)
+    fa1: { k: 'bush', n: 6, r: 18, loot: 'acorn', heartP: .5 },                    // 흔들 덤불(해롭지 않아요): 다가가면 다람쥐가 튀어나와 도토리 1개 + 50% 확률로 별사탕 · 덤불마다 하루 한 번
     fa2: { k: 'spore', n: 7, r: 22, slow: .6, dur: 2.4, cd: 7 },                  // 포자 버섯: 다가가면 퐁! → 2.4초 느려짐(속도 ×0.6) · 주변 몬스터도 느려져요 · 7초 뒤 다시
     fa3: { k: 'acorn', every: 3.4, r: 15, warn: 1.1, loot: 'acorn', lootP: .5 },   // 도토리 낙하: 그림자가 생기고 1.1초 뒤 쿵 · 절반 확률로 도토리가 남아요
     fa4: { k: 'mud', n: 10, r: 24, slow: .55 },                                    // 늪 웅덩이: 밟는 동안 속도 ×0.55 · 구르면 그대로 통과
@@ -15,10 +16,10 @@ const H3_CFG = {
   drops: { fa2: ['starring', .35], fa4: ['pearl', .35], fa6: ['flakebell', .35] },   // 보스 처치: 세트 꼬리 무기 [아이템, 확률] (없을 때만 나와요)
   rare: { v_storm: ['thunder', .06] },                                                  // 전용 몬스터 희귀 드롭
   easy: 1.5,   // 느긋 모드일 때 예고 시간 · 기믹 간격 배수
-  name: { spore: '포자 버섯', acorn: '도토리 낙하', mud: '늪 웅덩이', bolt: '번개', gust: '눈보라 돌풍' },
-  tips: { spore: '보라 버섯에 다가가면 포자가 퐁! 몬스터를 끌고 가면 같이 느려져요', acorn: '머리 위 그림자를 조심! 도토리가 떨어져요', mud: '늪 웅덩이는 발이 푹푹 빠져요 · 구르면 휙 지나가요', bolt: '노란 원 밖으로! 번개는 몬스터도 맞아요', gust: '돌풍이 불면 한쪽으로 밀려요 · 벼랑 쪽은 막혀 있어 안전해요' },
+  name: { bush: '흔들 덤불', spore: '포자 버섯', acorn: '도토리 낙하', mud: '늪 웅덩이', bolt: '번개', gust: '눈보라 돌풍' },
+  tips: { bush: '흔들리는 덤불에 다가가 보세요 · 다람쥐가 도토리를 떨어뜨려요', spore: '보라 버섯에 다가가면 포자가 퐁! 몬스터를 끌고 가면 같이 느려져요', acorn: '머리 위 그림자를 조심! 도토리가 떨어져요', mud: '늪 웅덩이는 발이 푹푹 빠져요 · 구르면 휙 지나가요', bolt: '노란 원 밖으로! 번개는 몬스터도 맞아요', gust: '돌풍이 불면 한쪽으로 밀려요 · 벼랑 쪽은 막혀 있어 안전해요' },
 };
-const H3 = { z: {}, falls: [], pud: [], hits: [], gust: null, fT: 0, slowT: 0, slowK: 1, seen: {}, pid: 0, flash: 0, fid: '', hintT: 0, hint: '' };
+const H3 = { z: {}, falls: [], pud: [], hits: [], gust: null, fT: 0, slowT: 0, slowK: 1, seen: {}, pid: 0, flash: 0, fid: '', hintT: 0, hint: '', bush: { d: 0, got: {} }, run: [] };
 function h3Scr(x, y) { return typeof USE3D !== 'undefined' && USE3D && R3 ? project3D(x, y + 1.6, .03) : [(x - cam.x) * SC, (y - cam.y) * SC]; }
 function h3In(z, r) { return Math.hypot(P.x - z.x, (P.y - z.y) * 1.3) < r; }
 function h3Zones(F, C) { if (H3.z[F.id]) return H3.z[F.id]; fgInit(); let s0 = 4099 * (F.tier + 5); const r = () => (s0 = (s0 * 16807) % 2147483647) / 2147483647, g = FGATE[F.id], out = [], [ex, ey] = fPx(F, F.ent[0], F.ent[1]);
@@ -29,7 +30,10 @@ function h3Tip(k) { if (H3.seen[k]) return; H3.seen[k] = 1; toast(H3_CFG.tips[k]
 function h3Easy() { return typeof CFG !== 'undefined' && CFG.easy ? H3_CFG.easy : 1; }   /* 느긋 모드: 예고 시간 · 간격이 길어져요 */
 function h3Fall(k, x, y, C, extra) { const f = Object.assign({ k, x, y, t: C.warn, t0: C.warn, r: C.r }, extra || {}); f.t *= h3Easy(); f.t0 = f.t; H3.falls.push(f); }
 function h3Tick(dt) { H3.slowK = 1; if (H3.flash > 0) H3.flash -= dt; for (let i = H3.hits.length - 1; i >= 0; i--) if ((H3.hits[i].t -= dt) <= 0) H3.hits.splice(i, 1);
-  const F = curField(); if (!F || F.id !== H3.fid) { H3.fid = F ? F.id : ''; H3.falls.length = 0; H3.pud.length = 0; H3.gust = null; H3.slowT = 0; H3.fT = 2.5; H3.hintT = 0; if (!F) return; } if (dlg || menu || state !== 'play') return; if (H3.hintT > 0) H3.hintT -= dt; const C = H3_CFG.haz[F.id], roll = P.roll > 0;
+  const F = curField(); if (!F || F.id !== H3.fid) { H3.fid = F ? F.id : ''; H3.falls.length = 0; H3.pud.length = 0; H3.gust = null; H3.slowT = 0; H3.fT = 2.5; H3.hintT = 0; H3.run.length = 0; if (!F) return; } if (dlg || menu || state !== 'play') return; if (H3.hintT > 0) H3.hintT -= dt; const C = H3_CFG.haz[F.id], roll = P.roll > 0;
+  for (let i = H3.run.length - 1; i >= 0; i--) { const q = H3.run[i]; q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.t <= 0) H3.run.splice(i, 1); }
+  if (C && C.k === 'bush') { const k = dayKey(); if (H3.bush.d !== k) { H3.bush.d = k; H3.bush.got = {}; } for (const z of h3Zones(F, C)) { if (H3.bush.got[z.id] || !h3In(z, C.r)) continue; H3.bush.got[z.id] = 1; h3Tip('bush'); sfx('pop'); burst(z.x, z.y - 8, '#6dbb5b', 18); floaters.push({ x: z.x, y: z.y - 30, t: 1, text: '다람쥐다!', col: '#ffe9a8' });
+      if (ITEMS[C.loot]) pickups.push({ kind: 'item', id: C.loot, x: z.x, y: z.y - 6, vx: (Math.random() - .5) * 40, vy: -70, t: 0 }); if (Math.random() < C.heartP) spawnHeart(z.x, z.y - 6); const a = Math.atan2(z.y - P.y, z.x - P.x) + (Math.random() - .5); H3.run.push({ x: z.x, y: z.y, vx: Math.cos(a) * 95, vy: Math.sin(a) * 70, t: 1.3 }); save(); } }
   if (C && (C.k === 'mud' || C.k === 'spore')) for (const z of h3Zones(F, C)) { if (z.cd > 0) z.cd -= dt;
     if (C.k === 'mud' && !roll && h3In(z, C.r)) { H3.slowK = Math.min(H3.slowK, C.slow); h3Tip('mud'); if (Math.random() < dt * 9) parts.push({ x: P.x + (Math.random() - .5) * 10, y: P.y, vx: (Math.random() - .5) * 30, vy: -40, t: .35, c: '#6b4a2e', g: 160 }); }
     if (C.k === 'spore' && z.cd <= 0 && h3In(z, C.r)) { z.cd = C.cd; H3.slowT = C.dur; h3Tip('spore'); sfx('poof'); burst(z.x, z.y - 8, '#c9b6ff', 22); burst(z.x, z.y - 8, '#ffffff', 8); fx({ k: 'boom', x: z.x, y: z.y - 4, r: 30, col: '#c9b6ff', d: .45 }); floaters.push({ x: P.x, y: P.y - 30, t: 1, text: '에취!', col: '#c9b6ff' });
@@ -49,7 +53,7 @@ function h3Tick(dt) { H3.slowK = 1; if (H3.flash > 0) H3.flash -= dt; for (let i
     else if (G.warn > 0) { G.warn -= dt; if (G.warn <= 0) { G.dur = C.dur; sfx('swipe'); } }
     else if ((G.t -= dt) <= 0) { G.warn = C.warn; G.a = Math.floor(Math.random() * 8) * Math.PI / 4; h3Tip('gust'); floaters.push({ x: P.x, y: P.y - 34, t: 1, text: `휘이잉~ ${['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'][Math.round(G.a / (Math.PI / 4)) % 8]}`, col: '#dff4ff' }); } }
   h3Boss(dt, F); }
-enterRoom = (o => r => { o(r); try { const F = fById(r.id), C = F && H3_CFG.haz[F.id]; if (C && bannerQ && bannerQ.title.indexOf(F.name) >= 0 && bannerQ.sub.indexOf('⚠') < 0) bannerQ.sub = `권장 Lv.${F.lv} · ⚠ ${H3_CFG.name[C.k]} · 다 잡으면 토벌 보상`; } catch (e) { } })(enterRoom);
+enterRoom = (o => r => { o(r); try { const F = fById(r.id), C = F && H3_CFG.haz[F.id]; if (C && bannerQ && bannerQ.title.indexOf(F.name) >= 0 && bannerQ.sub.indexOf(H3_CFG.name[C.k]) < 0) bannerQ.sub = `권장 Lv.${F.lv} · ${C.k === 'bush' ? '🐿' : '⚠'} ${H3_CFG.name[C.k]} · 다 잡으면 토벌 보상`; } catch (e) { } })(enterRoom);
 // ---- 보스 고유 패턴 ----
 fbSpawn = (o => F => { o(F); const B = H3_CFG.boss[F.id], e = enemies.find(q => q.fboss && q.fd === F.id); if (!B || !e || !ENEMY[B.kind] || e.kind === B.kind) return; e.kind = B.kind; e.max = e.hp = Math.ceil(ENEMY[B.kind].hp * F.hpK * 4 * G2CFG.boss.hpMul); if (typeof R3 !== 'undefined' && R3 && R3.ents && R3.ents.has(e)) { R3.scene.remove(R3.ents.get(e)); R3.ents.delete(e); } })(fbSpawn);
 function h3Boss(dt, F) { const B = H3_CFG.boss[F.id]; if (!B) return; const e = enemies.find(q => q.fboss && q.fd === F.id); if (!e) return; const near = Math.hypot(P.x - e.x, P.y - e.y);
@@ -78,6 +82,8 @@ function h3Draw() { const F = curField(); if (!F || state !== 'play') return; co
   if (!is3) { if (C && C.k === 'mud') for (const z of h3Zones(F, C)) { const [x, y, rx, ry] = h3Ell(z.x, z.y, C.r); ctx.fillStyle = 'rgba(94,70,48,.75)'; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.29); ctx.fill(); ctx.fillStyle = 'rgba(70,50,34,.8)'; ctx.beginPath(); ctx.ellipse(x, y, rx * .6, ry * .6, 0, 0, 6.29); ctx.fill(); }
     if (C && C.k === 'spore') for (const z of h3Zones(F, C)) { const [x, y, rx] = h3Ell(z.x, z.y, 7); ctx.fillStyle = '#e8dcc0'; ctx.fillRect(x - rx * .3, y - rx, rx * .6, rx); ctx.fillStyle = z.cd > 0 ? '#8a7aa8' : '#a06ad9'; ctx.beginPath(); ctx.ellipse(x, y - rx, rx, rx * .7, 0, Math.PI, 0); ctx.fill(); }
     for (const p of H3.pud) { const [x, y, rx, ry] = h3Ell(p.x, p.y, p.r); ctx.globalAlpha = Math.min(1, p.t / 1.2) * .75; ctx.fillStyle = '#6b4a2e'; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.29); ctx.fill(); ctx.globalAlpha = 1; } }
+  if (!is3 && C && C.k === 'bush') for (const z of h3Zones(F, C)) { const [x, y, rx] = h3Ell(z.x, z.y, 8); ctx.fillStyle = H3.bush.got[z.id] ? '#5a8a4a' : '#6dbb5b'; ctx.beginPath(); ctx.arc(x, y - rx * .6, rx, 0, 6.29); ctx.arc(x - rx * .7, y - rx * .3, rx * .7, 0, 6.29); ctx.arc(x + rx * .7, y - rx * .3, rx * .7, 0, 6.29); ctx.fill(); }
+  for (const q of H3.run) { const [x, y, rx] = h3Ell(q.x, q.y, 5), hop = Math.abs(Math.sin(q.t * 18)) * rx * .9, dir = q.vx >= 0 ? 1 : -1; ctx.globalAlpha = Math.min(1, q.t * 3); ctx.fillStyle = '#8a5a3c'; ctx.beginPath(); ctx.ellipse(x - dir * rx * 1.1, y - hop - rx * 1.3, rx * .55, rx * 1.0, dir * .5, 0, 6.29); ctx.fill(); ctx.fillStyle = '#b5753a'; ctx.beginPath(); ctx.ellipse(x, y - hop - rx * .7, rx, rx * .7, 0, 0, 6.29); ctx.fill(); ctx.beginPath(); ctx.arc(x + dir * rx * .9, y - hop - rx * 1.1, rx * .5, 0, 6.29); ctx.fill(); ctx.fillStyle = '#33222a'; ctx.beginPath(); ctx.arc(x + dir * rx * 1.1, y - hop - rx * 1.2, rx * .12, 0, 6.29); ctx.fill(); ctx.globalAlpha = 1; }
   for (const f of H3.falls) { const [x, y, rx, ry] = h3Ell(f.x, f.y, f.r), k = 1 - Math.max(0, f.t) / f.t0, col = f.k === 'bolt' ? '255,214,64' : f.k === 'mudb' ? '120,84,48' : '90,60,40';
     ctx.fillStyle = `rgba(${col},${.16 + k * .3})`; ctx.beginPath(); ctx.ellipse(x, y, rx * (f.k === 'acorn' ? .35 + k * .65 : 1), ry * (f.k === 'acorn' ? .35 + k * .65 : 1), 0, 0, 6.29); ctx.fill();
     ctx.strokeStyle = `rgba(${f.k === 'bolt' ? '255,240,160' : '255,110,120'},${.5 + .4 * Math.sin(time * 22)})`; ctx.lineWidth = 2.5 * DPR; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.29); ctx.stroke();
@@ -89,14 +95,16 @@ function h3Draw() { const F = curField(); if (!F || state !== 'play') return; co
   ctx.restore(); }
 drawOverlay4 = (o => () => { try { h3Draw(); } catch (e) { } o(); })(drawOverlay4);
 // ---- 3D: 늪 웅덩이 · 포자 버섯 · 보스 진흙 ----
-if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => { if (!R3) return; const F = curField(), C = F && H3_CFG.haz[F.id], Z = C && (C.k === 'mud' || C.k === 'spore') ? h3Zones(F, C) : [], key = F ? F.id + '|' + H3.pud.map(p => p.id).join(',') : '';
-  if (!R3.h3G || R3.h3G.userData.k !== key) { if (R3.h3G) R3.scene.remove(R3.h3G); R3.h3G = null; if (!F) return; const g = new THREE.Group(); g.userData = { k: key, sp: [], pd: [] };
+if (typeof __SYNC3D !== 'undefined') __SYNC3D.push(() => { if (!R3) return; const F = curField(), C = F && H3_CFG.haz[F.id], Z = C && (C.k === 'mud' || C.k === 'spore' || C.k === 'bush') ? h3Zones(F, C) : [], key = F ? F.id + '|' + H3.pud.map(p => p.id).join(',') : '';
+  if (!R3.h3G || R3.h3G.userData.k !== key) { if (R3.h3G) R3.scene.remove(R3.h3G); R3.h3G = null; if (!F) return; const g = new THREE.Group(); g.userData = { k: key, sp: [], pd: [], bs: [] };
     for (const z of Z) { const X = U(z.x), Zz = ZU(z.y) - .2, rx = C.r / T;
       if (C.k === 'mud') { const a = mesh('c', M('#5e4630', { roughness: .3 }), rx, .03, rx / 1.3, X, .016, Zz), b = mesh('c', M('#4a3626', { roughness: .2 }), rx * .62, .032, rx * .62 / 1.3, X + .1, .018, Zz); a.castShadow = b.castShadow = false; g.add(a, b, mesh('s', '#7a5c40', .09, .05, .09, X - rx * .4, .04, Zz + .1), mesh('s', '#7a5c40', .06, .04, .06, X + rx * .3, .04, Zz - .2)); }
+      else if (C.k === 'bush') { const bu = grp(mesh('sLow', '#5aa548', .3, .26, .28, 0, .22, 0), mesh('sLow', '#6dbb5b', .22, .2, .22, -.24, .17, .05), mesh('sLow', '#4e974c', .22, .2, .22, .24, .17, -.04), mesh('sLow', '#6dbb5b', .16, .15, .16, .05, .42, 0), mesh('s', '#a0705a', .045, .055, .045, -.1, .34, .22), mesh('s', '#a0705a', .045, .055, .045, .16, .26, .2)); bu.position.set(X, 0, Zz); g.add(bu); g.userData.bs.push({ z, bu }); }
       else { const mat = new THREE.MeshStandardMaterial({ color: '#a06ad9', emissive: '#c9b6ff', emissiveIntensity: .6, roughness: .5 }), sh = grp(mesh('c', '#e8dcc0', .09, .3, .09, 0, .15, 0), mesh('hemi', mat, .3, .24, .3, 0, .26, 0), mesh('s', '#ffffff', .05, .03, .05, .12, .44, .1), mesh('s', '#ffffff', .04, .03, .04, -.13, .42, -.06), mesh('s', '#ffffff', .045, .03, .045, 0, .49, -.1)); sh.position.set(X, 0, Zz);
         const ring = new THREE.Mesh(geos().ring, new THREE.MeshBasicMaterial({ color: '#c9b6ff', transparent: true, opacity: .3, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.scale.set(rx, rx / 1.3, 1); ring.position.set(X, .03, Zz); g.add(sh, ring); g.userData.sp.push({ z, mat, sh, ring }); } }
     for (const p of H3.pud) { const mat = new THREE.MeshStandardMaterial({ color: '#6b4a2e', roughness: .3, transparent: true, opacity: .9 }), d = mesh('c', mat, p.r / T, .03, p.r / T / 1.3, U(p.x), .02, ZU(p.y) - .2); d.castShadow = false; g.add(d); g.userData.pd.push({ p, mat }); }
     R3.scene.add(g); R3.h3G = g; }
-  const D = R3.h3G.userData; for (const s of D.sp) { const on = !(s.z.cd > 0); s.mat.emissiveIntensity = on ? .45 + Math.sin(time * 3 + s.z.id) * .25 : 0; s.ring.visible = on; s.sh.scale.setScalar(on ? 1 + Math.sin(time * 3 + s.z.id) * .04 : .82); } for (const q of D.pd) q.mat.opacity = Math.min(.9, q.p.t / 1.2); });
-townSave = (o => () => Object.assign(o(), { h3: { seen: H3.seen } }))(townSave);
-townLoad = (o => d => { o(d); if (d && d.h3 && d.h3.seen) Object.assign(H3.seen, d.h3.seen); })(townLoad);
+  const D = R3.h3G.userData; for (const s of D.sp) { const on = !(s.z.cd > 0); s.mat.emissiveIntensity = on ? .45 + Math.sin(time * 3 + s.z.id) * .25 : 0; s.ring.visible = on; s.sh.scale.setScalar(on ? 1 + Math.sin(time * 3 + s.z.id) * .04 : .82); } for (const q of D.pd) q.mat.opacity = Math.min(.9, q.p.t / 1.2);
+  for (const q of D.bs) { const used = !!H3.bush.got[q.z.id], w = !used && Math.sin(time * 1.3 + q.z.id * 2.1) > .55; q.bu.rotation.z = w ? Math.sin(time * 26) * .07 : 0; q.bu.scale.setScalar(used ? .78 : 1); q.bu.children[4].visible = q.bu.children[5].visible = !used; } });
+townSave = (o => () => Object.assign(o(), { h3: { seen: H3.seen, bush: H3.bush } }))(townSave);
+townLoad = (o => d => { o(d); if (d && d.h3 && d.h3.seen) Object.assign(H3.seen, d.h3.seen); if (d && d.h3 && d.h3.bush) H3.bush = d.h3.bush; })(townLoad);
