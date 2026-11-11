@@ -19,4 +19,6 @@ PATCHES = [
     ("gl * vec3(1.0, .9, .72) * .55 * bloom", "gl * mix(vec3(1.0, .9, .72), vec3(.8, .92, 1.0), cool) * .55 * bloom"),
     ("c.rgb *= mix(vec3(1.03, 1.0, .95), vec3(1.0), bgm);", "c.rgb *= mix(mix(vec3(1.03, 1.0, .95), vec3(1.0), bgm), vec3(.98, 1.0, 1.04), cool);"),
     ("hiT = mix(vec3(1.04, 1.0, .9), vec3(1.1, .96, .78), warm);", "hiT = mix(mix(vec3(1.04, 1.0, .9), vec3(1.1, .96, .78), warm), vec3(.95, 1.0, 1.1), cool);"),
+    # --- v62: 소동 중에는 노란 안내 말풍선을 공룡 티 게이지 아래로 (게이지에 가려 안 보이던 것) ---
+    ("uiPanel(CW / 2 - w / 2, ty, w, U2 * 2, U2, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, ty + U2, U2 * 1.0, UIC.ink, 'center');", "const tyE = typeof EP !== 'undefined' && EP && DG.on && !(typeof EP1 !== 'undefined' && EP.def === EP1 && EP.step === 4) ? Math.max(ty, CH * (CW < CH ? .155 : .12) + Math.max(11 * DPR, Math.min(CW, CH) / 32) * TXS() * 2.3 + 6 * DPR) : ty; uiPanel(CW / 2 - w / 2, tyE, w, U2 * 2, U2, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, tyE + U2, U2 * 1.0, UIC.ink, 'center');"),
 ]

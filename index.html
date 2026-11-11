@@ -1743,7 +1743,7 @@ function drawHUD() {
   if (act.length > 3) { const s = `+${act.length - 3}개 더`; uiPanel(px, y, u * 4.2, u * 1.4, u * .6); text(s, px + u * 2.1, y + u * .72, u * .78, UIC.sub, 'center'); }
   // toast
   if (toastT > 0) { const U2 = u * TXS(); ctx.globalAlpha = Math.min(1, toastT * 2); ctx.font = `${Math.round(U2 * 1.0)}px ${FONT}`; const w = Math.min(CW - SA.l - SA.r - 20 * DPR, ctx.measureText(toastMsg).width + U2 * 2.2); const ty = Math.max(clockBox && clockBox.y < CH * .2 ? clockBox.y + clockBox.h + 6 * DPR : py, mmRect && CW < CH ? mmRect.y + mmRect.h + 8 * DPR : 0);
-    uiPanel(CW / 2 - w / 2, ty, w, U2 * 2, U2, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, ty + U2, U2 * 1.0, UIC.ink, 'center'); ctx.globalAlpha = 1; }
+    const tyE = typeof EP !== 'undefined' && EP && DG.on && !(typeof EP1 !== 'undefined' && EP.def === EP1 && EP.step === 4) ? Math.max(ty, CH * (CW < CH ? .155 : .12) + Math.max(11 * DPR, Math.min(CW, CH) / 32) * TXS() * 2.3 + 6 * DPR) : ty; uiPanel(CW / 2 - w / 2, tyE, w, U2 * 2, U2, 'rgba(255,210,63,.97)'); text(toastMsg, CW / 2, tyE + U2, U2 * 1.0, UIC.ink, 'center'); ctx.globalAlpha = 1; }
   // touch buttons
   const B = btnLayout();
   if (TOUCH() && state === 'play') {
