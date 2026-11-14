@@ -1,5 +1,5 @@
 // 이든 히어로: 한 번 열면 인터넷 없이도 플레이 (이 폴더 안에서만 동작)
-var CACHE = 'eden-hero-v2';
+var CACHE = 'eden-hero-v3';
 var CORE = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(CORE); }).then(function () { return self.skipWaiting(); }));
