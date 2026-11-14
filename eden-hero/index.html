@@ -21,7 +21,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  html, body { touch-action: manipulation; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #5ec2ff; color: #2b2550;
     font-family: 'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif; }
   button { font-family: inherit; color: #2b2550; touch-action: manipulation; }
@@ -1643,14 +1644,15 @@ window.onerror = function (msg, src, line) {
   function startCelebrate() {
     G.celebrate = 3.2;
     G.fw = 0;
-    for (var _i19 = 0, _G$stars2 = G.stars; _i19 < _G$stars2.length; _i19++) {
-      var s = _G$stars2[_i19];
+    var old = G.stars;
+    G.stars = [];
+    for (var _i19 = 0; _i19 < old.length; _i19++) {
+      var s = old[_i19];
       burst(s.x, s.yy, 8, ['#ffd93d', '#fff'], {
         g: 0,
         life: 0.5
       });
     }
-    G.stars.length = 0;
     for (var i = 0; i < 70; i++) G.parts.push({
       type: 'confetti',
       x: rand(0, W),
@@ -1715,6 +1717,7 @@ window.onerror = function (msg, src, line) {
       }
       for (var i = G.stars.length - 1; i >= 0; i--) {
         var s = G.stars[i];
+        if (!s) continue;
         s.ph += dt;
         s.x += s.vx * dt;
         s.born = Math.min(1, s.born + dt * 3);
@@ -1729,6 +1732,7 @@ window.onerror = function (msg, src, line) {
         if (d < S * 0.42 + s.r * 0.8) {
           G.stars.splice(i, 1);
           collectStar(s);
+          if (G.celebrate > 0) break;
           continue;
         }
         if (s.x < -s.r * 3) G.stars.splice(i, 1);
@@ -1746,6 +1750,7 @@ window.onerror = function (msg, src, line) {
       }
       for (var _i22 = G.friendsList.length - 1; _i22 >= 0; _i22--) {
         var f = G.friendsList[_i22];
+        if (!f) continue;
         f.ph += dt;
         if (!f.saved) {
           f.y += f.vy * dt;
@@ -1804,6 +1809,7 @@ window.onerror = function (msg, src, line) {
       }
       for (var _i23 = G.clouds.length - 1; _i23 >= 0; _i23--) {
         var n = G.clouds[_i23];
+        if (!n) continue;
         n.x += n.vx * dt;
         n.ph += dt;
         if (!n.hit && hero.dizzy <= 0 && Math.hypot(hc.x - n.x, hc.y - n.y) < S * 0.42 + S * 0.55) {
@@ -1882,8 +1888,8 @@ window.onerror = function (msg, src, line) {
         var n = _G$clouds2[_i27];
         drawNaughty(ctx, n);
       }
-      for (var _i29 = 0, _G$stars4 = G.stars; _i29 < _G$stars4.length; _i29++) {
-        var s = _G$stars4[_i29];
+      for (var _i29 = 0, _G$stars2 = G.stars; _i29 < _G$stars2.length; _i29++) {
+        var s = _G$stars2[_i29];
         drawStarItem(ctx, s.x, s.yy, s.r * (0.3 + 0.7 * s.born), s.rot, s.born);
       }
       for (var _i31 = 0, _G$friendsList2 = G.friendsList; _i31 < _G$friendsList2.length; _i31++) {
@@ -2218,16 +2224,32 @@ window.onerror = function (msg, src, line) {
   updateHUD();
   show('title');
   var last = performance.now();
+  var errShown = 0;
   function frame(now) {
+    requestAnimationFrame(frame);
     var dt = (now - last) / 1000;
     last = now;
     if (!(dt > 0)) dt = 0.016;
     if (dt > 0.05) dt = 0.05;
     T += dt;
-    update(dt);
-    render();
-    if (mode === 'maker') renderPreview();
-    requestAnimationFrame(frame);
+    try {
+      update(dt);
+      render();
+      if (mode === 'maker') renderPreview();
+    } catch (e) {
+      if (window.console) console.error(e);
+      if (errShown < 1) {
+        errShown++;
+        var box = $('#err');
+        if (box) {
+          box.style.display = 'block';
+          box.textContent = '작은 문제가 있었지만 게임은 계속돼요. 이 화면을 찍어 보내주시면 고칠게요 → ' + (e && e.message);
+          setTimeout(function () {
+            box.style.display = 'none';
+          }, 6000);
+        }
+      }
+    }
   }
   requestAnimationFrame(frame);
 })();
