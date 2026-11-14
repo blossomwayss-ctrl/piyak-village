@@ -1,19 +1,37 @@
 {
- "name": "이든 히어로 출동!",
+ "name": "이든 히어로 놀이터",
  "short_name": "이든 히어로",
- "description": "손가락으로 하늘을 날며 별을 모으고 친구를 구하는 히어로 게임",
+ "description": "5살 히어로를 위한 1분 미니게임 8가지 놀이터",
  "start_url": "./",
  "scope": "./",
  "id": "./",
  "display": "fullscreen",
- "display_override": ["fullscreen", "standalone"],
+ "display_override": [
+  "fullscreen",
+  "standalone"
+ ],
  "orientation": "any",
  "background_color": "#5ec2ff",
  "theme_color": "#5ec2ff",
  "lang": "ko",
  "icons": [
-  { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-  { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-  { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
  ]
 }
